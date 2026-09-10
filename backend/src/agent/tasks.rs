@@ -25,6 +25,7 @@ pub enum TaskStage { Specialists, Building, Simulating, Reviewing, Finished }
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(deny_unknown_fields)]
 pub struct CreateTask {
+    #[serde(default)] pub research_mode: bool,
     pub objective: String,
     #[serde(default = "default_duration")] pub duration_minutes: u32,
     #[serde(default = "default_cycles")] pub max_cycles: u32,
@@ -83,6 +84,7 @@ pub struct TaskArtifact {
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct ResearchTask {
+    #[serde(default)] pub research_mode: bool,
     pub id: Uuid,
     pub project_id: Uuid,
     pub objective: String,
@@ -127,6 +129,7 @@ impl ResearchTask {
 #[serde(deny_unknown_fields)]
 pub struct ControlTask {
     pub action: String,
+    #[serde(default)] pub research_mode: Option<bool>,
     #[serde(default)] pub duration_minutes: Option<u32>,
     #[serde(default)] pub provider: Option<ProviderKind>,
     #[serde(default)] pub model: Option<String>,
@@ -204,7 +207,7 @@ impl AgentService {
         self.task_client(provider, &model, request.reasoning_effort.as_deref())?;
         let task = ResearchTask { id: Uuid::new_v4(), project_id, objective: request.objective.trim().into(),
             state: TaskState::Running, stage: TaskStage::Specialists, cycle: 1, max_cycles: request.max_cycles,
-            duration_minutes: request.duration_minutes,
+            duration_minutes: request.duration_minutes, research_mode: request.research_mode,
             specialist_count: request.specialist_count, auto_run: request.auto_run, provider, model,
             reasoning_effort: request.reasoning_effort, experiment_options: request.experiment_options,
             created_at: Utc::now(), updated_at: Utc::now(), deadline_at: Utc::now() + chrono::Duration::minutes(request.duration_minutes as i64),
@@ -255,6 +258,7 @@ impl AgentService {
                 let effort = request.reasoning_effort.or_else(|| if provider_changed || model != task.model { None } else { task.reasoning_effort.clone() });
                 self.task_client(provider, &model, effort.as_deref())?;
                 task.provider = provider; task.model = model; task.reasoning_effort = effort;
+                if let Some(enabled)=request.research_mode {task.research_mode=enabled;}
                 task.deadline_at = Utc::now() + chrono::Duration::seconds(task.remaining_seconds as i64);
                 task.state = TaskState::Running; task.failure = None;
                 task.notice = "Resumed from the last saved stage. Completed artifacts are reused; interrupted model calls are reissued only when needed.".into();
@@ -335,6 +339,11 @@ impl AgentService {
             if self.usage.settings()?.paused { bail!("Provider work is paused in Usage & cost"); }
             match task.stage {
                 TaskStage::Specialists => {
+                    if task.research_mode && !task.artifacts.iter().any(|artifact|artifact.kind=="public_research" && artifact.cycle==task.cycle) {
+                        let query=task.next_step.as_deref().unwrap_or(&task.objective);
+                        let report=crate::research::assets::gather(&self.database,task.project_id,query,token).await?;
+                        self.task_update(task.id,|task|task.artifact("public_research","Public catalogs",report.to_string()))?;
+                    }
                     let roles = ["Scientific designer", "Skeptical reviewer", "Simulation architect"].map(str::to_owned);
                     let parallelism = self.usage.settings()?.max_parallel_calls.min(task.specialist_count).max(1);
                     let results = stream::iter(roles.into_iter().take(task.specialist_count))
@@ -362,7 +371,7 @@ impl AgentService {
         let research_excerpt = excerpt(&research,8000);
         Ok(serde_json::to_string(&json!({"objective":excerpt(&task.objective,12000),"cycle":task.cycle,"max_cycles":task.max_cycles,
             "deadline_utc":task.deadline_at,"remaining_seconds":task.remaining(),"next_step":task.next_step.as_deref().map(|step|excerpt(step,4000)),
-            "shared_artifacts":artifacts,"compute":crate::compute::advisor::snapshot(self.scheduler.hardware()),
+            "shared_artifacts":artifacts,"compute":super::context::compute_summary(self.scheduler.hardware()),
             "budget":task.experiment_options,"capabilities":crate::domain::runtime_capabilities(),
             "research_context_excerpt":research_excerpt,"research_context_truncated":research.len()>8000,
             "briefing_notice":"Long source and peer material is excerpted for bounded context; full artifacts remain saved locally."}))?)
@@ -411,12 +420,14 @@ impl AgentService {
         options.max_wall_seconds = options.max_wall_seconds.min(task.remaining().max(1));
         let content = format!("Build the next concrete experiment for this researcher-authorized bounded task. Incorporate specialist critiques and previous measurements, choose the cheapest discriminating next step, and build a domain-appropriate procedural 3D scene. Keep conceptual visual geometry distinct from solved physics and label assumptions. The user authorized up to {} cycles within a shared deadline; this call builds one accepted experiment. If the required calculation is unavailable, identify the exact missing operation. Do not substitute unrelated dynamics or claim biological efficacy.\nTASK AND SHARED ARTIFACTS:\n{}",task.max_cycles,self.task_briefing(task)?);
         let request: SendMessageRequest = serde_json::from_value(json!({"content":content,"request_id":request_id,
-            "provider":task.provider,"model":task.model,"reasoning_effort":task.reasoning_effort,"agent_role":"builder",
+            "provider":task.provider,"model":task.model,"reasoning_effort":task.reasoning_effort,"agent_role":"builder","research_mode":task.research_mode,
             // Task-owned submission happens only after the model returns, under
             // the same state gate as Pause, with the actual remaining deadline.
             "auto_run":false,"study_intent":"experiment","experiment_options":options,
             "source_run_id":task.run_ids.last()}))?;
-        let call = self.chat(task.project_id, request);
+        let call = self.chat_with_origin(task.project_id, request, Some(super::ResearchMessageOrigin {
+            task_id: task.id, cycle: task.cycle, objective: &task.objective,
+        }));
         tokio::pin!(call);
         let response = tokio::select! {
             result = &mut call => result,
@@ -571,7 +582,7 @@ async fn control_task(State(state): State<Arc<AppState>>, Path(id): Path<Uuid>, 
 mod tests {
     use super::*;
     fn fixture() -> ResearchTask {
-        ResearchTask { id:Uuid::new_v4(),project_id:Uuid::new_v4(),objective:"Test a model".into(),state:TaskState::Running,
+        ResearchTask { research_mode:false,id:Uuid::new_v4(),project_id:Uuid::new_v4(),objective:"Test a model".into(),state:TaskState::Running,
             stage:TaskStage::Reviewing,cycle:2,max_cycles:3,duration_minutes:2,specialist_count:2,auto_run:true,provider:ProviderKind::OpenAi,
             model:"gpt-6-astra".into(),reasoning_effort:Some("high".into()),experiment_options:Default::default(),
             created_at:Utc::now(),updated_at:Utc::now(),deadline_at:Utc::now()+chrono::Duration::seconds(120),remaining_seconds:120,
@@ -641,7 +652,7 @@ mod tests {
             "max_cycles":2,"specialist_count":2,"auto_run":true,"provider":"open_ai","model":"gpt-6-astra","reasoning_effort":"low"})).unwrap()
     }
     fn control(action: &str) -> ControlTask {
-        ControlTask { action:action.into(),duration_minutes:None,provider:None,model:None,reasoning_effort:None }
+        ControlTask { action:action.into(),research_mode:None,duration_minutes:None,provider:None,model:None,reasoning_effort:None }
     }
     async fn stopped(service: &AgentService, id: Uuid) -> ResearchTask {
         for _ in 0..500 {
@@ -680,6 +691,43 @@ mod tests {
         let complete=stopped(&service,task.id).await; assert_eq!(complete.state,TaskState::Completed,"{:?}",complete.failure);
         server.abort();
     }
+    #[tokio::test] async fn task_attribution_keeps_full_provider_prompt_and_regular_chat_authorship() {
+        let (service,project,received,server)=mocked_service(0).await;
+        let mut create=request(); create.auto_run=false; create.specialist_count=1;
+        let task=service.start_research_task(project,create).unwrap();
+        assert_eq!(stopped(&service,task.id).await.state,TaskState::NeedsInput);
+        let messages=service.database.list_messages(project,100).unwrap();
+        let builder=messages.iter().find(|message|message.role==crate::domain::ConversationRole::User).unwrap();
+        assert_eq!(builder.content,task.objective);
+        assert_eq!(builder.metadata["source"],"research_session");
+        assert_eq!(builder.metadata["origin_task_id"],json!(task.id));
+        assert_eq!(builder.metadata["origin_task_cycle"],1);
+        assert_eq!(builder.metadata["session_objective"],task.objective);
+        let full_prompt=builder.metadata["internal_prompt"].as_str().unwrap().to_owned();
+        assert!(full_prompt.starts_with("Build the next concrete experiment for this researcher-authorized bounded task."));
+        let packet: Value=serde_json::from_str(full_prompt.split_once("\nTASK AND SHARED ARTIFACTS:\n").unwrap().1).unwrap();
+        assert_eq!(packet["objective"],task.objective);
+        assert_eq!(packet["compute"]["numerical_run_slots"],1);
+        assert!(packet["compute"].get("hardware").is_none());
+        assert!(packet["compute"].get("neural_accelerators").is_none());
+        assert!(received.lock().iter().any(|body|body["input"].as_str().unwrap().contains(&full_prompt)));
+        let reply=messages.iter().find(|message|message.role==crate::domain::ConversationRole::Assistant).unwrap();
+        assert_eq!(reply.metadata["source"],"research_session");
+        assert_eq!(reply.metadata["origin_task_id"],json!(task.id));
+        assert!(reply.metadata.get("internal_prompt").is_none());
+
+        // A researcher may paste an internal briefing as an ordinary chat turn.
+        // Its text does not grant the trusted runner's attribution or controls.
+        let regular: SendMessageRequest=serde_json::from_value(json!({"content":full_prompt,
+            "provider":"open_ai","model":"gpt-6-astra","reasoning_effort":"low","auto_run":false,
+            "study_intent":"experiment"})).unwrap();
+        let response=service.chat(project,regular).await.unwrap();
+        assert_eq!(response.user_message.content,full_prompt);
+        assert_eq!(response.user_message.metadata["source"],"user");
+        assert!(response.user_message.metadata.get("origin_task_id").is_none());
+        assert!(response.assistant_message.metadata.get("origin_task_id").is_none());
+        server.abort();
+    }
     #[tokio::test] async fn cancel_is_terminal_and_runner_cannot_replace_it_with_failure() {
         let (service,project,_,server)=mocked_service(200).await;
         let task=service.start_research_task(project,request()).unwrap();
@@ -688,6 +736,14 @@ mod tests {
         assert!(service.control_research_task(task.id,control("resume")).is_err());
         assert!(service.database.list_runs(100).unwrap().is_empty());
         server.abort();
+    }
+    #[tokio::test] async fn resume_can_change_public_research_consent_without_reissuing_finished_work() {
+        let (service,project,received,server)=mocked_service(0).await;
+        let mut task=fixture();task.project_id=project;task.state=TaskState::Paused;task.stage=TaskStage::Finished;
+        service.database.put_agent_task(&task).unwrap();
+        let mut resume=control("resume");resume.research_mode=Some(true);
+        let resumed=service.control_research_task(task.id,resume).unwrap();assert!(resumed.research_mode);
+        assert_eq!(stopped(&service,task.id).await.state,TaskState::Completed);assert!(received.lock().is_empty());server.abort();
     }
     #[tokio::test] async fn deadline_cancels_specialists_and_preserves_time_limit_state() {
         let (service,project,_,server)=mocked_service(3000).await;

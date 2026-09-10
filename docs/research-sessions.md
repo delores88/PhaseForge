@@ -2,7 +2,16 @@
 
 PhaseForge sessions coordinate specialist briefs, a validated experiment build, a local numerical run, an evidence review, and a concrete next step. The reviewer can request another cycle, within the researcher's time and cycle limits. All artifacts, stage receipts, model usage, accepted manifests, and numerical results are stored locally.
 
+User-authored turns remain attributed to the researcher. Internally orchestrated builder turns appear as **Research team · cycle N** with the session objective, and their replies retain the same task attribution. The full builder instruction still reaches the provider and is retained in local message audit metadata (`internal_prompt`), rather than filling the visible conversation with the internal briefing.
+
+Generated compute context sent to providers uses a capability whitelist: CPU cores and workers, available RAM, the selected GPU's name, backend and device limits, one numerical execution slot, and the fact that NPU numerical execution is unavailable. Raw hardware identifiers, driver details and redundant adapter inventories remain in the local Compute page.
+
 The sessions do not install new scientific solvers or claim that procedural geometry establishes scientific accuracy. Provider calls in this loop reason over the supplied evidence and native solver measurements; they do not independently browse or execute arbitrary code. GPU availability affects native solver allocation, not the remote language model's compute.
+
+Optional `research_mode:true` authorizes bounded public-catalog intake before the
+specialists work in each cycle. It is off by default. Intake saves source receipts
+and treats retrieved material as untrusted evidence; it does not give individual
+agents unrestricted browsing. See [public research and Studio](public-research-and-studio.md).
 
 ## Work budget and control
 
@@ -38,7 +47,7 @@ Select a model actually returned by the provider's authenticated catalog. The ex
 
 `GET /api/projects/{project_id}/tasks` lists sessions; `GET /api/tasks/{id}` returns one session. Records include `state`, `stage`, `cycle`, `deadline_at`, `remaining_seconds`, specialist `children`, `artifacts`, and `run_ids`.
 
-`POST /api/tasks/{id}/control` accepts `{"action":"pause"}`, `{"action":"cancel"}`, or `{"action":"resume"}`. Resume can additionally carry `provider`, `model`, `reasoning_effort`, and `duration_minutes`. Supplying `duration_minutes` grants that new remaining work budget. An expired session requires a new positive budget before resuming.
+`POST /api/tasks/{id}/control` accepts `{"action":"pause"}`, `{"action":"cancel"}`, or `{"action":"resume"}`. Resume can additionally carry `provider`, `model`, `reasoning_effort`, `research_mode`, and `duration_minutes`. Omitting `research_mode` preserves the previous choice. Supplying `duration_minutes` grants that new remaining work budget. An expired session requires a new positive budget before resuming.
 
 Pause freezes the remaining time, stops active model work and owned solvers, and preserves accepted designs and completed artifacts. Cancel is terminal. On app restart, running sessions become paused, owned interrupted solvers are stopped, and completed stages are reused after explicit resume. Native numerical recovery handles its own checkpoint compatibility; resuming a paused session whose numerical run was cancelled starts a new run of the exact immutable experiment from its declared initial conditions and records that fact.
 
@@ -56,4 +65,4 @@ OpenAI Pro requests, and requests using high/xhigh/max reasoning, use Responses 
 
 Requests retain `store:false`. OpenAI's current [background-mode documentation](https://developers.openai.com/api/docs/guides/background) permits this setting but states that response data is temporarily retained for roughly ten minutes to support polling. A provider call interrupted before its response ID reaches the app can still be billable. On app restart, unknown or interrupted usage is retained conservatively; an unfinished provider call is not silently reissued. Resume retries an interrupted stage explicitly and may incur another call.
 
-The default maximum output is 12,000 tokens per call, adjustable from 512 to 64,000 in **Usage & cost**. Reasoning consumes that output budget, so demanding Pro/max work may need a larger user-selected limit even when its visible report is short. All session calls honor the same selected output limit. If a provider exhausts it, PhaseForge records the billed failure and stops instead of treating partial text as a validated result.
+The default maximum output is 12,000 tokens per call, adjustable from 512 to 64,000 in **Usage & cost**. Reasoning consumes that output budget, so demanding Pro/max work may need a larger user-selected limit even when its visible report is short. All session calls honor the selected output limit. Experiment builders and Studio designs can recover from explicit output-limit exhaustion within the configured repair allowance by requesting a complete compact result under the same ceiling. Both calls retain their usage; zero repairs disables recovery. Specialist and review calls do not gain an extra retry from this mechanism. Exhausted or partial output is never treated as a validated experiment or artifact.

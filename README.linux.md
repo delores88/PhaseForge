@@ -97,6 +97,20 @@ remote OpenAI/Anthropic APIs with per-turn selection and saved usage accounting.
 
 ## Optional engines and validation
 
+Studio's Blender, CadQuery and KiCad integrations use separately installed native
+programs; the desktop package does not contain them. Install an appropriate
+[Blender build](https://www.blender.org/download/),
+[KiCad package](https://www.kicad.org/download/) and compatible CAD Python environment.
+`BLENDER_PATH`, `KICAD_CLI` and `PHASEFORGE_CAD_PYTHON` override executable discovery
+when set before starting the app. KiCad export also needs Python with its `pcbnew`
+bindings. See [CAD/PCB setup](docs/CAD_PCB_ENGINES.md) and
+[Blender setup](docs/BLENDER_RENDERING.md) for discovery paths and job limits.
+
+The pinned CAD requirements and native rendering/engineering checks were exercised
+on Windows x64. Wheel availability, KiCad bindings, native process behavior and
+Cycles GPU drivers need separate Linux x64/ARM64 validation. A discovered executable
+does not establish that a particular job or GPU backend works on that target.
+
 PDB, MOL/SDF V2000 and XYZ intake works without external chemistry engines.
 OpenMM, GROMACS, CP2K, xTB, LAMMPS and Open Babel can be detected when their Python
 environment or executables are available. Detection is not an executing adapter.

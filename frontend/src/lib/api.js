@@ -29,6 +29,7 @@ function json(method, payload = {}) {
 }
 
 export const api = {
+  studio: (path, payload, signal) => request(`/api/${path}`, {...(payload===undefined?{}:json('POST',payload)),signal}),
   tasks: (projectId, signal) => request(`/api/projects/${projectId}/tasks`, {signal}),
   task: (id, signal) => request(`/api/tasks/${id}`, {signal}),
   createTask: (projectId, payload) => request(`/api/projects/${projectId}/tasks`, json('POST',payload)),

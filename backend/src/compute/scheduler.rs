@@ -695,6 +695,7 @@ mod tests {
                 database.put_run_checkpoint(run.id, &json!({"retained_without_execution":true})).unwrap();
                 let request_id = Uuid::new_v4();
                 let task = ResearchTask {
+                    research_mode: false,
                     id: Uuid::new_v4(), project_id, objective: "Protect the shared research budget after restart".into(),
                     state, stage: TaskStage::Simulating, cycle: 1, max_cycles: 2, duration_minutes: 10,
                     specialist_count: 1, auto_run: true, provider: crate::domain::ProviderKind::OpenAi,

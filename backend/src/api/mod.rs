@@ -61,6 +61,10 @@ pub fn router(state: Arc<AppState>) -> anyhow::Result<Router> {
         .max_age(Duration::from_secs(3600));
 
     Ok(Router::new()
+        .merge(crate::studio::render::routes())
+        .merge(crate::studio::fabrication::routes())
+        .merge(crate::research::assets::routes())
+        .merge(crate::agent::studio::routes())
         .merge(crate::agent::tasks::routes())
         .merge(crate::experiment::api::routes())
         .merge(crate::research::api::routes())

@@ -12,6 +12,10 @@ use crate::domain::{
 
 pub use expression::Expression;
 
+pub fn validate_scene(value: &serde_json::Value) -> anyhow::Result<()> {
+    scene::validate(value)
+}
+
 const MAX_ODE_STEPS: usize = 2_000_000;
 const MAX_PARTICLE_STEPS: usize = 500_000;
 const MAX_SEARCH_CANDIDATES: usize = 1_000_000;
@@ -426,6 +430,20 @@ fn validate_names<'a>(
     Ok(unique)
 }
 
+// Challenge names are display labels and JSON keys, never expression symbols.
+// Keep readable labels intact; equation names continue through validate_names.
+fn validate_challenge_labels<'a>(names: impl Iterator<Item = &'a str>) -> anyhow::Result<()> {
+    let mut unique = BTreeSet::new();
+    for raw in names {
+        let label = raw.trim();
+        if label.is_empty() || label.chars().count() > 160 || label.chars().any(char::is_control) {
+            bail!("falsification labels must contain 1–160 visible characters");
+        }
+        if !unique.insert(label.to_owned()) { bail!("duplicate falsification label `{label}`"); }
+    }
+    Ok(())
+}
+
 fn reject_name_collisions(
     left: &BTreeSet<String>,
     right: &BTreeSet<String>,
@@ -819,12 +837,11 @@ fn validate_falsification(manifest: &ExperimentManifest) -> anyhow::Result<()> {
     if manifest.falsification.len() > 64 {
         bail!("a manifest may define at most 64 falsification passes");
     }
-    let _ = validate_names(
+    validate_challenge_labels(
         manifest
             .falsification
             .iter()
             .map(|value| value.name.as_str()),
-        "falsification",
     )?;
 
     let (state_names, constant_names) = match &manifest.model {
@@ -1043,6 +1060,16 @@ seeded randomness, validated identifiers, bounded memory, and immutable manifest
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn falsification_labels_are_readable_without_relaxing_expression_names() {
+        assert!(validate_challenge_labels(["Three-level time-step resolution check", "Orbit perturbation ±1%"].into_iter()).is_ok());
+        for labels in [vec![""], vec!["test\nnext"], vec!["same", " same "]] {
+            assert!(validate_challenge_labels(labels.into_iter()).is_err());
+        }
+        assert!(validate_challenge_labels(["x".repeat(161)].iter().map(String::as_str)).is_err());
+        assert!(validate_names(["Three-level time-step resolution check"].into_iter(), "state").is_err());
+    }
 
     #[test]
     fn identifier_rules_reject_paths_and_shell_metacharacters() {

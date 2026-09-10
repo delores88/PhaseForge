@@ -82,12 +82,16 @@ export function normalizeScene(input) {
   return {schema_version:SCENE_VERSION,title:text(input.title,'Scientific scene',200),units:text(input.units,'model units',80),provenance,nodes,bonds,camera:input.camera?{position:vector(input.camera.position,[8,5,10]),target:vector(input.camera.target)}:null,warnings};
 }
 
-export function sceneFromEvidence(run,manifest) {
+export function sceneSourceFromEvidence(run,manifest) {
   const saved=run?.result?.visualization?.scene;
-  if(saved)return normalizeScene(saved);
+  if(saved)return saved;
   // Never relabel an old run using an unrelated current revision.
   if(run && run.manifest_id!==manifest?.id)return null;
-  return normalizeScene(manifest?.visualization?.scene||manifest?.scene);
+  return manifest?.visualization?.scene||manifest?.scene||null;
+}
+
+export function sceneFromEvidence(run,manifest) {
+  return normalizeScene(sceneSourceFromEvidence(run,manifest));
 }
 
 export function fibonacciSphere(count,radius=1) {

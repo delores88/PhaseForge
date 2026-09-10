@@ -76,4 +76,16 @@ must be explicitly run on a machine with a hardware GPU. It evaluates several
 single-candidate GPU batches against analytic exponential decay and checks cancellation.
 
 Distributed scheduling, remote cluster adapters, NPU numerical kernels, exact
-integrator-state checkpoints, and OS-isolated worker processes remain future work.
+integrator-state checkpoints, and process isolation for these in-process numerical
+kernels remain future work.
+
+## Separate Studio workers
+
+Blender rendering and CAD/PCB exports use separate supervised processes and queues.
+Their time limits include queueing, and interrupted jobs retain their inputs and
+files for an explicit new job. Blender can retry a recoverable GPU render failure
+once on CPU within the original deadline. This is separate from generation
+checkpointing; native jobs do not share the numerical solver's checkpoint format
+or claim partial render continuation. Windows native workers enforce process-tree
+memory budgets, but cannot reserve GPU VRAM against other applications. See
+[render resource controls](BLENDER_RENDERING.md) and [CAD/PCB engines](CAD_PCB_ENGINES.md).

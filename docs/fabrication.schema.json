@@ -1,0 +1,380 @@
+{
+  "type": "object",
+  "properties": {
+    "kind": {
+      "type": "string",
+      "enum": [
+        "cad",
+        "pcb"
+      ]
+    },
+    "units": {
+      "type": "string",
+      "enum": [
+        "mm"
+      ]
+    },
+    "description": {
+      "type": "string"
+    },
+    "cad": {
+      "anyOf": [
+        {
+          "type": "object",
+          "properties": {
+            "parts": {
+              "type": "array",
+              "items": {
+                "type": "object",
+                "properties": {
+                  "id": {
+                    "type": "string"
+                  },
+                  "label": {
+                    "type": "string"
+                  },
+                  "operation": {
+                    "type": "string",
+                    "enum": [
+                      "add",
+                      "subtract"
+                    ]
+                  },
+                  "shape": {
+                    "type": "string",
+                    "enum": [
+                      "box",
+                      "cylinder",
+                      "sphere",
+                      "cone",
+                      "extruded_polygon"
+                    ]
+                  },
+                  "position": {
+                    "type": "array",
+                    "items": {
+                      "type": "number"
+                    },
+                    "minItems": 3,
+                    "maxItems": 3
+                  },
+                  "rotation": {
+                    "type": "array",
+                    "items": {
+                      "type": "number"
+                    },
+                    "minItems": 3,
+                    "maxItems": 3
+                  },
+                  "size": {
+                    "type": "array",
+                    "items": {
+                      "type": "number"
+                    },
+                    "minItems": 3,
+                    "maxItems": 3
+                  },
+                  "radius": {
+                    "type": "number"
+                  },
+                  "top_radius": {
+                    "type": "number"
+                  },
+                  "points": {
+                    "type": "array",
+                    "items": {
+                      "type": "array",
+                      "items": {
+                        "type": "number"
+                      },
+                      "minItems": 2,
+                      "maxItems": 2
+                    },
+                    "maxItems": 512
+                  }
+                },
+                "required": [
+                  "id",
+                  "label",
+                  "operation",
+                  "shape",
+                  "position",
+                  "rotation",
+                  "size",
+                  "radius",
+                  "top_radius",
+                  "points"
+                ],
+                "additionalProperties": false
+              },
+              "maxItems": 128
+            },
+            "fillet_radius": {
+              "type": "number"
+            }
+          },
+          "required": [
+            "parts",
+            "fillet_radius"
+          ],
+          "additionalProperties": false
+        },
+        {
+          "type": "null"
+        }
+      ]
+    },
+    "pcb": {
+      "anyOf": [
+        {
+          "type": "object",
+          "properties": {
+            "width_mm": {
+              "type": "number"
+            },
+            "height_mm": {
+              "type": "number"
+            },
+            "thickness_mm": {
+              "type": "number"
+            },
+            "nets": {
+              "type": "array",
+              "items": {
+                "type": "string"
+              },
+              "maxItems": 256
+            },
+            "components": {
+              "type": "array",
+              "items": {
+                "type": "object",
+                "properties": {
+                  "reference": {
+                    "type": "string"
+                  },
+                  "value": {
+                    "type": "string"
+                  },
+                  "position": {
+                    "type": "array",
+                    "items": {
+                      "type": "number"
+                    },
+                    "minItems": 2,
+                    "maxItems": 2
+                  },
+                  "rotation": {
+                    "type": "number"
+                  },
+                  "body_size": {
+                    "type": "array",
+                    "items": {
+                      "type": "number"
+                    },
+                    "minItems": 3,
+                    "maxItems": 3
+                  },
+                  "pads": {
+                    "type": "array",
+                    "items": {
+                      "type": "object",
+                      "properties": {
+                        "number": {
+                          "type": "string"
+                        },
+                        "net": {
+                          "type": "string"
+                        },
+                        "position": {
+                          "type": "array",
+                          "items": {
+                            "type": "number"
+                          },
+                          "minItems": 2,
+                          "maxItems": 2
+                        },
+                        "size": {
+                          "type": "array",
+                          "items": {
+                            "type": "number"
+                          },
+                          "minItems": 2,
+                          "maxItems": 2
+                        },
+                        "drill": {
+                          "type": "number"
+                        },
+                        "shape": {
+                          "type": "string",
+                          "enum": [
+                            "circle",
+                            "rect",
+                            "oval"
+                          ]
+                        },
+                        "kind": {
+                          "type": "string",
+                          "enum": [
+                            "through_hole",
+                            "smd"
+                          ]
+                        },
+                        "layer": {
+                          "type": "string",
+                          "enum": [
+                            "F.Cu",
+                            "B.Cu"
+                          ]
+                        }
+                      },
+                      "required": [
+                        "number",
+                        "net",
+                        "position",
+                        "size",
+                        "drill",
+                        "shape",
+                        "kind",
+                        "layer"
+                      ],
+                      "additionalProperties": false
+                    },
+                    "maxItems": 128
+                  }
+                },
+                "required": [
+                  "reference",
+                  "value",
+                  "position",
+                  "rotation",
+                  "body_size",
+                  "pads"
+                ],
+                "additionalProperties": false
+              },
+              "maxItems": 256
+            },
+            "tracks": {
+              "type": "array",
+              "items": {
+                "type": "object",
+                "properties": {
+                  "net": {
+                    "type": "string"
+                  },
+                  "layer": {
+                    "type": "string",
+                    "enum": [
+                      "F.Cu",
+                      "B.Cu"
+                    ]
+                  },
+                  "width_mm": {
+                    "type": "number"
+                  },
+                  "points": {
+                    "type": "array",
+                    "items": {
+                      "type": "array",
+                      "items": {
+                        "type": "number"
+                      },
+                      "minItems": 2,
+                      "maxItems": 2
+                    },
+                    "maxItems": 256
+                  }
+                },
+                "required": [
+                  "net",
+                  "layer",
+                  "width_mm",
+                  "points"
+                ],
+                "additionalProperties": false
+              },
+              "maxItems": 2048
+            },
+            "mounting_holes": {
+              "type": "array",
+              "items": {
+                "type": "object",
+                "properties": {
+                  "position": {
+                    "type": "array",
+                    "items": {
+                      "type": "number"
+                    },
+                    "minItems": 2,
+                    "maxItems": 2
+                  },
+                  "diameter_mm": {
+                    "type": "number"
+                  }
+                },
+                "required": [
+                  "position",
+                  "diameter_mm"
+                ],
+                "additionalProperties": false
+              },
+              "maxItems": 128
+            },
+            "silkscreen": {
+              "type": "array",
+              "items": {
+                "type": "object",
+                "properties": {
+                  "text": {
+                    "type": "string"
+                  },
+                  "position": {
+                    "type": "array",
+                    "items": {
+                      "type": "number"
+                    },
+                    "minItems": 2,
+                    "maxItems": 2
+                  },
+                  "size_mm": {
+                    "type": "number"
+                  }
+                },
+                "required": [
+                  "text",
+                  "position",
+                  "size_mm"
+                ],
+                "additionalProperties": false
+              },
+              "maxItems": 128
+            }
+          },
+          "required": [
+            "width_mm",
+            "height_mm",
+            "thickness_mm",
+            "nets",
+            "components",
+            "tracks",
+            "mounting_holes",
+            "silkscreen"
+          ],
+          "additionalProperties": false
+        },
+        {
+          "type": "null"
+        }
+      ]
+    }
+  },
+  "required": [
+    "kind",
+    "units",
+    "description",
+    "cad",
+    "pcb"
+  ],
+  "additionalProperties": false
+}

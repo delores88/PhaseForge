@@ -1,5 +1,6 @@
 import {buildSceneGraph} from './scene-geometry.mjs';
 import {PALETTE} from './scene.mjs';
+import {releaseRenderer} from './viewer-resources.mjs';
 
 const radiusFor=(entity,fallback)=>Number.isFinite(entity?.radius)&&entity.radius>0?entity.radius:fallback;
 const interpolatePosition=(a,b,alpha)=>b?a.position.map((v,i)=>v+(b.position[i]-v)*alpha):a.position;
@@ -12,11 +13,11 @@ export async function createSceneViewer(host,config) {
   const renderer=new THREE.WebGLRenderer({antialias:quality!=='low',alpha:false,powerPreference:'high-performance'});
   renderer.outputColorSpace=THREE.SRGBColorSpace;renderer.toneMapping=THREE.ACESFilmicToneMapping;renderer.toneMappingExposure=1.18;renderer.localClippingEnabled=true;
   let pixelRatio=Math.min(window.devicePixelRatio||1,quality==='high'?2:quality==='low'?1:1.5);renderer.setPixelRatio(pixelRatio);host.replaceChildren(renderer.domElement);
-  let graph=null,raf=0,observer=null,controls=null;
-  const extraGeometry=new Set(),extraMaterial=new Set(),listeners=[];
+  let graph=null,raf=0,observer=null,controls=null,disposed=false;
+  const extraGeometry=new Set(),extraMaterial=new Set(),extraInstances=new Set(),listeners=[];
   const addGeometry=g=>(extraGeometry.add(g),g),addMaterial=m=>(extraMaterial.add(m),m);
   const listen=(type,handler)=>{renderer.domElement.addEventListener(type,handler);listeners.push([type,handler]);};
-  const dispose=()=>{cancelAnimationFrame(raf);observer?.disconnect();controls?.dispose();for(const [type,handler] of listeners)renderer.domElement.removeEventListener(type,handler);graph?.dispose();extraGeometry.forEach(g=>g.dispose());extraMaterial.forEach(m=>m.dispose());renderer.dispose();renderer.domElement.remove();};
+  const dispose=()=>{if(disposed)return;disposed=true;cancelAnimationFrame(raf);observer?.disconnect();controls?.dispose();for(const [type,handler] of listeners)renderer.domElement.removeEventListener(type,handler);graph?.dispose();extraInstances.forEach(object=>object.dispose());extraGeometry.forEach(g=>g.dispose());extraMaterial.forEach(m=>m.dispose());releaseRenderer(renderer);};
   try {
     const world=new THREE.Group();scene.add(world);
     if(sceneSpec?.nodes.length){graph=buildSceneGraph(THREE,sceneSpec,{quality});world.add(graph.root);}
@@ -42,6 +43,7 @@ export async function createSceneViewer(host,config) {
     const clipping=new THREE.Plane(new THREE.Vector3(-1,0,0),span);
     const mapped=new Set((sceneSpec?.nodes||[]).map(n=>n.entity_id).filter(Boolean)),looseIDs=meta.ids.filter(id=>!mapped.has(id)),idIndex=new Map(meta.ids.map((id,i)=>[id,i]));
     const markers=new THREE.InstancedMesh(addGeometry(new THREE.SphereGeometry(1,quality==='low'?10:20,quality==='low'?8:14)),addMaterial(new THREE.MeshStandardMaterial({roughness:.4,metalness:.15})),Math.max(1,looseIDs.length));markers.count=0;markers.frustumCulled=false;markers.instanceMatrix.setUsage(THREE.DynamicDrawUsage);world.add(markers);
+    extraInstances.add(markers);
     const matrix=new THREE.Matrix4(),color=new THREE.Color(),fallbackRadius=Math.min(span*.03,Math.max(span*.004,Number(config.pointSize)||span*.012));
     const traces=[];
     for(const id of meta.ids.slice(0,Math.min(96,Math.max(1,Math.floor(120000/Math.max(frames.length,1)))))){
@@ -94,6 +96,7 @@ export async function createSceneViewer(host,config) {
     const api={dispose,seek:t=>{cursor=Math.max(meta.start,Math.min(meta.end,t));onTime(cursor);apply(cursor);reportCamera();},view:fit,capture,cameraState,command,vectorScale};
     apply(cursor);if(config.cameraCommand)command(config.cameraCommand);
     const draw=now=>{
+      if(disposed)return;
       raf=requestAnimationFrame(draw);
       if(document.hidden){last=now;renderClock=now;return;}
       // Rendering never follows an uncapped high-refresh display. Playback uses

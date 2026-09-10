@@ -1,12 +1,13 @@
 import {useEffect, useMemo, useState} from 'react';
-import {ChevronDown, Sparkles, RefreshCw} from 'lucide-react';
+import {createPortal} from 'react-dom';
+import {ChevronDown, Sparkles, RefreshCw, Globe2} from 'lucide-react';
 import {api} from '@/lib/api';
 import {useModelSelection} from '@/lib/modelSelection';
 
 const cache = new Map();
 export default function ModelPicker({providers=[], disabled=false, compact=false}) {
   const {selection,setSelection}=useModelSelection();
-  const [open,setOpen]=useState(false), [models,setModels]=useState([]), [error,setError]=useState(''), [loading,setLoading]=useState(false), [revision,setRevision]=useState(0);
+  const [position,setPosition]=useState({top:16,left:16}),[open,setOpen]=useState(false), [models,setModels]=useState([]), [error,setError]=useState(''), [loading,setLoading]=useState(false), [revision,setRevision]=useState(0);
   const configured=providers.filter(p=>p.key_configured || p.configured);
   const provider=configured.find(p=>p.provider===selection.provider) || configured.find(p=>p.provider==='open_ai') || configured[0];
   useEffect(()=>{
@@ -23,15 +24,16 @@ export default function ModelPicker({providers=[], disabled=false, compact=false
   const selected=choices.find(m=>m.id===(selection.model||provider?.model));
   const recommended=choices.find(m=>m.recommended);
   const label=selected?.display_name || selection.model || provider?.model || 'Choose a model';
-  const choose=m=>setSelection({provider:provider.provider,model:m.id,reasoning_effort:m.recommended_reasoning||null});
+  const choose=m=>setSelection(v=>({...v,provider:provider.provider,model:m.id,reasoning_effort:m.recommended_reasoning||null}));
   useEffect(()=>{
-    if(provider&&provider.provider!==selection.provider)setSelection({provider:provider.provider,model:provider.model||'',reasoning_effort:null});
+    if(provider&&provider.provider!==selection.provider)setSelection(v=>({...v,provider:provider.provider,model:provider.model||'',reasoning_effort:null}));
   },[provider?.provider,selection.provider,setSelection]);
   return <div className={`modelPicker ${compact?'modelPicker--compact':''}`}>
-    <button type="button" className="modelPickerTrigger" disabled={disabled} onClick={()=>setOpen(v=>!v)} aria-expanded={open} aria-label="Choose model for this turn"><Sparkles size={14}/><span>{label}</span><ChevronDown size={13}/></button>
-    {open&&<div className="modelPickerPanel">
+    <button type="button" className="modelPickerTrigger" disabled={disabled} onClick={e=>{const r=e.currentTarget.getBoundingClientRect();setPosition({top:Math.max(16,Math.min(r.bottom+8,window.innerHeight-456)),left:Math.max(16,Math.min(r.left,window.innerWidth-326))});setOpen(v=>!v);}} aria-expanded={open} aria-label="Choose model for this turn"><Sparkles size={14}/><span>{label}</span><ChevronDown size={13}/></button>
+    <button type="button" className={`researchModeToggle ${selection.research_mode?'active':''}`} disabled={disabled} aria-pressed={!!selection.research_mode} title="Research mode sends this request to public scientific catalogs and saves retrieved sources and assets" onClick={()=>setSelection(v=>({...v,research_mode:!v.research_mode}))}><Globe2 size={14}/>{selection.research_mode?'Research on':'Research off'}</button>
+    {open&&createPortal(<div className="modelPickerPanel modelPickerPanel--floating" style={position} role="dialog" aria-label="Model selection">
       <header><strong>Intelligence for this turn</strong><button type="button" aria-label="Refresh available models" onClick={()=>{cache.delete(provider?.provider);setRevision(v=>v+1);}} disabled={loading}><RefreshCw size={13}/></button></header>
-      <div className="modelProviderTabs">{configured.map(p=><button type="button" key={p.provider} className={provider?.provider===p.provider?'active':''} onClick={()=>setSelection({provider:p.provider,model:p.model||'',reasoning_effort:null})}>{p.provider==='open_ai'?'OpenAI':'Anthropic'}</button>)}</div>
+      <div className="modelProviderTabs">{configured.map(p=><button type="button" key={p.provider} className={provider?.provider===p.provider?'active':''} onClick={()=>setSelection(v=>({...v,provider:p.provider,model:p.model||'',reasoning_effort:null}))}>{p.provider==='open_ai'?'OpenAI':'Anthropic'}</button>)}</div>
       {loading?<p>Loading your available models…</p>:choices.length>0?<>
         <div className="modelRangeLabels"><span>Fast & economical</span><span>Most capable</span></div>
         <input type="range" aria-label="Model capability" min="0" max={Math.max(0,sliderChoices.length-1)} value={Math.max(0,sliderChoices.findIndex(m=>m.id===selected?.id||selected?.id.startsWith(m.id+'-')))} onChange={e=>choose(sliderChoices[Number(e.target.value)])}/>
@@ -42,6 +44,6 @@ export default function ModelPicker({providers=[], disabled=false, compact=false
       </>:<p>{error||'Add a provider key in Settings to discover models.'}{provider?.model&&' Your saved model is still selected.'}</p>}
       <small>Changes apply to the next request. Provider API charges apply.</small>
       <button type="button" className="button button--secondary" onClick={()=>setOpen(false)}>Done</button>
-    </div>}
+    </div>,document.body)}
   </div>;
 }

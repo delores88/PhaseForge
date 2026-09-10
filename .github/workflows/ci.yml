@@ -1,5 +1,10 @@
 name: Scientific contracts and native builds
-on: [push, pull_request, workflow_dispatch]
+on:
+  push:
+    paths-ignore: ['**/*.md', 'docs/RELEASE_VALIDATION.json']
+  pull_request:
+    paths-ignore: ['**/*.md', 'docs/RELEASE_VALIDATION.json']
+  workflow_dispatch:
 jobs:
   backend:
     strategy:
@@ -66,7 +71,7 @@ jobs:
       - run: node scripts/release-audit.mjs
       - run: npm ci --no-audit --no-fund
         working-directory: frontend
-      - run: node --test frontend/tests/scene.test.mjs
+      - run: node --test frontend/tests/*.test.mjs
       - run: node --test desktop/tests/*.test.cjs
       - run: npm run build
         working-directory: frontend

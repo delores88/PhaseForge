@@ -18,6 +18,31 @@ Chat attachments are text-only, size-bounded, and limited by extension. Supporte
 
 Provider output is schema-parsed. Executable manifests pass trusted validation before persistence or execution. Molecular and QM/MM discussions cannot silently invoke unconfigured scientific engines.
 
+Studio has a separate strict, data-only schema for scenes and fabrication. Source
+bindings and revision parents must belong to the current project. Render and
+fabrication requests validate again before starting their fixed native workers;
+model-generated Python, shell commands and plugins are not accepted.
+
+## Public source intake
+
+Automatic catalog queries require `research_mode:true`; it defaults to false on
+chat, Studio and research sessions. Explicit search/import actions authorize their
+own requests. Turning the mode off stops new automatic retrieval, but already
+saved evidence can still be included in later provider context.
+
+Catalog requests and public-file downloads use fixed scientific/data hosts, bounded
+responses and no redirects. Public-file URLs reject credentials, query strings,
+fragments, custom ports and unlisted hosts. Allowed CSV/JSON/PDB/GLB/STL/PNG/JPEG
+content must pass format-specific checks. HTML, SVG, executable files, scripts and
+incoming Blender projects are rejected. GLB assets must be self-contained within
+the accepted embedded-resource subset. See [the intake contract](public-research-and-studio.md)
+for exact hosts and limits.
+
+Retrieved content is untrusted evidence, never an instruction to the application or
+an authority over the researcher. Original bytes and provenance are saved locally.
+Checksums identify those bytes; they do not certify scientific truth or a license.
+No public upload or publication is performed by this intake path.
+
 ## Resource controls
 
 Run manifests contain finite wall-time, memory, step, candidate, batch, and output limits. Chat requests can be cancelled. Molecular imports and message attachments have explicit size and count ceilings.
@@ -41,7 +66,7 @@ write endpoints to a network without a separate authorization design.
 
 ## Trusted independent process (0.5.0)
 
-The sole new executable worker is static project-shipped Python, embedded into the
+The independent verification worker is static project-shipped Python, embedded into the
 Rust binary with source hashes. No user/agent source is compiled or run. The service
 launches an explicitly probed interpreter without a shell, under `-I`, with a bounded
 JSON input, an isolated random working directory, output limits, cancellation and
@@ -53,3 +78,18 @@ Crossref receives only explicitly consented query text. No automatic public uplo
 or paper submission is added. Reviewer names are local attribution, not authenticated
 signatures. Checksums verify bytes, not truth or identity. One backend instance per
 database remains required.
+
+## Native Studio processes
+
+Blender and CAD/PCB jobs run project-shipped workers with validated JSON inputs and
+separately installed local engines. The caller cannot choose an arbitrary script,
+command or artifact path. Blender starts with factory settings and automatic script
+execution disabled; editable `.blend` output is created by the trusted worker.
+Artifact routes expose fixed filenames, not arbitrary files from disk.
+
+Each worker has bounded queueing, elapsed time, outputs and cancellation. Windows
+Job Objects supervise process trees and enforce host-memory limits; Unix workers
+have process-group cancellation and memory monitoring. These controls do not
+reserve GPU VRAM or sandbox a compromised native installation. Locally configured
+engine executables and dependencies remain trusted software. Render/fabrication
+jobs interrupted by a restart retain their files and require an explicit new job.

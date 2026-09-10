@@ -5,8 +5,8 @@
   "native_platform": "windows-x64",
   "gpu": "NVIDIA GeForce RTX 4090 Laptop GPU / DX12",
   "executed": {
-    "rust_all_targets_passed": 156,
-    "rust_opt_in_excluded": 1,
+    "rust_all_targets_passed": 188,
+    "rust_opt_in_excluded": 4,
     "separate_gpu_test_passed": true,
     "native_http_smoke_programs": 5,
     "schema_tests": 22,
@@ -17,10 +17,13 @@
     "javascript_helpers": 165,
     "jsx_handlers": 19,
     "scene_tests": 14,
+    "conversation_presentation_tests": 3,
     "desktop_tests": 3,
-    "source_audit": 121,
+    "source_audit": 122,
     "frontend_build": true,
     "rust_release_build": true,
+    "initial_desktop_install_passed": true,
+    "installed_engine_crash_recovery_seconds": 4.95,
     "live_openai_session": {
       "model": "gpt-5.6-sol",
       "reasoning": "high",
@@ -30,7 +33,33 @@
       "scene_nodes": 12,
       "frames": 201,
       "validated_repair": true
-    }
+    },
+    "frontend_model_and_scene_tests": 30,
+    "studio": {
+      "rcsb_import": "4NCO",
+      "source_atoms": 22014,
+      "cycles_width": 1024,
+      "cycles_height": 1024,
+      "cycles_samples": 48,
+      "cycles_seconds": 41.516,
+      "cycles_backend": "OPTIX",
+      "cycles_device": "NVIDIA GeForce RTX 4090 Laptop GPU",
+      "model_triangles": 1484492,
+      "model_vertices": 738796,
+      "interactive_fullscreen_orbit_checked": true,
+      "cad_native_exit_code": 0,
+      "cad_step_stl_valid": true,
+      "pcb_drc_clean_manufacturing_export": true,
+      "pcb_unconnected_manufacturing_withheld": true,
+      "all_advertised_pcb_downloads_checked": true,
+      "bound_scene_atoms": [
+        22014,
+        1686
+      ],
+      "bound_scene_cycles_seconds": 62.594
+    },
+    "cpu_only_tests_passed": 186,
+    "viewer_lifecycle_tests": 4
   },
   "pending": [
     "Final Windows x64 installation acceptance",

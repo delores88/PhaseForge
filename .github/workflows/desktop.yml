@@ -29,7 +29,7 @@ jobs:
         working-directory: backend
       - run: npm ci --no-audit --no-fund
         working-directory: frontend
-      - run: node --test frontend/tests/scene.test.mjs
+      - run: node --test frontend/tests/*.test.mjs
       - run: npm run build
         working-directory: frontend
       - run: npm ci --no-audit --no-fund

@@ -2,8 +2,54 @@
 No AI calls, credentials, or internet. Uses an isolated temporary DB and port 17433.
 Run: python tests/runtime_smoke.py --binary backend/target/debug/phaseforge-backend[.exe]
 """
-import argparse, json, os, pathlib, subprocess, tempfile, time, urllib.request
+import argparse, json, os, pathlib, signal, subprocess, tempfile, time, urllib.request
+from contextlib import contextmanager
 from test_proposal_schema import draft
+
+@contextmanager
+def backend_process(command, log_path, *, environment=None):
+    """Own the backend and its helpers until their inherited log handles close.
+
+    Telemetry and verification can launch child processes. Terminating only the
+    backend leaves those children holding backend.log open on Windows, making
+    TemporaryDirectory cleanup fail even after every API assertion passes.
+    """
+    options = ({'creationflags': subprocess.CREATE_NO_WINDOW} if os.name == 'nt'
+               else {'start_new_session': True})
+    with log_path.open('w', encoding='utf-8') as log:
+        process = subprocess.Popen(command, stdin=subprocess.DEVNULL, stdout=log,
+                                   stderr=subprocess.STDOUT, env=environment,
+                                   close_fds=True, **options)
+        try:
+            yield process
+        finally:
+            try:
+                if os.name == 'nt':
+                    if process.poll() is None:
+                        # Kill the tree while its parent still exists; killing
+                        # the parent first loses taskkill's child ownership.
+                        stopped = subprocess.run(
+                            ['taskkill', '/PID', str(process.pid), '/T', '/F'],
+                            stdin=subprocess.DEVNULL, capture_output=True,
+                            text=True, timeout=15,
+                            creationflags=subprocess.CREATE_NO_WINDOW)
+                        if stopped.returncode and process.poll() is None:
+                            raise RuntimeError('Backend process-tree shutdown failed: '
+                                               + stopped.stdout + stopped.stderr)
+                else:
+                    # The dedicated session contains this test's backend only,
+                    # including helpers that outlive their immediate parent.
+                    try:
+                        os.killpg(process.pid, signal.SIGKILL)
+                    except ProcessLookupError:
+                        pass
+                process.wait(timeout=10)
+            finally:
+                # A failed tree shutdown still must reap our immediate child.
+                # Preserve the failure; do not ignore temporary-file errors.
+                if process.poll() is None:
+                    process.kill()
+                    process.wait(timeout=5)
 
 def main():
     parser=argparse.ArgumentParser();parser.add_argument('--binary',required=True);parser.add_argument('--port',type=int,default=17433);args=parser.parse_args()
@@ -12,14 +58,12 @@ def main():
     with tempfile.TemporaryDirectory(prefix='phaseforge-smoke-') as folder:
         root=pathlib.Path(folder)
         config=root/'test.toml';config.write_text('bind_address = "127.0.0.1"\nport = '+str(args.port)+'\ndata_directory = '+json.dumps(str(root/'data'))+'\ngpu_enabled = false\n',encoding='utf-8')
-        log=(root/'backend.log').open('w')
-        process=subprocess.Popen([str(binary),'--cpu-only','--config',str(config)],stdout=log,stderr=subprocess.STDOUT)
         base=f'http://127.0.0.1:{args.port}'
         def request(path,payload=None):
             body=json.dumps(payload).encode() if payload is not None else None
             req=urllib.request.Request(base+path,data=body,headers={'Content-Type':'application/json'})
             with urllib.request.urlopen(req,timeout=10) as response:return json.load(response)
-        try:
+        with backend_process([str(binary),'--cpu-only','--config',str(config)], root/'backend.log') as process:
             for _ in range(90):
                 try:
                     if request('/api/health')['status']=='ok':break
@@ -56,9 +100,4 @@ def main():
             time.sleep(2.2);telemetry=request('/api/telemetry');assert 'ram_total_bytes' in telemetry
             assert isinstance(telemetry['gpus'],list)
             print('PASS actual backend API: isolated run, no-objective metric evidence, 3 distinct trials, constraints, multi-entity frames, findings, lightweight workflow and resource schema.')
-        finally:
-            process.terminate()
-            try:process.wait(timeout=10)
-            except subprocess.TimeoutExpired:process.kill();process.wait()
-            log.close()
 if __name__=='__main__':main()

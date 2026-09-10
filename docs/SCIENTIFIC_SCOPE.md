@@ -4,9 +4,10 @@
 
 PhaseForge is an experimental computational workbench for creating, executing, inspecting, and challenging bounded scientific models. It is not a source of experimental truth and does not turn model output into proof about nature or medicine.
 
-Version 0.8 adds a local Electron desktop, procedural 3D scenes and timed research
-sessions. These improve construction, inspection and iteration around implemented
-models; they do not expand the native solver into all scientific domains.
+Version 0.8 adds a local Electron desktop, procedural 3D scenes, timed research
+sessions, public source intake and Studio rendering/CAD/PCB workflows. These improve
+construction, inspection and iteration around implemented models and artifacts;
+they do not expand the numerical solver into all scientific domains.
 
 ## Procedural representation
 
@@ -18,6 +19,28 @@ conceptual. Scene provenance is saved with each run. See [scenes](SCIENTIFIC_SCE
 Visual geometry is not a force field. Procedural DNA is not an experimentally
 determined conformation; a viral envelope and nearby molecules do not establish
 binding or efficacy. The analytic potential-flow example is not a viscous fluid solver.
+
+## Public sources and native artifacts
+
+Public research retrieves literature metadata, deposited structures and images,
+and can import selected data or meshes from supported hosts. Source URLs and byte
+hashes establish what was retrieved, not whether it is correct, licensed for a
+particular reuse or sufficient evidence for a claim. Images may be observations,
+composites or illustrations; research mode is not a systematic literature review.
+
+Blender Cycles computes image formation for supplied geometry and materials. An
+imported molecular surface approximates an atomic van der Waals envelope; it is
+not electron density, solvent-excluded geometry or a molecular simulation. A
+microscopy lighting preset does not create an acquired microscope measurement.
+Astronomical scene rendering does not execute general relativity.
+
+CadQuery/OpenCascade checks constructed solids and exports STEP/STL. Geometric
+validity does not establish structural strength, material properties, tolerances,
+process suitability or physical fit. KiCad runs board design-rule checks and exports
+editable and manufacturing files. A zero-issue DRC report does not establish
+electrical function, component ratings, a correct schematic or regulatory compliance.
+Inspect retained inputs, reports and limitations before drawing broader conclusions.
+See [rendering](BLENDER_RENDERING.md) and [CAD/PCB engines](CAD_PCB_ENGINES.md).
 
 ## Executable numerical capabilities
 
@@ -49,7 +72,7 @@ The interface must distinguish:
 
 ## Capability gaps
 
-Agents must return a capability gap when a question requires unsupported PDEs, fields, quantum amplitudes, stochastic wavefunctions, relativity, electronic structure, molecular dynamics, docking, reaction chemistry, or another absent representation. They must not coerce such questions into an unrelated classical model merely to produce output.
+For quantitative execution, agents must return a capability gap when the requested calculation requires unsupported PDEs, quantum amplitudes, relativity, electronic structure, molecular dynamics, docking, reaction chemistry or another absent solver. They must not coerce such questions into an unrelated classical model merely to produce output. Requests for a visual scene or engineering artifact can instead use Studio's supported representations, with their assumptions and limitations stated; these artifacts do not require an ODE model.
 
 ## Biomolecular claims
 

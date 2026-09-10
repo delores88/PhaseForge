@@ -38,6 +38,7 @@ pub struct ProviderClient {
     base_url: String,
     client: reqwest::Client,
     reasoning_effort: Option<String>,
+    schema_override: Option<Value>,
 }
 
 impl ProviderClient {
@@ -55,6 +56,7 @@ impl ProviderClient {
             base_url: base_url.trim_end_matches('/').to_owned(),
             client,
             reasoning_effort: None,
+            schema_override: None,
         }
     }
 
@@ -80,6 +82,9 @@ impl ProviderClient {
         self.provider == ProviderKind::OpenAi && (self.model.contains("-pro")
             || self.reasoning_effort.as_deref().is_some_and(|effort| ["high", "xhigh", "max"].contains(&effort)))
     }
+
+    pub(super) fn with_schema(mut self, schema: Value) -> Self { self.schema_override=Some(schema); self }
+    pub(super) fn structured_schema(&self) -> Value { self.schema_override.clone().unwrap_or_else(proposal_schema) }
 
     pub async fn poll_response(&self, id: &str) -> anyhow::Result<ProviderResponse> {
         self.response_operation(id, false).await
@@ -227,7 +232,7 @@ impl ProviderClient {
         &self, prompt: &str, system: &str, structured: bool, max_tokens: u32,
     ) -> anyhow::Result<ProviderResponse> {
         if self.model.trim().is_empty() { bail!("No active model selected"); }
-        let schema = proposal_schema();
+        let schema = self.structured_schema();
         let builder = match self.provider {
             ProviderKind::OpenAi => {
                 let mut body = json!({"model":self.model,"instructions":system,"input":prompt,
@@ -265,14 +270,18 @@ impl ProviderClient {
 }
 
 pub struct ProviderResponse { pub status: u16, pub body: Value }
+#[derive(Debug, thiserror::Error)]
+#[error("Provider reached the output-token limit before completing the artifact. Usage was recorded and the output ceiling was preserved.")]
+pub struct OutputLimitError;
 impl ProviderResponse {
     pub fn pending(&self) -> bool { (200..300).contains(&self.status) && self.body["status"].as_str().is_some_and(|status| ["queued", "in_progress"].contains(&status)) }
     pub fn text(&self) -> anyhow::Result<String> {
         if !(200..300).contains(&self.status) { bail!("Provider HTTP {}: {}",self.status,safe_error(&self.body)); }
-        if self.body.get("status").and_then(Value::as_str) == Some("incomplete")
-            || self.body.get("stop_reason").and_then(Value::as_str) == Some("max_tokens") {
-            bail!("Provider reached the output-token limit before completing a proposal. Usage was recorded; raise the per-call limit or request a smaller experiment.");
+        if (self.body["status"] == "incomplete" && self.body["incomplete_details"]["reason"] == "max_output_tokens")
+            || self.body["stop_reason"] == "max_tokens" {
+            return Err(OutputLimitError.into());
         }
+        if self.body["status"] == "incomplete" {bail!("Provider returned an incomplete response for a reason other than output length; no automatic recovery was attempted.");}
         if self.body.get("error").is_some_and(|v| !v.is_null()) { bail!("Provider error: {}",safe_error(&self.body)); }
         if self.body["status"] == "cancelled" { bail!("Provider background response was cancelled"); }
         if self.body["status"] == "failed" { bail!("Provider background response failed: {}",safe_error(&self.body)); }

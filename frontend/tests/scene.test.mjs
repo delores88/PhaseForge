@@ -2,7 +2,27 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import * as THREE from 'three';
 import {buildSceneGraph} from '../src/lib/scene-geometry.mjs';
-import {normalizeScene,sceneFromEvidence,SCENE_LIMITS,SCENE_PRESETS,exampleScene,helixPoints,fibonacciSphere,potentialFlowVelocity,potentialStreamlines} from '../src/lib/scene.mjs';
+import {normalizeScene,sceneSourceFromEvidence,sceneFromEvidence,SCENE_LIMITS,SCENE_PRESETS,exampleScene,helixPoints,fibonacciSphere,potentialFlowVelocity,potentialStreamlines} from '../src/lib/scene.mjs';
+
+test('camera parent updates retain scene identity across fresh Studio manifest wrappers',()=>{
+  const scene=exampleScene('dna');
+  const initial=sceneSourceFromEvidence(null,{visualization:{scene}});
+  for(let i=0;i<30;i++)assert.strictEqual(sceneSourceFromEvidence(null,{visualization:{scene}}),initial);
+  const replacement=exampleScene('flow');
+  assert.notStrictEqual(sceneSourceFromEvidence(null,{visualization:{scene:replacement}}),initial);
+  assert.equal(sceneSourceFromEvidence({manifest_id:'old'},{id:'new',visualization:{scene}}),null);
+});
+
+test('scene graph releases instance attributes and shared resources exactly once',()=>{
+  const graph=buildSceneGraph(THREE,normalizeScene(exampleScene('dna')),{quality:'low'});
+  let instances=0,releasedInstances=0,releasedGeometry=0;
+  graph.root.traverse(object=>{if(object.isInstancedMesh){instances++;object.addEventListener('dispose',()=>releasedInstances++);}});
+  for(const geometry of graph.resources.geometries)geometry.addEventListener('dispose',()=>releasedGeometry++);
+  assert.ok(instances>0);const geometryCount=graph.resources.geometries.size;
+  graph.dispose();graph.dispose();
+  assert.equal(releasedInstances,instances);assert.equal(releasedGeometry,geometryCount);
+  assert.equal(graph.root.children.length,0);assert.equal(graph.pickables.length,0);
+});
 
 test('scene input stays immutable and unsupported code/URLs never reach rendering data',()=>{
   const input={nodes:[{id:'atom',type:'atom',script:'throw Error()',url:'file:///private',parameters:{radius:NaN,expression:'alert(1)'}},{id:'unsafe',type:'javascript'}]};

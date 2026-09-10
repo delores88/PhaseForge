@@ -15,3 +15,4 @@ pub mod usage;
 pub mod discovery;
 
 pub mod assurance;
+pub mod studio;

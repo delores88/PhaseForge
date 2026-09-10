@@ -17,7 +17,7 @@ Planned package names match the desktop builder:
 | --- | --- | --- |
 | Windows x64 | `PhaseForge_VERSION_x64-setup.exe` | `windows-nsis` |
 | Windows ARM64 | `PhaseForge_VERSION_arm64-setup.exe` | `windows-nsis` |
-| Linux x64 | `PhaseForge_VERSION_x64.AppImage` | `linux-appimage` |
+| Linux x64 | `PhaseForge_VERSION_x86_64.AppImage` | `linux-appimage` |
 | Linux ARM64 | `PhaseForge_VERSION_arm64.AppImage` | `linux-appimage` |
 
 Each Windows/Linux asset declares exactly one architecture. Build configuration

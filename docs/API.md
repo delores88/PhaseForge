@@ -1,6 +1,6 @@
 # Loopback API
 
-The default backend is `http://127.0.0.1:7331`. The API is intended for the local PhaseForge browser client and future desktop shell.
+The default backend is `http://127.0.0.1:7331`. The API serves the local PhaseForge browser client and desktop shell.
 
 ## Service and compute
 
@@ -163,3 +163,44 @@ non-running gap, not a research plan. The user run flag authorizes one accepted 
 boolean `run`. Returns the prepared immutable manifest and optional queued run,
 status, request hash, and execution error. Same-ID requests are idempotent. See
 `EXPERIMENT_WORKFLOW.md` for reservation ambiguity, project scoping and restart semantics.
+
+## Timed sessions, public research and Studio (0.8.0)
+
+Chat turns accept per-request `provider`, `model`, `reasoning_effort` and
+`research_mode` (default false). Timed sessions retain these settings and share a
+deadline across specialist, builder and review stages. See [session request and
+control contracts](research-sessions.md).
+
+| Method | Route | Behavior |
+|---|---|---|
+| GET/POST | `/api/projects/:id/tasks` | List sessions / start a bounded session |
+| GET | `/api/tasks/:id` | Saved state, stage, budget, artifacts and owned runs |
+| POST | `/api/tasks/:id/control` | Pause, cancel or explicitly resume |
+| GET | `/api/projects/:id/assets` | Saved assets and public-search receipts |
+| POST | `/api/projects/:id/assets/search` | Bounded RCSB, literature or NASA search |
+| POST | `/api/projects/:id/assets/import` | Import a catalog accession or allowed `public_file` URL |
+| GET | `/api/assets/:id/content` | Original validated source bytes |
+| POST | `/api/projects/:id/studio/design` | Metered declarative scene, CAD or PCB design/revision |
+| GET | `/api/projects/:id/studio/designs` | Saved designs and lineage |
+| GET | `/api/studio/capabilities` | Local Blender executable discovery |
+| GET/POST | `/api/studio/renders` | List by `project_id` / queue a bounded local render |
+| GET | `/api/studio/renders/:id` | Status, device report and artifact URLs |
+| POST | `/api/studio/renders/:id/cancel` | Stop a queued or active render |
+| GET | `/api/studio/renders/:id/artifacts/:name` | Fixed render artifact filenames |
+| GET | `/api/studio/fabrication-engines` | Local CAD/Python and KiCad discovery |
+| GET/POST | `/api/studio/fabrications` | List by `project_id` / queue a bounded CAD or PCB job |
+| GET | `/api/studio/fabrications/:id` | Job status, geometry/DRC report and output filenames |
+| POST | `/api/studio/fabrications/:id/cancel` | Stop a queued or active engineering job |
+| GET | `/api/studio/fabrications/:id/artifacts/:name` | Fixed engineering artifact filenames |
+
+Studio design accepts `prompt`, `kind`, model overrides, `research_mode`, selected
+`asset_ids`, and optional `parent_design_id` and `failure_report`. Parent and source
+ownership are checked before external work. Design generation uses the existing
+`/api/chat/requests/:id/cancel` route when a `request_id` is supplied. Rendering and
+fabrication have separate job cancellation routes and do not call a model provider.
+
+See [public intake and design contracts](public-research-and-studio.md),
+[render settings and artifacts](BLENDER_RENDERING.md), and
+[fabrication inputs and checks](CAD_PCB_ENGINES.md). Executable discovery does not
+establish successful execution, and a saved artifact does not certify scientific
+or engineering correctness.

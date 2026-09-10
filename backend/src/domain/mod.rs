@@ -743,6 +743,7 @@ pub struct ChatAttachmentRecord {
 
 #[derive(Debug, Clone, Deserialize)]
 pub struct SendMessageRequest {
+    #[serde(default)] pub research_mode: bool,
     #[serde(default)]
     pub reasoning_effort: Option<String>,
     #[serde(default)] pub experiment_options: Option<crate::experiment::BuildOptions>,

@@ -20,7 +20,7 @@ pub fn validate_proposal_shape(value: &Value) -> anyhow::Result<()> {
     let root = proposal_schema();
     validate(value, &root, &root, "proposal")
 }
-fn validate(value: &Value, schema: &Value, root: &Value, path: &str) -> anyhow::Result<()> {
+pub(super) fn validate(value: &Value, schema: &Value, root: &Value, path: &str) -> anyhow::Result<()> {
     if let Some(reference) = schema.get("$ref").and_then(Value::as_str) {
         let target = root.pointer(reference.trim_start_matches('#')).context("bad schema reference")?;
         return validate(value, target, root, path);
@@ -47,6 +47,15 @@ fn validate(value: &Value, schema: &Value, root: &Value, path: &str) -> anyhow::
     }
     if let Some(choices) = schema.get("enum").and_then(Value::as_array) {
         if !choices.contains(value) { bail!("{path}: invalid enum value {value}"); }
+    }
+    if let Some(array)=value.as_array() {
+        if schema["maxItems"].as_u64().is_some_and(|max|array.len() as u64>max) || schema["minItems"].as_u64().is_some_and(|min|(array.len() as u64)<min) {bail!("{path}: array length outside schema bounds");}
+    }
+    if let Some(number)=value.as_f64() {
+        if !number.is_finite() || schema["maximum"].as_f64().is_some_and(|max|number>max) || schema["minimum"].as_f64().is_some_and(|min|number<min) {bail!("{path}: number outside schema bounds");}
+    }
+    if let Some(text)=value.as_str() {
+        if schema["maxLength"].as_u64().is_some_and(|max|text.chars().count() as u64>max) || schema["minLength"].as_u64().is_some_and(|min|(text.chars().count() as u64)<min) {bail!("{path}: text length outside schema bounds");}
     }
     if let Some(object) = value.as_object() {
         if let Some(required) = schema.get("required").and_then(Value::as_array) {

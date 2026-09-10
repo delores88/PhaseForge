@@ -13,7 +13,7 @@ An AI provider proposes changes. It does not receive arbitrary shell, filesystem
 
 ## Durable research objects
 
-SQLite stores research projects, immutable manifest revisions, conversation messages, attachment records, run records, molecular structures, QM/MM-region plans, computational campaigns, durable research sessions and numerical search checkpoints. Provider secrets are stored separately through the operating-system credential service.
+SQLite stores research projects, immutable manifest revisions, conversation messages, attachment records, run records, molecular structures, QM/MM-region plans, computational campaigns, durable research sessions and numerical search checkpoints. It also retains public-search receipts, source assets and their original bytes, and Studio design revisions. Native rendering and fabrication jobs keep durable records, inputs and output files under the app's artifacts directory. Provider secrets are stored separately through the operating-system credential service.
 
 ## Provider workflow
 
@@ -34,6 +34,29 @@ The optional `visualization.scene` passes a bounded scene schema. Agents author
 data, not arbitrary shaders, JavaScript or engine plugins. Each run saves its scene
 snapshot with the numerical output. Conceptual surface detail remains distinct from
 integration; a membrane or black-hole visual does not install MD or relativistic physics.
+
+## Public evidence and Studio artifacts
+
+The optional `research_mode` flag authorizes bounded catalog intake before a chat
+turn, Studio design or session cycle. `research::assets` searches Europe PMC, RCSB
+and NASA and saves source records. Explicit public-file intake accepts validated
+data and geometry from a fixed HTTPS host allowlist. Original bytes, URLs and hashes
+are retained locally; source excerpts remain untrusted context. Imported PDB
+coordinates become the same molecular records used elsewhere in the workbench.
+
+`agent::studio` has a separate strict response schema for scenes, CAD and PCB
+designs. It shares provider selection, usage admission, cancellation and bounded
+repair with experiment generation. It does not submit an unrelated numerical
+manifest. Project ownership of assets and parent designs is checked before external
+work; revisions include the exact prior design and preserve lineage.
+
+Native workers consume validated data through fixed project-shipped Python, never
+generated code. Blender Cycles produces images, editable projects and GLB geometry;
+CadQuery/OpenCascade builds solids; KiCad serializes boards, runs DRC and exports
+engineering files. These separately installed programs have their own bounded
+queues and process supervision. They do not extend the numerical scheduler into
+MD, PDEs or electrical simulation. See [public intake and Studio](public-research-and-studio.md),
+[rendering](BLENDER_RENDERING.md) and [CAD/PCB engines](CAD_PCB_ENGINES.md).
 
 ## Compute path
 
@@ -58,7 +81,7 @@ See [compute/recovery](COMPUTE_AND_RECOVERY.md) and [GPU scheduling](GPU_AND_SCH
 
 The backend parses supported text structure formats into one normalized record. Deterministic diagnostics, the browser viewport, the agent context, QM/MM-region planner, and campaign planner consume that same record.
 
-External engines are discovered, not impersonated. Campaign stages remain blocked when the required engine is unavailable.
+Molecular simulation engines are discovered, not impersonated. Campaign stages remain blocked when the required engine is unavailable. The executing Blender and CAD/PCB workers are separate integrations; their availability does not establish an MD, docking or quantum adapter.
 
 ## Desktop and browser architecture
 

@@ -148,6 +148,7 @@ export function buildSceneGraph(THREE,spec,{quality='balanced'}={}) {
   const bondObjects=[];
   for(const bond of spec.bonds){const a=objects.get(bond.from),b=objects.get(bond.to);if(!a||!b)continue;const group=new THREE.Group();root.add(group);const m=rods(group,[[a.position.toArray(),b.position.toArray()]],.045,'#a5beca');bondObjects.push({mesh:m,a,b});}
   function updateBonds(){for(const {mesh:m,a,b} of bondObjects){const direction=b.position.clone().sub(a.position),length=direction.length();quaternion.setFromUnitVectors(up,direction.normalize());matrix.compose(a.position.clone().lerp(b.position,.5),quaternion,new THREE.Vector3(.045,length,.045));m.setMatrixAt(0,matrix);m.instanceMatrix.needsUpdate=true;}}
-  function dispose(){resources.geometries.forEach(g=>g.dispose());resources.materials.forEach(m=>m.dispose());root.clear();}
+  let disposed=false;
+  function dispose(){if(disposed)return;disposed=true;root.traverse(object=>{if(object.isInstancedMesh)object.dispose();});resources.geometries.forEach(g=>g.dispose());resources.materials.forEach(m=>m.dispose());root.clear();objects.clear();pickables.length=0;}
   return {root,objects,pickables,updateBonds,dispose,resources};
 }

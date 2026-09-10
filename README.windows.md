@@ -11,7 +11,9 @@ prepared; it is not yet verified. No release is published. Consult the
 Local packaging produces `desktop/dist/PhaseForge_0.8.0_x64-setup.exe` on x64, or
 the corresponding ARM64 installer when built on ARM64. Launch the installer,
 choose the installation folder, and open PhaseForge. A packaged install includes
-the engine; Rust, Node.js and a separate browser are unnecessary to run it.
+the core Rust engine; Rust, Node.js and a separate browser are unnecessary to run it.
+Blender, CadQuery and KiCad are optional, separately installed Studio engines and
+are not included in this installer.
 
 When the tray icon is available, closing the window keeps research running. Use
 the tray menu's **Quit PhaseForge** to exit. The desktop attempts at most three
@@ -105,6 +107,20 @@ For a desktop launch, `PHASEFORGE_CONFIG` and `PHASEFORGE_DISABLE_GPU=1` are
 inherited by the child engine.
 
 ## Optional tools and troubleshooting
+
+Studio can run local Blender Cycles renders and native CAD/PCB exports. Install
+[Blender](https://www.blender.org/download/) and
+[KiCad](https://www.kicad.org/download/), and set up the isolated CAD Python runtime
+using [the pinned native-engine guide](docs/CAD_PCB_ENGINES.md). This development
+machine has local Windows x64 installations; installing PhaseForge on another
+machine does not install these engines automatically.
+
+`BLENDER_PATH`, `PHASEFORGE_CAD_PYTHON` and `KICAD_CLI` can point to the respective
+executables. Set them in the environment that starts PhaseForge and restart the
+app after changing them. Discovery also checks supported local installation paths.
+Studio's engine badges indicate discovery; each completed job records actual
+execution and checks. Blender selects a compatible Cycles device independently
+of the core wgpu numerical backend. See [render setup and limits](docs/BLENDER_RENDERING.md).
 
 Molecular files can be imported without external chemistry software. OpenMM,
 GROMACS, CP2K, xTB, LAMMPS and Open Babel can be inventoried when available in the

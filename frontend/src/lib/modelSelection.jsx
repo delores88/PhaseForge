@@ -2,7 +2,7 @@ import {createContext, useContext, useEffect, useState} from 'react';
 
 const SelectionContext = createContext(null);
 export function ModelSelectionProvider({children}) {
-  const [selection, setSelection] = useState({provider:'open_ai', model:'', reasoning_effort:null});
+  const [selection, setSelection] = useState({provider:'open_ai', model:'', reasoning_effort:null, research_mode:false});
   const [ready, setReady] = useState(false);
   useEffect(() => {
     try { const saved=JSON.parse(localStorage.getItem('phaseforge.modelSelection') || 'null'); if(saved && ['open_ai','anthropic'].includes(saved.provider))setSelection(saved); } catch {}

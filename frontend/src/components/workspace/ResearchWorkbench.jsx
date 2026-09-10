@@ -1,6 +1,7 @@
 import dynamic from "next/dynamic";
 import ExperimentWorkspace from "./ExperimentWorkspace";
 import ResearchSessions from './ResearchSessions';
+import StudioWorkbench from './StudioWorkbench';
 import {useModelSelection} from '@/lib/modelSelection';
 import EquationEditor from "./EquationEditor";
 import {buildRequest,checkedResponse,DEFAULT_BUILD,RUNNING,createSingleFlight} from "@/lib/experiment";
@@ -392,7 +393,7 @@ export default function ResearchWorkbench({ backend, onHardware, onEventState })
   };
 
   const sendWithinFlight = async (payload) => {
-    payload={...payload,provider:payload.provider||selection.provider,model:payload.model||selection.model||null,reasoning_effort:payload.reasoning_effort||selection.reasoning_effort||null};
+    payload={...payload,provider:payload.provider||selection.provider,model:payload.model||selection.model||null,reasoning_effort:payload.reasoning_effort||selection.reasoning_effort||null,research_mode:payload.research_mode??!!selection.research_mode};
     if(sceneContext)payload={...payload,content:`${payload.content}\n\nCurrent viewport inspection (visual context, not new empirical evidence): ${JSON.stringify(sceneContext)}`};
     if(!activeProjectId)throw new Error("Create a project first.");
     if(sendingRef.current||busy)throw new Error("One request is already running. Wait or press Stop.");
@@ -691,6 +692,7 @@ export default function ResearchWorkbench({ backend, onHardware, onEventState })
         {notice&&<div className="expNotice" role="status">{notice}<button type="button" onClick={()=>setNotice("")} aria-label="Dismiss notice">×</button></div>}
         <nav className="workspaceTabs" aria-label="Experiment workspace">
           <button type="button" className={tab==="world"?"active":""} onClick={()=>setTab("world")}><FlaskConical size={14}/>Experiment</button>
+          <button type="button" className={tab==="studio"?"active":""} onClick={()=>setTab("studio")}><Dna size={14}/>3D & fabrication</button>
           <button type="button" className={tab==="findings"?"active":""} onClick={()=>setTab("findings")}><BookOpen size={14}/>Results</button>
           <button type="button" className={tab==="manifest"?"active":""} onClick={()=>setTab("manifest")}><Braces size={14}/>Setup</button>
           <button type="button" className={tab==="sessions"?"active":""} onClick={()=>setTab("sessions")}><Sparkles size={14}/>Agents</button>
@@ -700,6 +702,7 @@ export default function ResearchWorkbench({ backend, onHardware, onEventState })
         </nav>
 
         <div className="workspaceStage">
+          {tab==='studio'&&<StudioWorkbench project={activeProject} manifest={activeManifest} providers={providers} onInspect={value=>setSceneContext(v=>({...v,inspection:value}))} onCameraChange={value=>setSceneContext(v=>({...v,camera:value}))}/>}
           {tab==='sessions'&&<ResearchSessions project={activeProject} providers={providers} onRefresh={refreshTaskData} onInspectRun={async id=>{try{const run=await api.run(id);setRuns(rows=>[run,...rows.filter(r=>r.id!==id)]);setSelectedRunId(id);setTab('world');}catch(e){setError(e.message);}}}/>}
           {tab==="research"&&<ResearchPlan project={activeProject} manifest={activeManifest} refreshKey={messages.length} busy={busy}
             onExperiment={content=>{setTab("world");return buildExperiment(content,DEFAULT_BUILD,false);}}
@@ -739,7 +742,7 @@ export default function ResearchWorkbench({ backend, onHardware, onEventState })
             providerReady={providers.some(p=>p.configured)} />}
         </div>
 
-        <RunStrip
+        {tab!=="studio"&&<RunStrip
           runs={runs}
           selectedRunId={selectedRun?.id}
           onSelect={(run) => {
@@ -747,7 +750,7 @@ export default function ResearchWorkbench({ backend, onHardware, onEventState })
             setTab("world");
           }}
           onCancel={cancelRun}
-        />
+        />}
       </section>
 
       <ChatDrawer

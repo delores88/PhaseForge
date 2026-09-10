@@ -30,7 +30,7 @@ export default function MoleculeWorkbench({
   onRefreshEngines,
 }) {
   const fileRef = useRef(null);
-  const [representation, setRepresentation] = useState("ball_and_stick");
+  const [representation, setRepresentation] = useState("surface");
   const [plans, setPlans] = useState([]);
   const [campaigns, setCampaigns] = useState([]);
   const [selectedPlanId, setSelectedPlanId] = useState("");
@@ -243,6 +243,8 @@ export default function MoleculeWorkbench({
               onChange={(event) => setRepresentation(event.target.value)}
               aria-label="Molecular representation"
             >
+              <option value="surface">Molecular surface</option>
+              <option value="ribbon">Backbone ribbon</option>
               <option value="ball_and_stick">Ball and stick</option>
               <option value="space_filling">Space filling</option>
             </select>

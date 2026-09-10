@@ -2,6 +2,8 @@
   "name": "phaseforge-desktop",
   "version": "0.8.0",
   "description": "Local scientific research and simulation workbench",
+  "homepage": "https://github.com/delores88/PhaseForge",
+  "desktopName": "science.phaseforge.desktop",
   "author": "Ben Van Dorn",
   "license": "MIT",
   "private": true,
@@ -24,11 +26,14 @@
     "extraResources": [
       {"from": "../frontend/out", "to": "ui"},
       {"from": "runtime/${os}/${arch}", "to": "runtime"},
-      {"from": "../tools", "to": "tools", "filter": ["**/*.py"]}
+      {"from": "../tools", "to": "tools", "filter": ["**/*.py", "requirements-cad.txt", "BLENDER_WORKER_LICENSE.txt"]},
+      {"from": "../LICENSE", "to": "LICENSE"},
+      {"from": "../THIRD_PARTY.md", "to": "THIRD_PARTY.md"},
+      {"from": "../docs/CAD_PCB_ENGINES.md", "to": "docs/CAD_PCB_ENGINES.md"}
     ],
     "win": {"target": "nsis", "icon": "../frontend/public/icon.png", "artifactName": "PhaseForge_${version}_${arch}-setup.${ext}"},
     "nsis": {"oneClick": false, "perMachine": false, "allowToChangeInstallationDirectory": true, "createDesktopShortcut": true, "deleteAppDataOnUninstall": false},
-    "linux": {"target": ["AppImage", "deb"], "icon": "../frontend/public/icon.png", "category": "Science", "artifactName": "PhaseForge_${version}_${arch}.${ext}", "maintainer": "Ben Van Dorn"},
+    "linux": {"target": ["AppImage", "deb"], "icon": "../frontend/public/icon.png", "category": "Science", "artifactName": "PhaseForge_${version}_${arch}.${ext}", "maintainer": "Ben Van Dorn", "syncDesktopName": true},
     "publish": null
   }
 }

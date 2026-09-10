@@ -1,10 +1,11 @@
 # PhaseForge 0.8.0
 
-PhaseForge is a local scientific research workbench: describe an experiment, build
-its mathematical model and 3D scene, run supported calculations, inspect the evidence,
-and decide what to test next. It combines a Rust runtime, an Electron desktop app,
-a Next.js interface and Three.js procedural graphics. The project and its rendering
-engine use MIT licenses.
+PhaseForge is a local scientific research workbench: gather public evidence, build
+experiments, 3D scenes or engineering designs, run supported calculations and local
+renderers, inspect the results, and decide what to test next. It combines a Rust
+runtime, an Electron desktop app, a Next.js interface and Three.js graphics. The
+core and Three.js use MIT licenses; optional native engines have their own
+[licenses and notices](THIRD_PARTY.md).
 
 **Development status:** Windows x64 is being built and tested on an RTX 4090 Laptop
 GPU machine. Native package workflows are prepared for Windows x64/ARM64 and Linux
@@ -23,6 +24,9 @@ No GitHub release has been published for this overhaul. See the
    call. A changed experiment receives an immutable revision.
 5. Open **Agents** for a timed research session with specialist collaborators,
    experiment building, simulation, evidence review and bounded follow-up cycles.
+6. Use **Studio** for a **3D scene**, **CAD / fabrication**, or **Circuit board**.
+   **Build design** saves a declarative artifact. Inspect it, then choose
+   **Render in Blender** or **Build engineering files** for local execution.
 
 The model picker orders account-visible OpenAI and Anthropic text models from fast
 to most capable, recommends stronger models for difficult simulation design, and
@@ -35,6 +39,38 @@ OpenAI is used for live development checks in this environment.
 sources, molecular imports, batch campaigns, verification dossiers and exports
 remain available through the laboratory's additional tools. Older Discovery links
 redirect into the workbench.
+
+## Public research and Studio
+
+Turn on **Research mode** to retrieve bounded public literature metadata, RCSB
+structures or NASA imagery relevant to the brief. It is off by default. Studio's
+**Public research & assets** also supports explicit searches and direct CSV, JSON,
+PDB, GLB, STL, PNG and JPEG imports from a fixed set of scientific/data hosts.
+Original bytes, source URLs and SHA-256 hashes stay with the project. Deposited
+coordinates can supply the actual geometry of a molecular render; source matches
+are evidence to assess, not an automatic validation of the researcher's hypothesis.
+
+Studio uses the selected model and the same usage controls as chat. Revisions retain
+the prior design and supplied failure report. A visual or engineering request has
+its own artifact workflow and does not need a numerical experiment. The interactive
+viewer opens supported GLB/STL files, molecular surfaces and procedural scenes with
+camera and object inspection controls.
+
+Optional native engines produce inspectable files:
+
+- **Blender Cycles:** local CPU or compatible GPU rendering, PNG images, editable
+  Blender projects and GLB models. The saved report identifies the device used.
+- **CadQuery/OpenCascade:** Boolean solids and polygon extrusions exported as STEP
+  and STL, with geometric validity, volume and bounds checks.
+- **KiCad:** editable boards and local footprint libraries, native DRC and previews.
+  A manufacturing archive is produced only when the native checks report no issues.
+
+Blender, CadQuery and KiCad are installed separately; they are not bundled in the
+desktop installer. They have been exercised on this Windows x64 development machine.
+That does not establish availability or acceptance on Linux or ARM64. See
+[public intake and Studio](docs/public-research-and-studio.md),
+[Blender rendering](docs/BLENDER_RENDERING.md), and
+[native CAD/PCB setup](docs/CAD_PCB_ENGINES.md).
 
 ## Procedural scenes and scientific evidence
 
@@ -49,6 +85,10 @@ or use supplied structural coordinates; moving geometry can bind to retained sol
 entities. A membrane, molecule or accretion disk does not itself execute molecular
 dynamics, drug binding, fluid dynamics or general relativity. Scene provenance and
 numerical results identify what was supplied, conceptual or calculated.
+
+Likewise, a Cycles microscopy style is an illustration, a molecular surface is an
+approximation derived from coordinates, a valid CAD solid is not a tested physical
+part, and passing PCB DRC does not establish electrical function.
 
 The executable solvers are currently:
 
@@ -110,6 +150,9 @@ needed to build from source, not to launch a packaged application.
 
 - [Architecture](docs/ARCHITECTURE.md), [roadmap](docs/ROADMAP.md),
   [API](docs/API.md), [security](docs/SECURITY.md), [usage](docs/USAGE_AND_COST.md).
+- [Scientific model viewer](docs/SCIENTIFIC_MODEL_VIEWER.md),
+  [public research and Studio](docs/public-research-and-studio.md),
+  [local rendering](docs/BLENDER_RENDERING.md), [CAD/PCB engines](docs/CAD_PCB_ENGINES.md).
 - [Direct experiment workflow](docs/EXPERIMENT_WORKFLOW.md),
   [findings](docs/FINDINGS_WORKFLOW.md), [research programmes](docs/RESEARCH_PROGRAMMES.md).
 - [Discovery campaigns](docs/DISCOVERY_CAMPAIGNS.md),

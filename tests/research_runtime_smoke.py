@@ -4,6 +4,7 @@ A missing binary is a failed prerequisite, never a passed test or a mock server.
 """
 import argparse,hashlib,json,os,pathlib,subprocess,tempfile,time,urllib.error,urllib.request
 from test_proposal_schema import draft
+from runtime_smoke import backend_process
 
 def main():
     p=argparse.ArgumentParser();p.add_argument('--binary',required=True);p.add_argument('--port',type=int,default=17436);a=p.parse_args()
@@ -11,7 +12,6 @@ def main():
     if not binary.is_file():raise SystemExit('Compile backend first; this test launches the real native application.')
     with tempfile.TemporaryDirectory(prefix='phaseforge-research-test-') as temp:
         root=pathlib.Path(temp);cfg=root/'test.toml';cfg.write_text('bind_address = "127.0.0.1"\nport = '+str(a.port)+'\ndata_directory = '+json.dumps(str(root/'data'))+'\ngpu_enabled = false\n',encoding='utf-8')
-        log=(root/'backend.log').open('w');proc=subprocess.Popen([str(binary),'--cpu-only','--config',str(cfg)],stdout=log,stderr=subprocess.STDOUT)
         def call(route,payload=None,method=None):
             req=urllib.request.Request(f'http://127.0.0.1:{a.port}'+route,data=json.dumps(payload).encode() if payload is not None else None,headers={'Content-Type':'application/json'},method=method)
             with urllib.request.urlopen(req,timeout=20) as r:return json.load(r)
@@ -20,7 +20,7 @@ def main():
             except urllib.error.HTTPError as error:
                 assert error.code==422,(route,error.code,error.read());return
             raise AssertionError('Invalid request accepted: '+route)
-        try:
+        with backend_process([str(binary),'--cpu-only','--config',str(cfg)], root/'backend.log') as proc:
             for _ in range(100):
                 try:
                     if call('/api/health')['status']=='ok':break
@@ -64,9 +64,4 @@ def main():
             assert len(call(route)['data'])==1 and call(route)['searches']==[]
             assert call('/api/usage')['totals']['total_tokens']==0
             print('PASS real native API: admission, reducers, censored-event metadata, distinct h/2+h/4, explicit radii, local CSV provenance, public-query refusal without consent, zero paid tokens.')
-        finally:
-            proc.terminate()
-            try:proc.wait(timeout=10)
-            except subprocess.TimeoutExpired:proc.kill();proc.wait()
-            log.close()
 if __name__=='__main__':main()

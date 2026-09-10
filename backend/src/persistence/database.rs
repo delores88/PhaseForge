@@ -35,6 +35,10 @@ impl Database {
             CREATE INDEX IF NOT EXISTS ix_objects_kind_updated
                 ON objects(kind, updated_at DESC);
 
+            CREATE TABLE IF NOT EXISTS research_asset_payloads (
+                id TEXT PRIMARY KEY, project_id TEXT NOT NULL, bytes BLOB NOT NULL
+            );
+
             CREATE TABLE IF NOT EXISTS manifest_revision_counter (
                 project_id TEXT PRIMARY KEY, revision INTEGER NOT NULL
             );
@@ -54,6 +58,22 @@ impl Database {
     }
 
     pub fn put_agent_task(&self, task: &crate::agent::tasks::ResearchTask) -> anyhow::Result<()> { self.put("agent_task", &task.id.to_string(), task) }
+    pub fn put_research_asset(&self, asset: &crate::research::assets::ResearchAsset, bytes: &[u8]) -> anyhow::Result<()> {
+        let mut connection=self.connection.lock(); let tx=connection.transaction()?;
+        tx.execute("INSERT OR REPLACE INTO research_asset_payloads(id,project_id,bytes) VALUES (?1,?2,?3)",params![asset.id.to_string(),asset.project_id.to_string(),bytes])?;
+        tx.execute("INSERT OR REPLACE INTO objects(kind,id,json) VALUES ('research_asset',?1,?2)",params![asset.id.to_string(),serde_json::to_string(asset)?])?;
+        tx.commit()?; Ok(())
+    }
+    pub fn research_assets(&self,id:Uuid)->anyhow::Result<Vec<crate::research::assets::ResearchAsset>> {self.research_rows("research_asset",id)}
+    pub fn get_research_asset(&self,id:Uuid)->anyhow::Result<Option<crate::research::assets::ResearchAsset>> {self.get("research_asset",&id.to_string())}
+    pub fn research_asset_bytes(&self,id:Uuid)->anyhow::Result<Option<Vec<u8>>> {
+        Ok(self.connection.lock().query_row("SELECT bytes FROM research_asset_payloads WHERE id=?1",params![id.to_string()],|row|row.get(0)).optional()?)
+    }
+    pub fn put_asset_search(&self,v:&crate::research::assets::AssetSearch)->anyhow::Result<()> {self.put("asset_search",&v.id.to_string(),v)}
+    pub fn asset_searches(&self,id:Uuid)->anyhow::Result<Vec<crate::research::assets::AssetSearch>> {self.research_rows("asset_search",id)}
+    pub fn put_studio_design(&self,id:Uuid,v:&serde_json::Value)->anyhow::Result<()> {self.put("studio_design",&id.to_string(),v)}
+    pub fn get_studio_design(&self,id:Uuid)->anyhow::Result<Option<serde_json::Value>> {self.get("studio_design",&id.to_string())}
+    pub fn studio_designs(&self,id:Uuid)->anyhow::Result<Vec<serde_json::Value>> {self.research_rows("studio_design",id)}
     pub fn get_agent_task(&self, id: Uuid) -> anyhow::Result<Option<crate::agent::tasks::ResearchTask>> { self.get("agent_task", &id.to_string()) }
     pub fn list_agent_tasks(&self) -> anyhow::Result<Vec<crate::agent::tasks::ResearchTask>> { self.list("agent_task", 10000) }
 
@@ -191,7 +211,8 @@ impl Database {
             self.delete("discovery_study", &study.id.to_string())?;
         }
         let connection = self.connection.lock();
-        connection.execute("DELETE FROM objects WHERE kind IN ('agent_task','research_notebook','notebook_revision','research_plan','research_search','research_task','research_data','experiment_receipt') AND json_extract(json, '$.project_id') = ?1", params![project_id.to_string()])?;
+        connection.execute("DELETE FROM research_asset_payloads WHERE project_id=?1",params![project_id.to_string()])?;
+        connection.execute("DELETE FROM objects WHERE kind IN ('agent_task','research_asset','asset_search','studio_design','research_notebook','notebook_revision','research_plan','research_search','research_task','research_data','experiment_receipt') AND json_extract(json, '$.project_id') = ?1", params![project_id.to_string()])?;
         connection.execute("DELETE FROM manifest_revision_counter WHERE project_id = ?1", params![project_id.to_string()])?;
         drop(connection);
         self.delete("project", &project_id.to_string())

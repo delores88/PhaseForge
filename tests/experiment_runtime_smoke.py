@@ -3,13 +3,13 @@ Launches the actual built Rust backend. Missing binaries fail, never skip/pass.
 """
 import argparse,copy,json,pathlib,subprocess,tempfile,time,urllib.request,urllib.error,uuid
 from test_proposal_schema import draft
+from runtime_smoke import backend_process
 
 def main():
  p=argparse.ArgumentParser();p.add_argument('--binary',required=True);p.add_argument('--port',type=int,default=17437);a=p.parse_args();binary=pathlib.Path(a.binary).resolve()
  if not binary.is_file():raise SystemExit('Compile the Rust backend first. Native acceptance was not executed.')
  with tempfile.TemporaryDirectory(prefix='phaseforge-v07-') as d:
   root=pathlib.Path(d);config=root/'test.toml';config.write_text('bind_address="127.0.0.1"\nport='+str(a.port)+'\ndata_directory='+json.dumps(str(root/'data'))+'\ngpu_enabled=false\n',encoding='utf8')
-  log=(root/'backend.log').open('w');proc=subprocess.Popen([str(binary),'--cpu-only','--config',str(config)],stdout=log,stderr=subprocess.STDOUT)
   def call(route,body=None,method=None):
    req=urllib.request.Request('http://127.0.0.1:'+str(a.port)+route,data=json.dumps(body).encode() if body is not None else None,headers={'Content-Type':'application/json'},method=method)
    with urllib.request.urlopen(req,timeout=25) as r:return json.load(r) if r.status!=204 else None
@@ -23,7 +23,7 @@ def main():
     if run['status'] not in ('queued','running'):break
     time.sleep(.05)
    assert run['status']=='completed',run.get('error');return run
-  try:
+  with backend_process([str(binary),'--cpu-only','--config',str(config)], root/'backend.log') as proc:
    for _ in range(100):
     try:
      if call('/api/health')['status']=='ok':break
@@ -53,9 +53,4 @@ def main():
    workspace=call('/api/projects/'+world['id']+'/research');assert workspace['plans']==[] and workspace['tasks']==[]
    usage=call('/api/usage');assert usage['totals']['total_tokens']==0,usage['totals']
    print('PASS native direct workflow: local setup, real numeric results, h/2 replay, doubled horizon, idempotency, immutable history, no task gates, project isolation and zero paid tokens.')
-  finally:
-   proc.terminate()
-   try:proc.wait(8)
-   except subprocess.TimeoutExpired:proc.kill();proc.wait()
-   log.close()
 if __name__=='__main__':main()

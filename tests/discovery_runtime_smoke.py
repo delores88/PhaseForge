@@ -3,6 +3,7 @@ This is NOT executed in the packaging container. Windows/Linux CI executes it.
 """
 import argparse,hashlib,io,json,os,pathlib,subprocess,tempfile,time,urllib.request,urllib.error,zipfile
 from test_proposal_schema import draft
+from runtime_smoke import backend_process
 
 def main():
     p=argparse.ArgumentParser();p.add_argument('--binary',required=True);p.add_argument('--port',type=int,default=17434);args=p.parse_args()
@@ -10,11 +11,10 @@ def main():
     if not binary.is_file():raise SystemExit('Build the backend first; this is a native integration test, not a source check.')
     with tempfile.TemporaryDirectory(prefix='phaseforge-discovery-') as folder:
         root=pathlib.Path(folder);config=root/'isolated.toml';config.write_text('bind_address = "127.0.0.1"\nport = '+str(args.port)+'\ndata_directory = '+json.dumps(str(root/'data'))+'\ngpu_enabled = false\n',encoding='utf-8')
-        log=(root/'backend.log').open('w');proc=subprocess.Popen([str(binary),'--cpu-only','--config',str(config)],stdout=log,stderr=subprocess.STDOUT)
         def call(path,payload=None,method=None,raw=False):
             req=urllib.request.Request(f'http://127.0.0.1:{args.port}'+path,data=json.dumps(payload).encode() if payload is not None else None,method=method,headers={'Content-Type':'application/json'})
             with urllib.request.urlopen(req,timeout=30) as response:return response.read() if raw else json.load(response)
-        try:
+        with backend_process([str(binary),'--cpu-only','--config',str(config)], root/'backend.log') as proc:
             for _ in range(100):
                 try:
                     if call('/api/health')['status']=='ok':break
@@ -57,9 +57,4 @@ def main():
             # No budget was silently consumed by AI.
             assert call('/api/usage')['totals']['total_tokens']==0
             print('PASS actual native campaign: 4 exploration + 2 refinement runs, archive, metrics, record CAS, ZIP CRC, all payload hashes, independent ODE replay, zero paid calls.')
-        finally:
-            proc.terminate()
-            try:proc.wait(timeout=10)
-            except subprocess.TimeoutExpired:proc.kill();proc.wait()
-            log.close()
 if __name__=='__main__':main()

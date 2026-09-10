@@ -26,6 +26,8 @@ function harness(){
   const out=ts.transpileModule(fs.readFileSync(file,'utf8'),{compilerOptions:{module:ts.ModuleKind.CommonJS,jsx:ts.JsxEmit.React,target:ts.ScriptTarget.ES2022},reportDiagnostics:true});
   if(out.diagnostics?.length)throw Error(out.diagnostics.map(d=>ts.flattenDiagnosticMessageText(d.messageText,' ')).join('\n'));
   function req(id){if(id==='react')return React;if(id==='lucide-react')return icons;
+   // Keep portal children in the virtual tree; browser tests verify placement.
+   if(id==='react-dom')return{createPortal:children=>children};
    if(id==='next/link')return{__esModule:true,default:p=>React.createElement('a',{...p,href:typeof p.href==='string'?p.href:'/'},p.children)};
    if(id==='next/router')return{useRouter:()=>({pathname:'/',isReady:true,query:{},push:async()=>{},replace:async()=>{}})};
    if(id==='@/lib/api')return{api:{}};
