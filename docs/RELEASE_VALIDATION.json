@@ -5,8 +5,8 @@
   "native_platform": "windows-x64",
   "gpu": "NVIDIA GeForce RTX 4090 Laptop GPU / DX12",
   "executed": {
-    "rust_all_targets_passed": 188,
-    "rust_opt_in_excluded": 4,
+    "rust_all_targets_passed": 192,
+    "rust_opt_in_excluded": 5,
     "separate_gpu_test_passed": true,
     "native_http_smoke_programs": 5,
     "schema_tests": 22,
@@ -14,9 +14,8 @@
     "python_verification_tests": 34,
     "research_upgrade_tests": 30,
     "equation_editor_tests": 5,
-    "javascript_helpers": 165,
     "jsx_handlers": 19,
-    "scene_tests": 14,
+    "scene_tests": 17,
     "conversation_presentation_tests": 3,
     "desktop_tests": 3,
     "source_audit": 122,
@@ -34,7 +33,6 @@
       "frames": 201,
       "validated_repair": true
     },
-    "frontend_model_and_scene_tests": 30,
     "studio": {
       "rcsb_import": "4NCO",
       "source_atoms": 22014,
@@ -56,10 +54,104 @@
         22014,
         1686
       ],
-      "bound_scene_cycles_seconds": 62.594
+      "bound_scene_cycles_seconds": 56.234,
+      "ai_cad": {
+        "model": "gpt-6-astra",
+        "reasoning": "medium",
+        "design_id": "044b84a5-3f7d-4a57-91c5-a53490f83693",
+        "api_job_id": "3640e25c-9935-4490-a9e6-f1761317b34a",
+        "api_job_completed": true,
+        "execution_seconds": 3.325236,
+        "engine": "CadQuery 2.6.1",
+        "valid_solid": true,
+        "solid_count": 1,
+        "volume_mm3": 9938.486900714375,
+        "nominal_plate_dimensions_mm": [
+          60,
+          40,
+          5
+        ],
+        "nominal_opening_diameter_mm": 22,
+        "nominal_mounting_hole_diameter_mm": 3.2,
+        "mounting_holes": 4,
+        "exports": [
+          "step",
+          "stl"
+        ],
+        "both_exports_downloaded": true,
+        "visually_checked": true,
+        "viewer_triangles": 2552,
+        "scope": "Geometric construction and exports; physical fit, materials, loads and fabrication tolerances remain unverified"
+      },
+      "bound_scene_api_job_completed": true,
+      "bound_scene_api_job_id": "fa147773-4cfe-42fd-8e33-0dc174d656c6",
+      "bound_scene_resolution": [
+        1024,
+        1024
+      ],
+      "bound_scene_samples": 48,
+      "bound_scene_backend": "OPTIX",
+      "bound_scene_memory_budget_bytes": 4294967296,
+      "bound_scene_max_seconds": 300,
+      "bound_scene_glb_bytes": 13600384,
+      "bound_scene_viewer_expanded_triangles": 1091365,
+      "bound_scene_hidden_solvent_atoms": [
+        0,
+        127
+      ],
+      "bound_scene_rendered_atoms": [
+        22014,
+        1559
+      ],
+      "bound_scene_template_instances": 9,
+      "bound_scene_fullscreen_checked": true,
+      "bound_scene_all_five_http_downloads_match_bytes": true,
+      "bound_scene_direct_worker_validation_seconds": 62.594,
+      "bound_scene_scope": "Per-job source coordinates and fingerprints retained; solvent exclusions disclosed. Env-Fab template placement, membrane and capsid are morphological reconstruction."
     },
     "cpu_only_tests_passed": 186,
-    "viewer_lifecycle_tests": 4
+    "viewer_lifecycle_tests": 4,
+    "research_helper_tests": 25,
+    "viewer_resource_tests": 2,
+    "frontend_node_tests": 30,
+    "javascript_helper_suites_passed": true,
+    "test_counts_note": "Frontend Node total of 30 predates the latest targeted 17-test scene run. Viewer-resource suite has 2 tests; lifecycle regressions are subsets. Desktop tests are separate. No unverified combined helper total is reported.",
+    "blackhole_scoped_baseline": {
+      "model": "gpt-6-astra",
+      "reasoning": "medium",
+      "completed": true,
+      "run_id": "d1ae2ed0-f6eb-4118-b5e3-e788c1281fcc",
+      "manifest_id": "46302e9a-64e7-47b0-be30-9957ee53e0e6",
+      "backend": "Rayon CPU / f64",
+      "integration_method": "rk4",
+      "state_dimension": 6,
+      "steps": 64000,
+      "time_step_years": 0.0005,
+      "simulated_years": 32,
+      "execution_seconds": 2.167907,
+      "frames": 641,
+      "scene_nodes": 3,
+      "maximum_relative_energy_error": 8.311680609055662e-11,
+      "maximum_relative_angular_momentum_error": 1.8125125454344547e-13,
+      "conservation_checks_passed": 2,
+      "step_halving_comparisons_passed": 3,
+      "halved_step_relative_energy_error": 4.978425106737434e-12,
+      "inputs": "Illustrative central mass and initial conditions; no fitted astronomical dataset",
+      "recorded_public_catalog_searches": 2,
+      "astronomical_datasets_imported": 0,
+      "original_5000_light_year_request_completed": false,
+      "original_failure": "provider_output_limit",
+      "scoping": "Explicitly narrowed follow-up prompt; not autonomous completion of the original request"
+    },
+    "crossref_project_search": {
+      "id": "20325418-9555-4557-a8bf-057f1438d487",
+      "completed": true,
+      "query": "Sagittarius A* S2 orbit",
+      "elapsed_seconds": 1.17,
+      "doi_results": 5,
+      "results_visible_in_ui": true,
+      "scope": "Metadata retrieval only; relevance varies. Earlier orbital inputs remain illustrative and no stellar census is established."
+    }
   },
   "pending": [
     "Final Windows x64 installation acceptance",
@@ -70,5 +162,29 @@
     "Cluster orchestration",
     "Local open-source LLMs",
     "External MD/CFD/QM solvers"
-  ]
+  ],
+  "interim_ci_observations": {
+    "scope": "Earlier source snapshots; not final-revision acceptance",
+    "scientific_completed_run_id": 34530065047,
+    "scientific_completed_jobs": 3,
+    "earlier_package_status": {
+      "linux_x64": "success",
+      "linux_arm64": "success",
+      "windows_x64": "pending",
+      "windows_arm64": "pending"
+    },
+    "subsequent_commit": "44237f2",
+    "subsequent_scientific_run": {
+      "id": 34531057689,
+      "status_when_recorded": "running"
+    },
+    "subsequent_desktop_run": {
+      "id": 34531093553,
+      "status_when_recorded": "running"
+    },
+    "additional_viewer_corrections_pending_verification": false,
+    "latest_application_targeted_scene_tests_passed": 17
+  },
+  "source_application_commit": "5a26384",
+  "build_source_commit": null
 }
