@@ -3,6 +3,7 @@ const {spawn}=require('node:child_process');
 const fs=require('node:fs');
 const path=require('node:path');
 const {startServer}=require('./server.cjs');
+const {installWorkbenchPermissions}=require('./permissions.cjs');
 let window,backend,ui,tray,quitting=false,restarts=0;
 const VERSION=require('./package.json').version;
 const delay=ms=>new Promise(r=>setTimeout(r,ms));
@@ -30,7 +31,7 @@ function makeWindow(url){
   window=new BrowserWindow({width:1540,height:980,minWidth:800,minHeight:600,title:'PhaseForge',backgroundColor:'#101417',autoHideMenuBar:true,show:false,webPreferences:{nodeIntegration:false,contextIsolation:true,sandbox:true,webSecurity:true}});
   window.webContents.setWindowOpenHandler(({url:target})=>{if(/^https:\/\//.test(target))shell.openExternal(target);return {action:'deny'};});
   window.webContents.on('will-navigate',(event,target)=>{if(new URL(target).origin!==url){event.preventDefault();if(/^https:\/\//.test(target))shell.openExternal(target);}});
-  window.webContents.session.setPermissionRequestHandler((_webContents,_permission,callback)=>callback(false));
+  installWorkbenchPermissions(window.webContents,url);
   window.on('close',event=>{if(!quitting&&tray){event.preventDefault();window.hide();}});
   window.once('ready-to-show',()=>window.show());window.loadURL(url);
   const png=app.isPackaged?path.join(process.resourcesPath,'ui','icon.png'):path.resolve(__dirname,'../frontend/public/icon.png');

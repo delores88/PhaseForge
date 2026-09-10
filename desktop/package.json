@@ -22,7 +22,7 @@
     "productName": "PhaseForge",
     "asar": true,
     "directories": {"output": "dist"},
-    "files": ["main.cjs", "server.cjs", "package.json"],
+    "files": ["main.cjs", "server.cjs", "permissions.cjs", "package.json"],
     "extraResources": [
       {"from": "../frontend/out", "to": "ui"},
       {"from": "runtime/${os}/${arch}", "to": "runtime"},
