@@ -7,9 +7,10 @@ runtime, an Electron desktop app, a Next.js interface and Three.js graphics. The
 core and Three.js use MIT licenses; optional native engines have their own
 [licenses and notices](THIRD_PARTY.md).
 
-**Development status:** Windows x64 is being built and tested on an RTX 4090 Laptop
-GPU machine. Native package workflows are prepared for Windows x64/ARM64 and Linux
-x64/ARM64; that does not establish that all four targets have passed acceptance.
+**Development status:** Windows x64 is installed and tested on an RTX 4090 Laptop
+GPU machine. Native package builds passed for Windows x64/ARM64 and Linux x64/ARM64.
+Hands-on runtime acceptance remains limited to Windows x64; the validation record
+identifies each tested source revision and the final local installer.
 No GitHub release has been published for this overhaul. See the
 [validation record](docs/RELEASE_VALIDATION.md) for executed checks and remaining work.
 

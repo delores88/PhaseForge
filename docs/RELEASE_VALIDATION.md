@@ -2,8 +2,10 @@
 
 Date: 2026-09-10. Unreleased development build. Historical reports are retained in
 `docs/history/`; their unexecuted or static checks are not current runtime evidence.
-Latest installed acceptance snapshot: `6123022`. Final installation of the
-saved-source correction and final package-build provenance remain pending.
+Application/package source: `44c9026677464bfe1e8096e19243dc6b0db8032c`.
+Its saved-source UI fix has passed live rerender validation using the unchanged
+backend from `6123022`. The final Windows x64 installation has passed native
+acceptance. Scientific CI for this exact application revision passed.
 
 ## Executed on Windows x64
 
@@ -27,6 +29,7 @@ Machine: Windows 11, RTX 4090 Laptop GPU (16 GiB VRAM), approximately 32 GiB RAM
 | Research conversation presentation | 3 passed | Team attribution, retained audit data, legacy session display and ordinary user text |
 | Desktop tests | 7 passed | Static proxy, host/origin checks, traversal, interrupted upstream connection, scoped fullscreen permissions and policy packaging |
 | Combined frontend and desktop Node run | 45 passed | 38 frontend plus 7 desktop; these are the same tests listed above, not additional checks |
+| Process cleanup test helpers | 3 passed; isolated native runtime HTTP smoke passed | Test-only cleanup commit `332aea9`; no application changes after the `44c9026` package |
 | Source audit | 122 gates passed | Integration contracts and shipping file/credential checks; not a native build |
 
 ## Live OpenAI build–run–review session
@@ -139,7 +142,20 @@ fall through to an unrelated Blender scene. Selection changes cancel pending
 saved-input reads, and stale molecular loads cannot replace a newer selection.
 Seven source-selection tests cover these source contracts and bounded input reads.
 The independent JSX handler check passed all 19 checks, and the source audit
-passed all 122 gates. Final installed-app acceptance of this correction is pending.
+passed all 122 gates. The final UI was then exercised through its actual
+“Render in Blender” control: selecting saved job
+`fa147773-4cfe-42fd-8e33-0dc174d656c6` created job
+`0a365339-207c-409e-b8f6-6820741db6de`. Comparing the two saved requests confirmed
+exactly equal scenes, molecular bindings and camera values. The original has two
+scene nodes and a null explicit camera; this check preserves its automatic framing
+choice rather than claiming a tested custom-camera rerender.
+
+That UI-created job completed at 1024 × 1024 and 64 samples in 57.328 seconds on
+the RTX 4090 through OptiX, with no fallback. All five artifacts downloaded with
+exactly the advertised byte counts and retained SHA-256 checksums. The GLB was
+13,600,384 bytes; PNG was 1,140,698 bytes. This verifies the final UI's saved-source
+handoff to the native engine. The replacement installed app subsequently loaded
+the completed job and recovered its original source, with the render button enabled.
 
 A second render submitted through the actual app API bound the full 4NCO complex
 to illustrative virion envelope placements and 1HSG coordinates to a separate
@@ -164,7 +180,7 @@ RAM grant. All five render artifacts downloaded through the desktop proxy. This
 is an observed bounded GPU-to-CPU recovery; it does not establish recovery from
 every graphics-driver crash or arbitrary memory failure.
 
-## Packaging and remaining acceptance
+## Packaging and native acceptance
 
 The Windows x64 NSIS installer built and installed successfully with the existing
 projects and OS-stored credential preserved. The installed app opened the retained
@@ -178,19 +194,35 @@ fullscreen after the scoped permission fix. The recommended Astra/max setting
 was selected without an additional model-generation call. This interim installer
 was 117,740,097 bytes with SHA-256
 `E95F37B0678757A5A7E86F635BD1BB15BF1EBE3231796C2247478F74489260BF`.
-Further viewer source-selection corrections require a new package; this checksum
-is not the final installer checksum.
+That interim package predates the saved-source correction; its checksum is retained
+as historical installation evidence.
 
-An earlier scientific CI run, `34530065047`, completed all three jobs successfully.
-At the recorded interim packaging check, Linux x64 and ARM64 packages succeeded
-while both Windows package jobs were pending. Those results apply to earlier
-source snapshots. The subsequent scientific run `34531057689` and desktop run
-`34531093553` for commit `44237f2` were still running when recorded. Application
-commit `5a26384` includes a subsequent opacity correction with its targeted scene
-suite passing. These earlier CI observations are not acceptance of that revision.
+The replacement Windows x64 package was built from clean commit
+`44c9026677464bfe1e8096e19243dc6b0db8032c`. It is 117,741,558 bytes with SHA-256
+`2884703579B9E921DB7B5E451A5CDA3944D15BA8C603B0CC75FA8B377DA9ACBE`.
+The visible installer completed successfully. Installed `build.json` identifies
+`44c9026` with a clean source tree, and the bundled backend hash matches the checked
+binary. The installed application owns the local API on port 7331 and serves its
+desktop proxy on port 7332. Seven saved projects, the existing credential and 71
+OpenAI model entries remained available. Studio automatically opened the latest
+rerender with 1,091,365 expanded triangles; its original input was recovered and
+the render control became available. Fullscreen entry/exit, orbit and zoom were
+visually checked in the native application.
 
-The final follow-up installation and four native package workflow results remain
-pending and will be recorded after those checks finish.
+Scientific CI run `34532211210` for `6123022` completed successfully, including
+browser checks and Windows/Ubuntu backend tests with native HTTP smoke programs.
+Desktop workflow `34532259964` for the same source also completed successfully:
+Linux x64, Linux ARM64, Windows x64 and Windows ARM64 each built on their native
+runner and uploaded an artifact archive. Archive IDs, sizes and checksums are
+retained in the JSON record; they describe CI download archives, not the local
+installer checksum above. These four package results apply to `6123022`, while
+the final `44c9026` Windows x64 package has the separate local acceptance above.
+
+Exact-revision scientific run `34533754223` for `44c9026` completed successfully
+at 21:54:42 UTC: browser, Windows backend and Ubuntu backend jobs all passed,
+including the Windows native HTTP smoke programs. There are no backend source
+changes from `6123022` to `44c9026`. Subsequent commit `332aea9` changes test cleanup
+and its CI coverage only; it does not change the installed application.
 The workflow uploads private CI artifacts only; it has no release publication step.
 Windows ARM64 and Linux x64/ARM64 runtime acceptance are not inferred from a
 Windows x64 build. NPU computation, distributed clusters, external MD/CFD/QM engines

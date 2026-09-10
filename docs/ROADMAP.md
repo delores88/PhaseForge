@@ -35,11 +35,11 @@ and [CAD/PCB engines](CAD_PCB_ENGINES.md).
 
 ## Acceptance before wider distribution
 
-Native package jobs are prepared for Windows x64, Windows ARM64, Linux x64 and Linux
-ARM64. The three targets beyond the current Windows x64 machine have not completed
-acceptance for this overhaul. Run their real compiler, packaging, install/uninstall,
-credential-store, graphics-driver and application-lifecycle checks. CI definitions
-alone do not establish a supported installer.
+Native compiler, test and package jobs have passed for Windows x64, Windows ARM64,
+Linux x64 and Linux ARM64. The validation record identifies the exact source
+revisions. The three targets beyond the current Windows x64 machine still need
+hands-on install/uninstall, credential-store, graphics-driver and application-lifecycle
+acceptance before wider distribution.
 
 Validate optional-engine distributions and dependencies independently on each
 target, including Cycles devices, CAD native-library compatibility and KiCad's

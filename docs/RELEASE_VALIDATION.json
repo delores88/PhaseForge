@@ -166,7 +166,66 @@
         "late_molecular_loads_gated_by_selection": true,
         "saved_input_inspection_limit_bytes": 33554432,
         "tests_passed": 7,
-        "installed_acceptance_pending": true
+        "installed_acceptance_pending": false,
+        "live_ui_rerender_passed": true,
+        "installed_acceptance_passed": true
+      },
+      "saved_job_ui_rerender": {
+        "ui_source_commit": "44c9026677464bfe1e8096e19243dc6b0db8032c",
+        "backend_unchanged_since": "6123022",
+        "trigger": "Actual Render in Blender UI control",
+        "completed": true,
+        "original_job_id": "fa147773-4cfe-42fd-8e33-0dc174d656c6",
+        "job_id": "0a365339-207c-409e-b8f6-6820741db6de",
+        "scene_equal": true,
+        "bindings_equal": true,
+        "camera_equal": true,
+        "explicit_camera": null,
+        "scene_nodes": 2,
+        "resolution": [
+          1024,
+          1024
+        ],
+        "samples": 64,
+        "elapsed_seconds": 57.328,
+        "actual_compute": {
+          "backend": "OPTIX",
+          "devices": [
+            "NVIDIA GeForce RTX 4090 Laptop GPU"
+          ],
+          "fallback": null,
+          "probes": []
+        },
+        "all_five_http_downloads_match_bytes": true,
+        "verified_artifacts": [
+          {
+            "name": "render.png",
+            "bytes": 1140698,
+            "sha256": "8C57034F8BCDA459E12C00E0072ED60C72AFF099923CC5CF00AB3D90FD2BA012"
+          },
+          {
+            "name": "scene.blend",
+            "bytes": 24091063,
+            "sha256": "FD379F5610EA7184704791D2EA00FB48D4CE67CF76CEB47996C4BDD77FD41D8E"
+          },
+          {
+            "name": "scene.glb",
+            "bytes": 13600384,
+            "sha256": "19F602C96779DC32955EEBC7C22D0BF2A92D6590555B5F323711A3720A5643D3"
+          },
+          {
+            "name": "renderer.json",
+            "bytes": 7966,
+            "sha256": "D9DEE46286208DE8FC87EF0725C75859501CF82FC87EC6BC724E4082C104F746"
+          },
+          {
+            "name": "input.json",
+            "bytes": 8762085,
+            "sha256": "DF3AC96A8FCCAF6A8085843589A56395556B38E775BB112BA5DB6A88AD1788F2"
+          }
+        ],
+        "scope": "Final UI preserves the selected saved job source. This example has automatic framing (null explicit camera); custom-camera equality is covered by helper tests, not this live run. Native installation acceptance is separate.",
+        "installed_latest_job_loaded": true
       }
     },
     "cpu_only_tests_passed": 186,
@@ -276,12 +335,48 @@
       "scope": "Interim installed acceptance; subsequent viewer source-selection corrections require another package. This is not the final installer checksum."
     },
     "frontend_and_desktop_node_tests": 45,
-    "studio_source_selection_tests": 7
+    "studio_source_selection_tests": 7,
+    "latest_package_build": {
+      "source_commit": "44c9026677464bfe1e8096e19243dc6b0db8032c",
+      "platform": "windows-x64",
+      "build_completed": true,
+      "clean_source_tree": true,
+      "installer_bytes": 117741558,
+      "installer_sha256": "2884703579B9E921DB7B5E451A5CDA3944D15BA8C603B0CC75FA8B377DA9ACBE",
+      "installation_acceptance_status": "passed",
+      "status_when_recorded": "Visible installer completed and native application acceptance passed"
+    },
+    "final_installed_acceptance": {
+      "source_commit": "44c9026677464bfe1e8096e19243dc6b0db8032c",
+      "installed_build_dirty": false,
+      "accepted": true,
+      "installer_bytes": 117741558,
+      "installer_sha256": "2884703579B9E921DB7B5E451A5CDA3944D15BA8C603B0CC75FA8B377DA9ACBE",
+      "backend_hash_matches_checked_binary": true,
+      "installed_backend_owns_port_7331": true,
+      "desktop_proxy_port": 7332,
+      "saved_projects_preserved": 7,
+      "existing_credential_preserved": true,
+      "openai_model_entries": 71,
+      "latest_job_loaded": "0a365339-207c-409e-b8f6-6820741db6de",
+      "viewer_expanded_triangles": 1091365,
+      "saved_input_recovered": true,
+      "rerender_button_enabled": true,
+      "native_fullscreen_enter_passed": true,
+      "native_fullscreen_exit_passed": true,
+      "orbit_and_zoom_visually_passed": true,
+      "left_in_normal_workbench": true,
+      "whole_virion_model_visible": true
+    },
+    "test_harness_cleanup": {
+      "source_commit": "332aea9",
+      "helper_tests_passed": 3,
+      "isolated_native_runtime_http_smoke_passed": true,
+      "ci_test_step_added": true,
+      "application_changed": false
+    }
   },
-  "pending": [
-    "Final Windows x64 installation acceptance",
-    "Four native package workflow builds"
-  ],
+  "pending": [],
   "roadmap": [
     "NPU execution",
     "Cluster orchestration",
@@ -307,11 +402,70 @@
       "id": 34531093553,
       "status_when_recorded": "running"
     },
-    "additional_viewer_corrections_pending_verification": true,
+    "additional_viewer_corrections_pending_verification": false,
     "latest_application_targeted_scene_tests_passed": 17
   },
-  "source_application_commit": "6123022",
-  "build_source_commit": null,
-  "source_application_scope": "Latest installed acceptance snapshot; saved-source correction passes source review, tests and frontend build but awaits final installed acceptance and build provenance",
-  "final_installer_sha256": null
+  "source_application_commit": "44c9026677464bfe1e8096e19243dc6b0db8032c",
+  "build_source_commit": "44c9026677464bfe1e8096e19243dc6b0db8032c",
+  "source_application_scope": "Final Windows x64 UI/package source; live saved-job rerender, installed native acceptance and exact-revision scientific CI all passed. Backend source is unchanged since 6123022. Four native platform package archives were built from 6123022.",
+  "final_installer_sha256": "2884703579B9E921DB7B5E451A5CDA3944D15BA8C603B0CC75FA8B377DA9ACBE",
+  "final_installer_bytes": 117741558,
+  "final_installer_acceptance_status": "passed",
+  "latest_ci_observations": {
+    "earlier_source_commit": "6123022650e2e0f08dd9947c3b7a209ee8a2718e",
+    "earlier_scientific_all_jobs_passed": true,
+    "earlier_native_packages": {
+      "linux_x64": "success",
+      "linux_arm64": "success",
+      "windows_x64": "success",
+      "windows_arm64": "success"
+    },
+    "latest_source_commit": "44c9026677464bfe1e8096e19243dc6b0db8032c",
+    "latest_scientific_run": {
+      "id": 34533754223,
+      "status": "completed",
+      "conclusion": "success",
+      "completed_at": "2026-09-10T21:54:42Z",
+      "browser_status": "success",
+      "windows_backend_status": "success",
+      "ubuntu_backend_status": "success",
+      "windows_native_http_smokes_passed": true
+    },
+    "backend_source_unchanged_between_commits": true,
+    "scope": "All four native package artifacts verified for 6123022. Exact 44 frontend/package accepted locally on Windows x64; exact-revision scientific CI passed all browser and Windows/Ubuntu backend jobs. Interactive acceptance on other platforms is not inferred from packaging.",
+    "earlier_scientific_run_id": 34532211210,
+    "earlier_desktop_run_id": 34532259964,
+    "earlier_package_archive_scope": "GitHub Actions downloadable artifact archives; archive byte sizes and hashes are distinct from installer file checksums.",
+    "earlier_package_archives": [
+      {
+        "platform": "windows_x64",
+        "runner": "windows-2025",
+        "artifact_id": 10174664696,
+        "archive_bytes": 116719796,
+        "archive_sha256": "946ce334d9df5c331912d77905911b115375b3a2c5138b76377780ed851e6641"
+      },
+      {
+        "platform": "windows_arm64",
+        "runner": "windows-11-arm",
+        "artifact_id": 10174624747,
+        "archive_bytes": 109648033,
+        "archive_sha256": "2a98942bb6dddd74b58923fcb50398e86634463381d6056e420b88ff2344f3e9"
+      },
+      {
+        "platform": "linux_x64",
+        "runner": "ubuntu-24.04",
+        "artifact_id": 10174313452,
+        "archive_bytes": 242696154,
+        "archive_sha256": "9474786aa1d0e08626021c422bbdaa28771d9ca5c238e88f110c5d182dd839b4"
+      },
+      {
+        "platform": "linux_arm64",
+        "runner": "ubuntu-24.04-arm",
+        "artifact_id": 10174297787,
+        "archive_bytes": 238996903,
+        "archive_sha256": "2018dcc53ac13ddbdc9a9204767111ca0153f4bd0fbae442d42e7cabd5ebfc19"
+      }
+    ]
+  },
+  "release_list_empty_when_checked": true
 }
