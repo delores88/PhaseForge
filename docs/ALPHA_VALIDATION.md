@@ -46,15 +46,55 @@ redirect rejection, key redaction and SQLite preservation tests are included in
 the full Rust result above. Runtime and dependency scanner findings remain
 separate from application regression tests.
 
-## Pending exact installer evidence
+## Exact candidate packages
 
-The candidate workflow must build from a clean pushed commit and pass actual
-Windows x64 NSIS and Linux x64 AppImage installation/launch, offline computation,
-normal quit, persistence, closed-database backup restoration and removal. The same
-Windows candidate installer must then be installed and inspected on the developer's
-Windows 11 machine. Original installer hashes, source identity, compiler-bound
-dependency metadata, native runtime observations, raw scans and detached build
-provenance are required before any package acceptance claim.
+Both native jobs in [candidate run 34540332559](https://github.com/delores88/PhaseForge/actions/runs/34540332559)
+passed at clean source `b868e93b4a5ae4c356263684a515a8787ef5b4b7`.
+The regular browser, Windows and Linux CI also passed at this commit.
+
+| Distributed package | Bytes | SHA-256 |
+| --- | ---: | --- |
+| `PhaseForge_0.8.0-alpha.1_x64-setup.exe` | 111,709,894 | `0fcce03cb07eef6c050f99f4ba83dc5b8f368a70f82c47dea4d0188ff40de33c` |
+| `PhaseForge_0.8.0-alpha.1_x86_64.AppImage` | 142,784,759 | `4f6a3f1373dd19614f44a4d663014bb406eb0da15f0849015dcf025b4587b581` |
+
+Actual Windows Server 2025 x64 and Ubuntu 24.04.5 x64 package acceptance covered
+installation, three launches, offline numerical computation, persistence, normal
+quit, closed-database backup restoration and removal. The deterministic fixture
+and its refined run both produced final `x = 1`, retained 101 frames and used zero
+provider tokens. All four inert listeners on IPv4/IPv6 loopback ports 3000 and
+7331 received zero connections and zero bytes. The owned dynamic backend port
+closed after normal Quit. These fixtures do not certify minimum memory, GPU
+workloads, ARM64 acceptance or an upgrade from an earlier version.
+
+The hosted harness launches the installed executable through local debugger
+instrumentation, with Chromium's sandbox enabled and GPU acceleration disabled.
+It invokes the normal application Quit lifecycle and tracks process creation
+identities. This is not an uninstrumented launch or GPU-rendering certification.
+
+The Ubuntu runner explicitly disabled its restriction on unprivileged user
+namespaces to permit Chromium's sandbox; Chromium's sandbox itself remained
+enabled. This result therefore does not establish out-of-box compatibility with
+stock Ubuntu 24.04 AppArmor settings. No developer-machine security setting was
+changed by these checks.
+
+Each retained candidate includes its original installer, compiler-bound backend
+dependency metadata, installed payload inventory, observed runtime versions,
+frontend module evidence, raw scans, checksums and detached GitHub OIDC provenance.
+The workflow verified all six attested subjects against a freshly obtained trust
+root. Subsequent local checksum/receipt consistency checks are not a separate
+cryptographic replay. Neither package has been published by the candidate workflow.
+
+Local installation and visual inspection of this same Windows installer on the
+developer's Windows 11 machine remain pending.
+
+## Security review status
+
+Each candidate retains 413 High/Critical scanner candidates and eight source
+secret findings. Counts alone do not establish exploitability. The source secret
+findings are six public WebSocket handshake fixtures and two documented native-job
+UUIDs; their individual dispositions leave the raw reports intact. Payload and
+expanded application-archive secret scans reported no findings. Runtime
+applicability review remains separate from these secret dispositions.
 
 Electron 43.7.0 is an engineering candidate with verified upstream backports, but
 the reviewed ANGLE CVE-2026-87500 remains an unresolved release blocker. The GLB
