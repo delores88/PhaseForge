@@ -20,6 +20,12 @@ records are retained. A source ID in a new plan must have been retrieved in this
 ID does not prove the model interpreted that source correctly. Abstracts may be truncated and
 are not full-text reading. Empty and failed searches do not establish absence or novelty.
 
+The newer default-off [research mode](public-research-and-studio.md) also retrieves
+general scholarly metadata through Crossref. Its saved sources can appear beside
+programme searches, identified by their source IDs and scope. The programme pane's
+explicit Europe PMC request remains separate; it does not silently expand that
+specific consent to other catalogs.
+
 CSV input is limited to1MiB,20,000 rows,128 unique-header columns and bounded fields. It must be
 UTF-8; BOM bytes are retained in the submission and checksum while ignored as a header marker.
 Quoted fields/newlines are parsed. Ragged rows, malformed quotes and duplicate headers are

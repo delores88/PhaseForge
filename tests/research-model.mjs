@@ -11,6 +11,7 @@ check('Single demo flagged',()=>assert(m.designGaps({}).some(x=>x.includes('One 
 check('All design inputs not scientific proof',()=>assert.deepEqual(m.designGaps({search:{enabled:true},trajectory:[{}],constraints:[{}],falsification:[{}]}),[]));
 check('Metric names include reductions once',()=>assert.equal(m.allMetrics({observables:[{name:'x'}],trajectory:[{name:'x'},{name:'peak'}]}).length,2));
 check('Source URL allowlist',()=>{assert(m.sourceURL('https://europepmc.org/article/MED/1'));assert.equal(m.sourceURL('javascript:alert(1)'),null);assert.equal(m.sourceURL('https://europepmc.org.evil.example/x'),null);});
+check('General research DOI links',()=>{assert.equal(m.sourceURL('https://doi.org/10.1051/0004-6361/202142465'),'https://doi.org/10.1051/0004-6361/202142465');for(const url of ['http://doi.org/10.1/x','https://doi.org.evil.example/x','https://user:pass@doi.org/x','https://doi.org:8000/x'])assert.equal(m.sourceURL(url),null);});
 check('Task intent and no execution',()=>{const s=m.taskPrompt('goal',{title:'test',question:'q',method:'m',inputs:['real data'],success_criterion:'evidence',deliverable:'record',next_prompt:'prepare'});assert(s.includes('real data'));assert(s.includes('do not run'));});
 check('Explicit intent choices include direct experimentation',()=>assert.equal(m.INTENTS.length,5));
 let last;globalThis.fetch=async(url,options={})=>{last={url,options};return{ok:true,status:200,json:async()=>({})}};const signal=new AbortController().signal;

@@ -126,7 +126,7 @@ pub async fn search_catalog(db:&Database, project:Uuid, request:SearchRequest)->
 }
 async fn search_inner(db:&Database, record:&AssetSearch, limit:usize)->anyhow::Result<(Vec<Candidate>,String)> {
     if record.catalog==Catalog::Literature {
-        let (sources,hash,hits)=super::retrieve(&record.query).await?;
+        let (sources,hash,hits)=super::literature::retrieve(&record.query).await?;
         let search=super::Search {id:record.id,project_id:record.project_id,query:record.query.clone(),created_at:record.created_at,
             status:"completed".into(),error:None,response_sha256:Some(hash.clone()),total_hits:hits,results:sources};
         db.put_research_search(&search)?;
@@ -283,21 +283,49 @@ pub fn context(db:&Database,project:Uuid)->anyhow::Result<Value> {
 
 /// Opt-in discovery uses public catalog queries only. Original files and source
 /// receipts stay local; remote text is never promoted to application instructions.
+fn focused_query(prompt:&str)->String {
+    let lower=prompt.to_ascii_lowercase();
+    let words=lower.split(|c:char|!c.is_alphanumeric() && c!='-' && c!='*').filter(|word|!word.is_empty()).collect::<Vec<_>>();
+    let has=|word:&str|words.contains(&word);
+    let mut terms=Vec::new();
+    let galactic_center = (lower.contains("milky way") || lower.contains("galactic center") || lower.contains("galactic centre")) && (lower.contains("black hole") || has("blackhole"));
+    if has("sagittarius") || lower.contains("sgr a") || galactic_center {
+        terms.push("Sagittarius A*");
+        if has("s2"){terms.push("S2");}
+        if has("orbit") || has("orbital") || has("star") || has("stars"){terms.push("orbit");}
+        if has("precession") || has("schwarzschild"){terms.push("Schwarzschild precession");}
+    } else if lower.contains("black hole") || has("blackhole") {
+        terms.push("black hole");
+        for (match_word,phrase) in [("accretion","accretion disk"),("photon","photon ring"),("kerr","Kerr"),("schwarzschild","Schwarzschild"),("orbit","orbit"),("orbital","orbit"),("lensing","gravitational lensing")] {
+            if has(match_word) && !terms.contains(&phrase){terms.push(phrase);}
+        }
+    } else if has("hiv") || has("hiv-1") || has("aids") {
+        terms.push("HIV-1");
+        if has("env") || has("envelope") || has("spikes"){terms.push("Env trimer");}
+        for word in ["protease","capsid","gp120","gp140","pgt122","pgt128","vrc01","neutralizing","inhibitor","drug","resistance"] {if has(word){terms.push(word);}}
+    }
+    if !terms.is_empty(){return terms.join(" ").chars().take(250).collect();}
+    let mut seen=std::collections::HashSet::new();
+    words.into_iter().filter(|word|word.len()>1 && !word.bytes().all(|b|b.is_ascii_digit()) && !matches!(*word,
+        "please"|"create"|"creating"|"build"|"building"|"design"|"designing"|"show"|"render"|"make"|"making"|"help"|"me"|"my"|"our"|"we"|"you"|"your"|"want"|"need"|"would"|"could"|"should"|"can"|"will"|"must"|"the"|"of"|"to"|"and"|"with"|"without"|"for"|"from"|"in"|"on"|"at"|"as"|"is"|"it"|"its"|"be"|"by"|"an"|"or"|"that"|"this"|"these"|"those"|"about"|"into"|"before"|"after"|"then"|"using"|"use"|"used"|"based"|"first"|"next"|"new"|"best"|"full"|"complete"|"detailed"|"small"|"simple"|"bounded"|"executable"|"supported"|"available"|"local"|"public"|"research"|"researcher"|"scientific"|"question"|"experiment"|"experiments"|"simulation"|"simulate"|"model"|"models"|"scene"|"visualization"|"workbench"|"studio"|"source"|"sources"|"data"|"evidence"|"look"|"find"|"gather"|"retrieve"|"inspect"|"result"|"results"|"task"|"work"|"run"|"running"|"review"|"test"|"tests"|"step"|"steps"|"minutes"|"hours"|"perform"|"conduct"|"do"|"not"|"only"|"all"))
+        .filter(|word|seen.insert(*word)).take(12).collect::<Vec<_>>().join(" ").chars().take(250).collect()
+}
 pub async fn gather(db:&Database,project:Uuid,prompt:&str,token:&CancellationToken)->anyhow::Result<Value> {
     let action=async {
-        let query=prompt.split_whitespace().filter(|word|!matches!(word.to_ascii_lowercase().as_str(),"please"|"create"|"build"|"show"|"render"|"make"|"me"|"a"|"the"|"of"|"to"|"and"|"with"))
-            .take(18).collect::<Vec<_>>().join(" ").chars().take(250).collect::<String>();
+        let query=focused_query(prompt);
         if query.len()<3{return Ok(json!({"status":"skipped","reason":"No usable public query"}));}
         let lower=prompt.to_ascii_lowercase();
         let pdb_id=prompt.split(|ch:char|!ch.is_ascii_alphanumeric()).find(|word|word.len()==4 && word.bytes().any(|b|b.is_ascii_alphabetic()) && identifier(&Catalog::Rcsb,word).is_ok());
         let molecular=pdb_id.is_some() || ["protein","molecule","hiv","virus","dna","enzyme","ligand","receptor"].iter().any(|word|lower.contains(word));
-        let space=["black hole","blackhole","planet","nebula","galaxy","star","nasa","spacecraft"].iter().any(|word|lower.contains(word));
+        let space=lower.contains("black hole") || lower.contains("sgr a") || lower.split(|c:char|!c.is_ascii_alphanumeric()).any(|word|matches!(word,"blackhole"|"sagittarius"|"planet"|"planets"|"nebula"|"galaxy"|"star"|"stars"|"nasa"|"spacecraft"));
         let mut reports=Vec::new();let mut imported=Vec::new();let mut warnings=Vec::new();
         let literature=search_catalog(db,project,SearchRequest {catalog:Catalog::Literature,query:query.clone(),limit:5}).await?;
         if let Some(error)=&literature.error {warnings.push(error.clone());} reports.push(literature.id);
         if molecular || space {
             let catalog=if molecular {Catalog::Rcsb}else{Catalog::Nasa};
-            let search=search_catalog(db,project,SearchRequest {catalog:catalog.clone(),query,limit:5}).await?;
+            let asset_query=if catalog==Catalog::Nasa && query.starts_with("Sagittarius A*") {"Sagittarius A".into()}
+                else if catalog==Catalog::Nasa && query.starts_with("black hole") {"black hole".into()} else {query.clone()};
+            let search=search_catalog(db,project,SearchRequest {catalog:catalog.clone(),query:asset_query,limit:5}).await?;
             let selected=if catalog==Catalog::Rcsb {pdb_id.map(str::to_owned).or_else(||search.results.first().map(|candidate|candidate.accession.clone()))}
                 else {search.results.first().map(|candidate|candidate.accession.clone())};
             if let Some(error)=&search.error {warnings.push(error.clone());} reports.push(search.id);
@@ -305,8 +333,8 @@ pub async fn gather(db:&Database,project:Uuid,prompt:&str,token:&CancellationTok
                 match import_catalog(db,project,ImportRequest {catalog,accession}).await {Ok(asset)=>imported.push(asset.id),Err(error)=>warnings.push(format!("{error:#}"))}
             }
         }
-        Ok(json!({"status":"completed","search_ids":reports,"asset_ids":imported,"warnings":warnings,
-            "scope":"At most two catalog searches, bounded entry metadata requests, and one bounded asset import. A search match is a candidate, not an assertion of relevance or scientific proof. Europe PMC covers biomedical literature; this is not exhaustive web research."}))
+        Ok(json!({"status":"completed","search_ids":reports,"asset_ids":imported,"warnings":warnings,"query":query,
+            "scope":"At most two catalog searches (literature may try one alternate provider), bounded entry metadata requests, and one bounded asset import. Crossref covers general scholarly metadata; Europe PMC covers biomedical literature. Query keywords are a heuristic; the full researcher brief remains the task context. Search matches are candidates, not relevance or scientific proof; this is not exhaustive web research."}))
     };
     tokio::select! {biased; _=token.cancelled()=>bail!("Public research was cancelled"),result=action=>result}
 }
@@ -336,6 +364,15 @@ async fn content(State(state):State<Arc<AppState>>,Path(id):Path<Uuid>)->Result<
 #[cfg(test)]
 mod tests {
     use super::*;
+    #[test]fn public_queries_preserve_scientific_subjects_beyond_verbose_task_instructions() {
+        let prompt="Please use public research before designing the first executable bounded experiment. Build a small local model with the available supported capabilities to inspect the S2 star orbit around Sagittarius A* and Schwarzschild precession.";
+        let original=prompt.to_owned();assert_eq!(focused_query(prompt),"Sagittarius A* S2 orbit Schwarzschild precession");assert_eq!(prompt,original);
+        assert_eq!(focused_query("Please build a detailed HIV-1 Env trimer with the neutralizing PGT122 Fab antibody"),"HIV-1 Env trimer pgt122 neutralizing");
+        assert_eq!(focused_query("Use public research before building the first executable bounded experiment for Riemann zeta function zeros"),"riemann zeta function zeros");
+        assert_eq!(focused_query("Render a Kerr black hole with an accretion disk and photon ring"),"black hole accretion disk photon ring Kerr");
+        assert_eq!(focused_query("Build a simulation of the blackhole at the center of the milky way. Gather data on stars and other objects close by the super massive black hole"),"Sagittarius A* orbit");
+        assert!(focused_query("please build the first complete experiment").is_empty());assert!(focused_query(&"unusualword ".repeat(10000)).len()<=250);
+    }
     const ENV_HEADER:&str=concat!(
         "TITLE     CRYSTAL STRUCTURE OF THE BG505 SOSIP GP140 HIV-1 ENV TRIMER IN COMPLEX\n",
         "TITLE    2 WITH THE BROADLY NEUTRALIZING FAB PGT122\n",

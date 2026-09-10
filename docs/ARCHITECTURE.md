@@ -38,8 +38,10 @@ integration; a membrane or black-hole visual does not install MD or relativistic
 ## Public evidence and Studio artifacts
 
 The optional `research_mode` flag authorizes bounded catalog intake before a chat
-turn, Studio design or session cycle. `research::assets` searches Europe PMC, RCSB
-and NASA and saves source records. Explicit public-file intake accepts validated
+turn, Studio design or session cycle. `research::assets` uses Crossref for general
+scholarly metadata and Europe PMC for biomedical literature, with one bounded
+alternate-provider attempt on empty/failed retrieval. RCSB and NASA supply structure
+and image catalogs. All save source records. Explicit public-file intake accepts validated
 data and geometry from a fixed HTTPS host allowlist. Original bytes, URLs and hashes
 are retained locally; source excerpts remain untrusted context. Imported PDB
 coordinates become the same molecular records used elsewhere in the workbench.

@@ -1,8 +1,14 @@
 # Public research and artifact design
 
-`research_mode` is an optional boolean on chat turns, research sessions and Studio design requests. It defaults to false. Enabling it authorizes bounded public queries using the current brief: biomedical literature through Europe PMC, experimental molecular structures through RCSB PDB when relevant, and NASA images for astronomy or space topics. A session records this intake before its specialists work in each cycle. Turning the mode off prevents new automatic catalog requests; already saved evidence remains available.
+`research_mode` is an optional boolean on chat turns, research sessions and Studio design requests. It defaults to false. Enabling it authorizes bounded public queries using the current brief: general scholarly metadata through Crossref, biomedical literature through Europe PMC, experimental molecular structures through RCSB PDB when relevant, and NASA images for astronomy or space topics. A session records this intake before its specialists work in each cycle. Turning the mode off prevents new automatic catalog requests; already saved evidence remains available.
 
-Automatic discovery uses the three public catalogs below and makes at most two searches, bounded entry-metadata requests and one asset import per cycle/turn. Search matches remain candidates whose relevance and provenance require interpretation. Explicit public-file imports additionally accept supported data and CAD meshes from the listed hosts; this does not enable unrestricted web browsing, full-paper retrieval or executable assets.
+Automatic discovery uses the three catalog choices below and makes at most two catalog searches, bounded entry-metadata requests and one asset import per cycle/turn. The literature search can contact one alternate provider when its primary returns no usable records or fails. Search matches remain candidates whose relevance and provenance require interpretation. Explicit public-file imports additionally accept supported data and CAD meshes from the listed hosts; this does not enable unrestricted web browsing, full-paper retrieval or executable assets.
+
+Search queries use bounded scientific keywords rather than the first words of a
+long work instruction. Recognized topics such as Sagittarius A*/S2 or HIV-1 Env
+receive concise domain phrases; other queries drop generic task words. This is a
+heuristic, and the receipt retains the derived query. The full original brief stays
+in the conversation or task context.
 
 ## Source intake
 
@@ -11,6 +17,18 @@ Automatic discovery uses the three public catalogs below and makes at most two s
 - `POST /api/projects/{id}/assets/import` accepts a catalog accession, for example `{"catalog":"rcsb","accession":"1HSG"}`. Literature search already saves its source records; it does not import full papers.
 - The same import endpoint accepts `{"catalog":"public_file","accession":"https://raw.githubusercontent.com/owner/repository/main/data.csv"}` for an explicitly selected file. `public_file` is an import option, not a search catalog.
 - `GET /api/assets/{id}/content` returns the saved original structure, image, data or mesh bytes.
+
+Literature searches retain at most 15 records. General science and mathematics use
+Crossref first; biomedical terms use Europe PMC first, with at most one alternate
+request. Crossref supplies DOI, title, authors, publication date at the precision
+provided, and an abstract only when deposited. DOI links are constructed under
+`https://doi.org/`; arbitrary source URLs are not used for fetches. Each response is
+limited to 4 MiB and 25 seconds with redirects disabled. Source records identify
+metadata-only results and abstract excerpts; they do not claim full-paper reading,
+peer-review status, exhaustive coverage or verified scientific conclusions. The
+existing programme pane's explicit Europe PMC search retains its narrower consent
+and endpoint. See [Crossref's REST API](https://www.crossref.org/documentation/retrieve-metadata/rest-api/)
+and [query guidance](https://www.crossref.org/documentation/retrieve-metadata/rest-api/tips-for-using-the-crossref-rest-api/).
 
 RCSB imports currently support four-character PDB IDs. Their actual coordinates become local molecular structures; a source binding reuses these coordinates instead of asking a language model to invent them. Downloads are limited to 8 MiB, and the molecular importer supports up to 100,000 atoms. NASA imports accept only static PNG/JPEG files within a 32-megapixel decoding budget. Every asset retains its source URL, SHA-256, source description and provenance, with the original bytes in local storage. Provider context includes source metadata; NASA pixels are not currently sent as model vision input.
 
