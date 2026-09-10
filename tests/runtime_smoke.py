@@ -6,6 +6,20 @@ import argparse, json, os, pathlib, signal, subprocess, tempfile, time, urllib.r
 from contextlib import contextmanager
 from test_proposal_schema import draft
 
+def wait_for_windows_tree_exit(process, stopped):
+    """Judge taskkill's result only after waiting on our owned process handle.
+
+    taskkill may return nonzero when a helper exits during tree enumeration,
+    while the backend itself is still completing termination.
+    """
+    try:
+        process.wait(timeout=10)
+    except subprocess.TimeoutExpired as error:
+        if stopped.returncode:
+            raise RuntimeError('Backend process-tree shutdown failed: '
+                               + stopped.stdout + stopped.stderr) from error
+        raise
+
 @contextmanager
 def backend_process(command, log_path, *, environment=None):
     """Own the backend and its helpers until their inherited log handles close.
@@ -33,9 +47,7 @@ def backend_process(command, log_path, *, environment=None):
                             stdin=subprocess.DEVNULL, capture_output=True,
                             text=True, timeout=15,
                             creationflags=subprocess.CREATE_NO_WINDOW)
-                        if stopped.returncode and process.poll() is None:
-                            raise RuntimeError('Backend process-tree shutdown failed: '
-                                               + stopped.stdout + stopped.stderr)
+                        wait_for_windows_tree_exit(process, stopped)
                 else:
                     # The dedicated session contains this test's backend only,
                     # including helpers that outlive their immediate parent.

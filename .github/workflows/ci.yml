@@ -26,6 +26,7 @@ jobs:
       - uses: actions/setup-python@v5
         with: {python-version: '3.12'}
       - run: python -m pip install jsonschema
+      - run: python tests/test_runtime_cleanup.py
       - if: runner.os == 'Linux'
         run: python tests/runtime_smoke.py --binary backend/target/debug/phaseforge-backend
       - if: runner.os == 'Windows'
