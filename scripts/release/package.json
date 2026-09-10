@@ -1,0 +1,14 @@
+{
+  "name": "phaseforge-release-evidence",
+  "version": "1.0.0",
+  "private": true,
+  "type": "module",
+  "description": "Build-only native acceptance and detached provenance tools; never bundled in PhaseForge.",
+  "license": "MIT",
+  "engines": {"node": ">=22"},
+  "dependencies": {
+    "@actions/attest": "3.2.0",
+    "playwright-core": "1.63.0"
+  },
+  "overrides": {"@sigstore/core": "3.2.1"}
+}

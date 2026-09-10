@@ -1,0 +1,15 @@
+{
+  "title": "Installed numerical-engine acceptance",
+  "question": "Does the packaged RK4 engine integrate dx/dt = 1 from x(0) = 0?",
+  "scientific_boundary": "A deterministic software acceptance fixture, not an empirical scientific claim.",
+  "hypothesis": "At t = 1 the computed state is x = 1 within 1e-8.",
+  "model": {"kind":"state_vector_ode","variables":[{"name":"x","unit":"m","initial":0}],"derivatives":[{"variable":"x","expression":"1"}]},
+  "constants": [], "trajectory": [],
+  "integration": {"method":"rk4","start_time":0,"end_time":1,"time_step":0.01,"output_stride":1,"max_steps":100},
+  "search": {"enabled":false,"algorithm":"none","variables":[],"objectives":[],"population":2,"generations":1,"elite_fraction":0.2,"mutation_scale":0.1,"seed":1},
+  "observables": [{"name":"state","expression":"x","unit":"m"}], "constraints": [],
+  "visualization": {"entities":[],"kind":"trajectory","x":"t","y":"x","z":"0","point_size":1,"max_frames":101,"trails":true,"scene":null},
+  "falsification": [],
+  "compute": {"preference":"cpu","policy":"interactive","candidate_count":1,"batch_size":1,"max_wall_seconds":30,"max_memory_mb":256},
+  "limitations": ["No external models, credentials or network research. This checks the offline numerical engine; PhaseForge does not bundle a local LLM."]
+}

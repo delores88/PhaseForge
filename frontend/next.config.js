@@ -4,6 +4,8 @@ const nextConfig = {
   reactStrictMode: true,
   devIndicators: false,
   poweredByHeader: false,
+  // Release evidence binds shipped chunks to their emitted source-map content.
+  productionBrowserSourceMaps: true,
   trailingSlash: true,
   images: {
     unoptimized: true,

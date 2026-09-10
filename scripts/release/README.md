@@ -1,0 +1,33 @@
+# ALPHA candidate evidence
+
+The manually dispatched `marketplace-candidates.yml` workflow builds only Windows x64 NSIS and Linux x64 AppImage. It never creates or publishes a GitHub release, signs with an OS certificate, or submits to DeloresAI. Root must freeze and push the final source before dispatch. Both targets must be complete in one draft before the first marketplace submission.
+
+Each job builds from the exact clean dispatched commit and locked dependencies. Pinned cargo-auditable embeds actual compiler dependency metadata in the backend. The staged runtime includes that metadata bound to its binary hash, the complete Cargo lock with its scope disclosed, frontend/desktop input locks, and hashes of the static UI actually packaged. The build-only release tool dependencies are never packaged.
+
+`frontend-modules.json` links each emitted JavaScript bundle to its actual shipped source map and mapped source-content hashes. The installed payload is parsed again and must exactly reproduce the staged evidence. Mapping gaps remain explicit; dependency versions are not guessed from a lockfile. Source maps are included in the final package, and module summary/gaps are retained in the build manifest and raw checks archive.
+
+`native.mjs` runs only in an explicitly enabled GitHub-hosted disposable job. Windows installs the exact NSIS package into a new isolated directory; Linux copies and launches the actual AppImage through FUSE under Xvfb. Chromium's sandbox remains enabled. Playwright opens a local debugger transport for observation; this is not an uninstrumented launch certification. The app creates its own backend and authenticated readiness channel. The fixture imports and solves dx/dt = 1, refines and solves again, opens the actual Results UI, observes SQLite and Electron runtime versions, checks zero provider tokens, and retains a screenshot. It quits normally, verifies owned child processes/ports stopped, reopens saved results, restores a closed-database backup into another fresh data directory, then uninstalls/removes the app and verifies original fixture data is preserved. Cleanup can target only the recorded PID plus creation-time identities; unrelated applications are never stopped.
+
+During those launches, inert IPv4 and IPv6 loopback listeners occupy legacy ports 3000 and 7331. They must observe zero connections, including TCP-only readiness probes. The actual backend endpoint comes from `/api/health.endpoint` after the desktop verifies its own child; its dynamically assigned port must differ from those fixtures and the UI port 7332, then close after normal Quit. Launcher and Electron process trees are both sampled with creation-time identities so exited/reused PIDs cannot become cleanup targets. Copied AppImage links retain their relative targets, and payload inventory still rejects escaping links.
+
+Acceptance records the actual hosted OS, architecture, Linux glibc, RAM, installed bytes and sampled process memory. These observations do not establish minimum supported RAM/OS claims. Hosted Windows Server 2025 is not Windows 11 acceptance. The final native Windows 11 app must also be tested on the developer's machine before claiming that environment. Optional native engines and paid AI providers are outside this offline fixture.
+
+Source Syft includes development dependencies because Electron is a declared devDependency that becomes shipped runtime code. Payload Syft excludes clearly identified build-input locks and optional-engine requirements from its package claims; those files remain covered by full payload hashes. ASAR is separately expanded with bounded trusted code. Actual `process.versions` and backend SQLite observations supplement scanner coverage. Raw source, payload, ASAR and runtime Grype results and redacted Gitleaks reports remain in the checks ZIP. There are no blanket CVE/secret exceptions. Completing these tools does **not** mean security acceptance: unresolved High/Critical findings, secret findings, ClamAV inspection and signed marketplace admission still require review. A tool error prevents candidate assembly.
+
+A separate `runtime-screening-aliases.cdx.json` widens candidate matching to Google Chrome advisories for vendored Chromium and the numeric upstream V8 version. Google Chrome is not claimed as an installed component. V8's `google:v8` vendor/product mapping is documented in [NVD's CVE record](https://nvd.nist.gov/vuln/detail/cve-2024-3914). These conservative screening aliases and every resulting raw match remain distinct from the payload inventory; OS applicability and Electron backports are never waived automatically.
+
+Electron may report `process.versions.openssl` as the compatibility placeholder `0.0.0`. This does not become an OpenSSL component or CPE. The raw value is retained, while `runtime-identity-gaps.json`, the scanner review and build manifest explicitly leave the crypto identity unresolved until the exact BoringSSL source/archive and packaged-native-byte mapping is verified. Inventory completeness is never inferred from zero vulnerability matches.
+
+Candidate assets include the original installer once, source and payload CycloneDX inventories, raw checks/native receipts ZIP, build manifest, checksums, detached GitHub OIDC SLSA bundle, freshly obtained GitHub trusted root and exact-commit verification. The pinned GitHub CLI authenticates its root bootstrap; consumers should obtain fresh roots and enforce their own expected source/workflow policy. OIDC proves build origin, not scientific validity or a vulnerability-free application. The build manifest is **not** `deloresai.manifest.json`.
+
+Tool versions and official archive SHA-256 values are pinned in `tool-pins.json`. `@actions/attest` uses GitHub's private Sigstore trust domain with `skipWrite: true`; no repository attestation API write or public-good transparency disclosure occurs. The build-only `@sigstore/core` override fixes the UTF-8 DSSE payload-type length vulnerability and has a direct regression test.
+
+Local non-destructive verification:
+
+```text
+npm ci --prefix scripts/release --ignore-scripts --no-audit --no-fund
+node --test scripts/release/*.test.mjs
+python -m unittest discover -s scripts/release -p "test_*.py"
+```
+
+Native acceptance intentionally refuses normal local execution. Do not fake GitHub-hosted environment variables to bypass that guard. Failed native jobs upload diagnostic JSON/screenshots only; incomplete packages are never labeled validated or admitted.
