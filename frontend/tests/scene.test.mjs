@@ -52,6 +52,27 @@ test('atomic coordinate scales and negative world positions are retained',()=>{
   assert.equal(scene.nodes[0].parameters.radius,1.4e-10);assert.equal(scene.nodes[0].parameters.thickness,1.4e-10*.08);assert.equal(scene.nodes[0].position[0],-1e-9);
 });
 
+test('translucent primitive envelopes preserve authored scale without opaque depth occlusion',()=>{
+  const scene=normalizeScene({nodes:[
+    {id:'black-hole',type:'black_hole',parameters:{radius:8}},
+    ...['sphere','box','atom'].map(type=>({id:type,type,scale:[1,1,.03],parameters:{radius:35,opacity:.35}})),
+    {id:'opaque',type:'sphere',parameters:{radius:2}},
+  ]});
+  const graph=buildSceneGraph(THREE,scene);
+  for(const id of ['sphere','box','atom']){
+    const object=graph.objects.get(id),material=object.children[0].material;
+    assert.equal(material.opacity,.35);assert.equal(material.transparent,true);
+    assert.equal(material.depthWrite,false,'an enclosing display envelope must not hide later transparent surfaces');
+    const size=new THREE.Box3().setFromObject(object).getSize(new THREE.Vector3());
+    assert.ok(Math.abs(size.x-70)<1e-6);assert.ok(Math.abs(size.y-70)<1e-6);assert.ok(Math.abs(size.z-2.1)<1e-6);
+  }
+  const core=graph.objects.get('black-hole').children[0];
+  assert.deepEqual(core.scale.toArray(),[8,8,8]);assert.equal(core.material.transparent,false);
+  const opaque=graph.objects.get('opaque').children[0].material;
+  assert.equal(opaque.opacity,1);assert.equal(opaque.transparent,false);assert.equal(opaque.depthWrite,true);
+  graph.dispose();
+});
+
 test('a historical run cannot be relabeled with the current manifest geometry',()=>{
   const manifest={id:'new',visualization:{scene:exampleScene('dna')}};
   assert.equal(sceneFromEvidence({manifest_id:'old'},manifest),null);

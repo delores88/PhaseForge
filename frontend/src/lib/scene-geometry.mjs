@@ -131,6 +131,8 @@ export function buildSceneGraph(THREE,spec,{quality='balanced'}={}) {
   for(const node of spec.nodes) {
     const group=new THREE.Group();group.name=node.id;group.userData.node=node;group.position.set(...node.position);group.rotation.set(...node.rotation);group.scale.set(...node.scale);root.add(group);objects.set(node.id,group);
     const p=node.parameters,c=node.color;
+    // Transparent envelopes must not become opaque occluders around their contents.
+    const transparency={opacity:p.opacity,transparent:p.opacity<1,depthWrite:p.opacity>=1};
     if(node.type==='molecule')molecule(group,p,c);
     else if(node.type==='dna')dna(group,p,c);
     else if(node.type==='virus')virus(group,p,c);
@@ -140,9 +142,9 @@ export function buildSceneGraph(THREE,spec,{quality='balanced'}={}) {
     else if(node.type==='field'||node.type==='streamlines')flow(group,p,c);
     else if(node.type==='surface')surface(group,p,c);
     else if(node.type==='curve')tube(group,p.points||[],p.thickness,c);
-    else if(node.type==='mesh'){const g=geo(new THREE.BufferGeometry());g.setAttribute('position',new THREE.Float32BufferAttribute(p.vertices.flat(),3));g.setIndex(p.indices);g.computeVertexNormals();mesh(group,g,material(c,{side:THREE.DoubleSide,transparent:p.opacity<1,opacity:p.opacity}));}
-    else if(node.type==='box')mesh(group,geo(new THREE.BoxGeometry(p.radius*2,p.radius*2,p.radius*2)),material(c));
-    else mesh(group,sphere,material(node.type==='atom'?(ELEMENT_COLORS[p.element]||c):c,{roughness:.4}),null,p.radius);
+    else if(node.type==='mesh'){const g=geo(new THREE.BufferGeometry());g.setAttribute('position',new THREE.Float32BufferAttribute(p.vertices.flat(),3));g.setIndex(p.indices);g.computeVertexNormals();mesh(group,g,material(c,{side:THREE.DoubleSide,...transparency}));}
+    else if(node.type==='box')mesh(group,geo(new THREE.BoxGeometry(p.radius*2,p.radius*2,p.radius*2)),material(c,transparency));
+    else mesh(group,sphere,material(node.type==='atom'?(ELEMENT_COLORS[p.element]||c):c,{roughness:.4,...transparency}),null,p.radius);
     group.traverse(o=>{if(o.isMesh){o.userData.sceneNodeId=node.id;pickables.push(o);}});
   }
   const bondObjects=[];
