@@ -15,6 +15,8 @@ jobs:
     steps:
       - uses: actions/checkout@v4
       - uses: dtolnay/rust-toolchain@stable
+      - uses: actions/setup-node@v4
+        with: {node-version: '22'}
       - if: runner.os == 'Linux'
         run: sudo apt-get update && sudo apt-get install -y pkg-config libdbus-1-dev libssl-dev
       - run: cargo check --all-targets
@@ -47,6 +49,16 @@ jobs:
         run: python tests/experiment_runtime_smoke.py --binary backend/target/debug/phaseforge-backend
       - if: runner.os == 'Windows'
         run: python tests/experiment_runtime_smoke.py --binary backend/target/debug/phaseforge-backend.exe
+      - if: runner.os == 'Linux'
+        run: python tests/api_security_runtime_smoke.py --binary backend/target/debug/phaseforge-backend
+      - if: runner.os == 'Windows'
+        run: python tests/api_security_runtime_smoke.py --binary backend/target/debug/phaseforge-backend.exe
+      - name: Dynamic owned-backend readiness and proxy smoke (Linux)
+        if: runner.os == 'Linux'
+        run: node desktop/tests/dynamic-backend-smoke.cjs backend/target/debug/phaseforge-backend
+      - name: Dynamic owned-backend readiness and proxy smoke (Windows)
+        if: runner.os == 'Windows'
+        run: node desktop/tests/dynamic-backend-smoke.cjs backend/target/debug/phaseforge-backend.exe
   browser:
     runs-on: ubuntu-latest
     steps:

@@ -4,7 +4,7 @@
 
 $ErrorActionPreference = "Stop"
 Set-StrictMode -Version Latest
-Write-Host "PhaseForge complete installer (v0.8.0)" -ForegroundColor White
+Write-Host "PhaseForge complete installer (v0.8.0-alpha.1)" -ForegroundColor White
 
 # Backend installation runs in its own scope.
 & {
@@ -68,7 +68,7 @@ Write-Host "PhaseForge complete installer (v0.8.0)" -ForegroundColor White
         throw "backend/Cargo.toml was not found. Open PowerShell in the extracted PhaseForge project root before pasting this file."
     }
 
-    Write-Host "PhaseForge backend installer (v0.8.0)" -ForegroundColor White
+    Write-Host "PhaseForge backend installer (v0.8.0-alpha.1)" -ForegroundColor White
     Write-Host "Repository: $PFRepoRoot"
     Write-Host "Backend:    $PFBackendRoot"
 
@@ -208,7 +208,7 @@ Write-Host "PhaseForge complete installer (v0.8.0)" -ForegroundColor White
         throw "frontend/package.json was not found. Open PowerShell in the extracted PhaseForge project root before pasting this file."
     }
 
-    Write-Host "PhaseForge frontend installer (v0.8.0)" -ForegroundColor White
+    Write-Host "PhaseForge frontend installer (v0.8.0-alpha.1)" -ForegroundColor White
     Write-Host "Repository: $PFRepoRoot"
     Write-Host "Frontend:   $PFFrontendRoot"
     Write-Host "Node minimum: $PFMinimumNode"

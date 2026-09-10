@@ -1,4 +1,5 @@
 /** Strict, data-only asset intake. Validate before invoking any Three.js loader. */
+import {prepareGLBShaderMetadata,validTextureChannel} from './model-assets-shaders.mjs';
 export const MODEL_LIMITS=Object.freeze({bytes:128*1024*1024,triangles:2_000_000,vertices:6_000_000,nodes:12000,images:16,texturePixels:32_000_000,textureSide:8192});
 const fail=message=>{throw new Error(message);};
 const finiteVector=v=>Array.isArray(v)&&v.every(n=>typeof n==='number'&&Number.isFinite(n)&&Math.abs(n)<=1e15);
@@ -46,8 +47,16 @@ export function inspectGLB(buffer) {
   for(const image of images){if(image.uri!==undefined||!Number.isInteger(image.bufferView)||!views[image.bufferView])fail('Textures must be embedded buffer views; external URLs and data URIs are not loaded.');const v=views[image.bufferView],bytes=binary.subarray(v.byteOffset||0,(v.byteOffset||0)+v.byteLength),[w,h]=textureDimensions(bytes,image.mimeType);if(!w||!h||w>MODEL_LIMITS.textureSide||h>MODEL_LIMITS.textureSide||(pixels+=w*h)>MODEL_LIMITS.texturePixels)fail('Embedded texture dimensions exceed the viewer memory budget.');}
   // Unknown extensions can carry URLs even when normal glTF buffers are embedded.
   const pending=[json];let visited=0;
-  while(pending.length){const value=pending.pop();if(++visited>2_000_000)fail('Model metadata is too complex.');if(!value||typeof value!=='object')continue;for(const [key,child] of Object.entries(value)){if(key==='uri'||key==='url')fail('Asset URLs are not loaded. Use a fully embedded GLB export.');if(child&&typeof child==='object')pending.push(child);}}
-  return {format:'glb',json,triangles,vertices,bytes:buffer.byteLength,textures:images.length};
+  while(pending.length){const value=pending.pop();if(++visited>2_000_000)fail('Model metadata is too complex.');if(!value||typeof value!=='object')continue;for(const [key,child] of Object.entries(value)){if(key==='uri'||key==='url')fail('Asset URLs are not loaded. Use a fully embedded GLB export.');if(key==='texCoord'&&!validTextureChannel(child))fail('Texture texCoord must be an integer from 0 to 3.');if(typeof child==='number'&&!Number.isFinite(child))fail('Model metadata contains a nonfinite number.');if(child&&typeof child==='object')pending.push(child);}}
+  prepareGLBShaderMetadata(json);
+  // GLTFLoader parses bytes again. Returning only sanitized JSON would leave the
+  // original material names on the real loader path, so replace the JSON chunk.
+  const encoded=new TextEncoder().encode(JSON.stringify(json)),jsonSize=Math.ceil(encoded.length/4)*4,binarySize=binary?.byteLength??0,total=20+jsonSize+(binary?8+binarySize:0);
+  if(total>MODEL_LIMITS.bytes)fail('Sanitized model metadata exceeds the 128 MiB budget.');
+  const safeBuffer=new ArrayBuffer(total),safeView=new DataView(safeBuffer),safeBytes=new Uint8Array(safeBuffer);
+  safeView.setUint32(0,0x46546c67,true);safeView.setUint32(4,2,true);safeView.setUint32(8,total,true);safeView.setUint32(12,jsonSize,true);safeView.setUint32(16,0x4e4f534a,true);safeBytes.fill(32,20,20+jsonSize);safeBytes.set(encoded,20);
+  if(binary){safeView.setUint32(20+jsonSize,binarySize,true);safeView.setUint32(24+jsonSize,0x004e4942,true);safeBytes.set(binary,28+jsonSize);}
+  return {format:'glb',buffer:safeBuffer,json,triangles,vertices,bytes:buffer.byteLength,textures:images.length,renderSanitization:{materialNames:'trusted_identifiers',sourceBytesChanged:false}};
 }
 
 export function inspectSTL(buffer) {
@@ -74,7 +83,11 @@ export async function readModelAsset({url,file,signal}) {
     const joined=new Uint8Array(length);let at=0;for(const chunk of chunks){joined.set(chunk,at);at+=chunk.byteLength;}buffer=joined.buffer;name=target.pathname.split('/').at(-1);
   }else fail('Choose a model file or a completed render.');
   if(signal?.aborted)throw new DOMException('Cancelled','AbortError');
+  // Provenance always describes the downloaded/source file, never the transient
+  // sanitized render buffer returned by inspectGLB.
+  const sourceSha256=Array.from(new Uint8Array(await crypto.subtle.digest('SHA-256',buffer)),byte=>byte.toString(16).padStart(2,'0')).join('');
+  if(signal?.aborted)throw new DOMException('Cancelled','AbortError');
   const glb=buffer.byteLength>=4&&new DataView(buffer).getUint32(0,true)===0x46546c67;
   const inspection=glb?inspectGLB(buffer):inspectSTL(buffer);
-  return {buffer,name,...inspection};
+  return {buffer,name,sourceSha256,...inspection};
 }

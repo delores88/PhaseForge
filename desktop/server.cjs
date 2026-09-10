@@ -11,16 +11,29 @@ function assetPath(root,pathname){
   if(rel.startsWith('..')||path.isAbsolute(rel))return null;
   return file;
 }
-function startServer(root,backendPort=7331,port=0){
+function startServer(root,backendTarget=null,port=0,{isBackendReady=()=>true}={}){
   root=path.resolve(root);
+  const target=()=>{
+    if(!isBackendReady())return null;
+    const value=typeof backendTarget==='function'?backendTarget():backendTarget;
+    const backendPort=typeof value==='number'?value:value?.address==='127.0.0.1'?value.port:null;
+    return Number.isInteger(backendPort)&&backendPort>0&&backendPort<=65535?value:null;
+  };
+  const portOf=value=>typeof value==='number'?value:value.port;
+  const allowedOrigin=(headers,origin)=>headers.origin!==undefined?headers.origin===origin:
+    headers['sec-fetch-site']===undefined||['none','same-origin','same-site'].includes(headers['sec-fetch-site']);
   return new Promise((resolve,reject)=>{
     const server=http.createServer((req,res)=>{
       const host=`127.0.0.1:${server.address().port}`;
       if(req.headers.host!==host){res.writeHead(403).end();return;}
       const url=new URL(req.url,`http://${host}`);
       if(url.pathname.startsWith('/api/')){
-        if(req.headers.origin && req.headers.origin!==`http://${host}`){res.writeHead(403).end();return;}
-        const proxy=http.request({host:'127.0.0.1',port:backendPort,path:url.pathname+url.search,method:req.method,headers:{...req.headers,host:`127.0.0.1:${backendPort}`,origin:'http://127.0.0.1:3000'}},upstream=>{
+        if(!allowedOrigin(req.headers,`http://${host}`)){res.writeHead(403).end();return;}
+        const selected=target();
+        if(selected===null){res.writeHead(503,{'Content-Type':'application/json'}).end(JSON.stringify({error:{message:'The local research engine is starting or recovering. Your saved work remains available.'}}));return;}
+        const backendPort=portOf(selected);
+        const proxy=http.request({host:'127.0.0.1',port:backendPort,path:url.pathname+url.search,method:req.method,headers:{...req.headers,host:`127.0.0.1:${backendPort}`}},upstream=>{
+          if(target()!==selected){upstream.destroy();res.writeHead(503).end();return;}
           const headers={...upstream.headers};delete headers['access-control-allow-origin'];res.writeHead(upstream.statusCode,headers);
           upstream.on('aborted',()=>res.destroy());upstream.on('error',()=>res.destroy());res.on('close',()=>upstream.destroy());upstream.pipe(res);
         });
@@ -45,13 +58,26 @@ function startServer(root,backendPort=7331,port=0){
     });
     server.on('upgrade',(req,socket,head)=>{
       const host=`127.0.0.1:${server.address().port}`;
-      if(req.headers.host!==host||req.url!=='/api/events/ws'||req.headers.origin!==`http://${host}`){socket.destroy();return;}
-      const proxy=http.request({host:'127.0.0.1',port:backendPort,path:req.url,headers:{...req.headers,host:`127.0.0.1:${backendPort}`,origin:'http://127.0.0.1:3000'}});
+      const selected=target();
+      if(selected===null||req.headers.host!==host||req.url!=='/api/events/ws'||req.headers.origin!==`http://${host}`){socket.destroy();return;}
+      const backendPort=portOf(selected);
+      const proxy=http.request({host:'127.0.0.1',port:backendPort,path:req.url,headers:{...req.headers,host:`127.0.0.1:${backendPort}`}});
+      let upgraded=false;
+      const rejectUpgrade=()=>{clearTimeout(handshakeDeadline);proxy.destroy();socket.destroy();};
+      // A rejected or silent upstream must let the renderer reconnect, and an
+      // active byte trickle must not extend the total handshake deadline.
+      const handshakeDeadline=setTimeout(rejectUpgrade,5000);
+      proxy.on('response',response=>{response.resume();rejectUpgrade();});
+      proxy.on('error',rejectUpgrade);
+      proxy.on('close',()=>{if(!upgraded)rejectUpgrade();});
+      socket.on('close',()=>{clearTimeout(handshakeDeadline);proxy.destroy();});
       proxy.on('upgrade',(response,upstream,uphead)=>{
+        upgraded=true;clearTimeout(handshakeDeadline);
+        if(target()!==selected){upstream.destroy();socket.destroy();return;}
         socket.write(`HTTP/1.1 ${response.statusCode} Switching Protocols\r\n${Object.entries(response.headers).map(([k,v])=>`${k}: ${v}`).join('\r\n')}\r\n\r\n`);
         if(uphead.length)socket.write(uphead);if(head.length)upstream.write(head);socket.pipe(upstream).pipe(socket);
         upstream.on('error',()=>socket.destroy());socket.on('error',()=>upstream.destroy());socket.on('close',()=>upstream.destroy());
-      });proxy.on('error',()=>socket.destroy());proxy.end();
+      });proxy.end();
     });
     server.once('error',reject);server.listen(port,'127.0.0.1',()=>resolve({server,url:`http://127.0.0.1:${server.address().port}`}));
   });

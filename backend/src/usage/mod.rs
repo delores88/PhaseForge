@@ -1,5 +1,8 @@
 //! Local usage accounting and admission controls. No provider prices are guessed.
 //! Reservations are conservative preflight estimates, NOT provider billing limits.
+mod redaction;
+pub(crate) use redaction::redact_credentials;
+
 use std::sync::Arc;
 use anyhow::{bail, Context};
 use chrono::{DateTime, Utc};
@@ -159,12 +162,20 @@ impl UsageService {
     pub fn new(database: Database) -> anyhow::Result<Self> {
         // Never discard unsettled usage on restart or turn it into a zero-cost call.
         for mut record in database.list_usage_records()? {
+            let mut changed = false;
             if ["running", "received", "validating"].contains(&record.status.as_str()) {
                 record.status = "interrupted".to_owned();
                 record.completed_at = Some(Utc::now());
                 record.error = Some("Backend restarted before call processing finished; reported usage is retained, or the reservation remains when usage is unknown.".to_owned());
-                database.put_usage_record(&record)?;
+                changed = true;
             }
+            // Upgrade older ledgers too. Only recognizable credential patterns
+            // can be recovered without retaining/reading historical opaque keys.
+            if let Some(error) = &record.error {
+                let clean: String = redact_credentials(error, None).chars().take(2000).collect();
+                if clean != *error { record.error = Some(clean); changed = true; }
+            }
+            if changed { database.put_usage_record(&record)?; }
         }
         Ok(Self { database, gate: Arc::new(Mutex::new(())) })
     }
@@ -234,7 +245,7 @@ impl UsageService {
         let mut row = self.database.get_usage_record(id)?.context("usage record not found")?;
         row.status = status.to_owned();
         row.completed_at = Some(Utc::now());
-        row.error = error.map(|s| s.chars().take(2000).collect());
+        row.error = error.map(|s| redact_credentials(s, None).chars().take(2000).collect());
         if let Some(body) = body {
             row.usage = TokenUsage::from_response(row.provider, body);
             row.provider_response_id = body.get("id").and_then(Value::as_str).map(str::to_owned);
@@ -294,6 +305,44 @@ fn reserved_cost(input: u64, output: u64, rate: &ModelRate) -> f64 {
 #[cfg(test)]
 mod tests {
     use super::*;
+    #[test]
+    fn provider_security_historical_errors_are_scrubbed_without_changing_usage() {
+        let db = Database::open(std::path::Path::new(":memory:")).unwrap();
+        let service = UsageService::new(db.clone()).unwrap();
+        let row = service.begin(Uuid::new_v4(), None, ProviderKind::OpenAi, "fixture-model", "fixture", 0, 10, 32).unwrap();
+        service.finish(row.id, "completed", Some(&json!({"id":"resp_fixture","usage":{"input_tokens":9,"output_tokens":4}})), None).unwrap();
+        let mut historical = db.get_usage_record(row.id).unwrap().unwrap();
+        let key = format!("sk-{}", "synthetic_historical_fixture_123456789");
+        historical.error = Some(format!("Invalid {key}; Bearer historic-fixture-token; diagnostic retained"));
+        db.put_usage_record(&historical).unwrap();
+        let expected_error = "Invalid [REDACTED]; Bearer [REDACTED]; diagnostic retained";
+        let mut expected = serde_json::to_value(&historical).unwrap();
+        expected["error"] = json!(expected_error);
+        let restarted = UsageService::new(db.clone()).unwrap();
+        assert_eq!(serde_json::to_value(db.get_usage_record(row.id).unwrap().unwrap()).unwrap(), expected);
+        let report = restarted.report().unwrap().to_string();
+        assert!(!report.contains(&key));
+        assert!(!report.contains("historic-fixture-token"));
+        assert!(report.contains("diagnostic retained"));
+        let _again = UsageService::new(db.clone()).unwrap();
+        assert_eq!(serde_json::to_value(db.get_usage_record(row.id).unwrap().unwrap()).unwrap(), expected);
+    }
+
+    #[test]
+    fn provider_security_usage_retention_scrubs_keys_before_truncation() {
+        let db = Database::open(std::path::Path::new(":memory:")).unwrap();
+        let service = UsageService::new(db.clone()).unwrap();
+        let row = service.begin(Uuid::new_v4(), None, ProviderKind::OpenAi, "fixture-model", "fixture", 0, 10, 512).unwrap();
+        let key = format!("sk-{}", "synthetic_fixture_only_123456789");
+        let message = format!("{} denied {key} and Bearer fixture-token", "x".repeat(1975));
+        service.finish(row.id, "provider_error", None, Some(&message)).unwrap();
+        let stored = db.get_usage_record(row.id).unwrap().unwrap().error.unwrap();
+        assert!(!stored.contains("sk-"));
+        assert!(!stored.contains("fixture-token"));
+        assert!(stored.contains("[REDACTED]"));
+        assert!(!service.report().unwrap().to_string().contains(&key));
+    }
+
     #[test]
     fn openai_cached_and_reasoning_are_not_double_counted() {
         let u=TokenUsage::from_response(ProviderKind::OpenAi, &json!({"usage":{"input_tokens":100,"output_tokens":30,

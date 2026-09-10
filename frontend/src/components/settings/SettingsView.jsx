@@ -16,6 +16,7 @@ import { useCallback, useEffect, useMemo, useState } from "react";
 
 import { ErrorState, LoadingState } from "@/components/shared/AsyncState";
 import { api } from "@/lib/api";
+import {version as appVersion} from "../../../package.json";
 
 const labels = {
   open_ai: { name: "OpenAI", keyPlaceholder: "sk-…" },
@@ -251,14 +252,24 @@ export default function SettingsView({ backend, onHardware, onEventState }) {
 
   return (
     <section className="settingsView settingsView--providersV3">
+      <section className="surfacePanel settingsAbout" aria-label="About PhaseForge">
+        <div className="aboutBrand">
+          <img className="brandDark" src="/brand/app-icon-dark.png" alt="PhaseForge" />
+          <img className="brandLight" src="/brand/app-icon-light.png" alt="PhaseForge" />
+          <div><strong className="alphaNotice">Alpha · {appVersion}</strong><h2>Serious research starts with curiosity.</h2></div>
+        </div>
+        <p>PhaseForge is for anyone who wants to undertake serious scientific research, with or without a formal scientific background. Explore a question, build an experiment and examine the evidence together with AI. This is an alpha release; more features are coming.</p>
+        <p>The app is free, with no trial, paid unlocks or required developer credits. For AI features, choose <strong>OpenAI or Anthropic</strong> and add that provider’s API key. You do not need both. These are the only external paid AI services used by PhaseForge; your selected provider charges separately for API usage. Existing experiments and local tools can run without a new model call.</p>
+        <p>Blender, CadQuery and KiCad are optional, free engines installed separately for rendering and engineering exports. Research mode can retrieve public sources; content included in an AI request is sent to the provider you select. Keys stay in your operating system’s credential store.</p>
+        <p>Rendered geometry and calculated results describe their declared models and sources. They still require scientific interpretation and validation; an image or completed experiment does not establish a discovery or treatment.</p>
+      </section>
       <div className="securityCallout">
         <LockKeyhole size={20} />
         <div>
-          <strong>Credential storage no longer depends on model selection</strong>
+          <strong>Choose your provider, then your model</strong>
           <p>
-            Save a key first. PhaseForge then asks the provider for models visible
-            to that account. The model choice is a separate reversible setting,
-            so an empty model field can never block secure credential storage.
+            Save the key for the provider you want to use. PhaseForge reads the models
+            available to that account, and you can choose a different model for each turn.
           </p>
         </div>
       </div>

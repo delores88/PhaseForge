@@ -1,4 +1,4 @@
-# PhaseForge 0.8.0
+# PhaseForge 0.8.0-alpha.1
 
 PhaseForge is a local scientific research workbench: gather public evidence, build
 experiments, 3D scenes or engineering designs, run supported calculations and local
@@ -7,12 +7,20 @@ runtime, an Electron desktop app, a Next.js interface and Three.js graphics. The
 core and Three.js use MIT licenses; optional native engines have their own
 [licenses and notices](THIRD_PARTY.md).
 
-**Development status:** Windows x64 is installed and tested on an RTX 4090 Laptop
-GPU machine. Native package builds passed for Windows x64/ARM64 and Linux x64/ARM64.
-Hands-on runtime acceptance remains limited to Windows x64; the validation record
-identifies each tested source revision and the final local installer.
-No GitHub release has been published for this overhaul. See the
-[validation record](docs/RELEASE_VALIDATION.md) for executed checks and remaining work.
+**Alpha:** PhaseForge is for anyone who wants to undertake serious scientific
+research, with or without a formal scientific background. More features are coming.
+The app is free: no trial, paid unlocks or mandatory developer credits. AI features
+need an **OpenAI or Anthropic API key**; you do not need both. Your selected provider
+charges separately for API usage. No additional paid AI service is required.
+Blender, CadQuery and KiCad are optional free tools installed separately.
+
+The first alpha targets Windows x64 and Linux x64 AppImage. Exact candidate
+installation, security review and marketplace acceptance are separate release gates;
+preparing an installer does not establish admission. The preceding 0.8.0 development
+build was installed and tested on an RTX 4090 Laptop GPU, and package builds passed
+for Windows and Linux x64/ARM64. ARM64 is not included in the initial alpha listing.
+See the [validation record](docs/RELEASE_VALIDATION.md) for those executed baseline
+checks, and [alpha notes](RELEASE_NOTES_0.8.0-alpha.1.md) for the current changes.
 
 ## Use the workbench
 
@@ -159,8 +167,8 @@ needed to build from source, not to launch a packaged application.
 - [Discovery campaigns](docs/DISCOVERY_CAMPAIGNS.md),
   [verification methods](docs/VERIFICATION_METHODS.md),
   [verification dossiers](docs/VERIFICATION_DOSSIERS.md), [exports](docs/RESEARCH_EXPORT.md).
-- [Marketplace template](docs/DELORES_MARKETPLACE_TEMPLATE.md): preparation only;
-  no marketplace publication is part of this update.
+- [Marketplace template](docs/DELORES_MARKETPLACE_TEMPLATE.md): packaging guidance;
+  only the exact accepted artifacts may be represented as marketplace validated.
 
 Historical validation records remain under [docs/history](docs/history/). Their
-results are not counted as fresh executions for 0.8.0.
+results are not counted as fresh executions for the alpha candidate.

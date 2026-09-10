@@ -14,11 +14,11 @@ if (-not (Test-Path $PFBinary)) {
 $health = $null
 try { $health = Invoke-RestMethod -Uri "http://127.0.0.1:7331/api/health" -TimeoutSec 2 } catch {}
 if ($null -ne $health) {
-    if ($health.status -eq "ok" -and $health.name -eq "PhaseForge" -and $health.version -eq "0.8.0") {
-        Write-Host "PhaseForge v0.8.0 backend is already running." -ForegroundColor Green
+    if ($health.status -eq "ok" -and $health.name -eq "PhaseForge" -and $health.version -eq "0.8.0-alpha.1") {
+        Write-Host "PhaseForge v0.8.0-alpha.1 backend is already running." -ForegroundColor Green
         return
     }
-    throw "A different backend is running on port 7331. Stop the old backend before starting v0.8.0."
+    throw "A different backend is running on port 7331. Stop the old backend before starting v0.8.0-alpha.1."
 }
 
 $listener = Get-NetTCPConnection -LocalPort 7331 -State Listen -ErrorAction SilentlyContinue

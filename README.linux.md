@@ -1,15 +1,15 @@
-# PhaseForge 0.8.0 on Linux
+# PhaseForge 0.8.0-alpha.1 on Linux
 
-PhaseForge's desktop architecture combines a native Rust engine, an exported
-Next.js interface and Electron. Linux x64 and ARM64 package jobs are prepared in the
-[desktop workflow](.github/workflows/desktop.yml), producing AppImage and Debian
-packages. Neither Linux target has completed native acceptance for this overhaul.
-Windows x64 is the active local test platform; prepared jobs are not evidence of
-successful Linux execution. No release is published.
+PhaseForge combines a native Rust engine, an exported interface and Electron.
+The initial alpha targets Linux x64 AppImage. The preceding development revision
+passed Linux x64 and ARM64 packaging in the [desktop workflow](.github/workflows/desktop.yml).
+That packaging result does not establish native acceptance of the alpha candidate.
+ARM64 and Debian packages remain engineering targets outside the initial listing;
+the exact alpha AppImage requires native acceptance and marketplace review.
 
 ## Build prerequisites
 
-- Current stable Rust/Cargo; the crate declares Rust 1.85 as its minimum.
+- Current stable Rust/Cargo; the crate declares Rust 1.88 as its minimum.
 - A native C/C++ toolchain, `pkg-config`, and development libraries for the Rust
   credential backend. Ubuntu CI includes `libdbus-1-dev` and `libssl-dev`.
 - Node.js 22 and npm 10 or newer; Git with a checked-out commit.
@@ -48,8 +48,11 @@ packaging uses `--publish never`. These commands prepare local artifacts, not a
 public release. Test installation, launch, graphics, credentials and uninstallation
 on each actual target before distributing a package.
 
-The desktop starts its owned engine on `127.0.0.1:7331` and serves the bundled
-interface on `127.0.0.1:7332`. A production Next.js server is unnecessary.
+The desktop's owned engine binds an OS-assigned available loopback port, announced
+through the private parent connection and verified with its launch secret.
+The bundled interface retains `127.0.0.1:7332` for persistent preferences and
+refuses an occupied interface port. Packaged execution does not use development
+port 3000 or the old fixed engine port 7331. A production Next.js server is unnecessary.
 Where a tray icon is supported, closing the window keeps research running; use
 **Quit PhaseForge** to exit. Tray behavior still needs native Linux testing.
 

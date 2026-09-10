@@ -8,9 +8,9 @@
     "slug": "phaseforge",
     "publisherId": null,
     "repository": {"id": null, "url": "https://github.com/delores88/PhaseForge"},
-    "release": {"id": null, "tag": null, "version": "0.8.0", "channel": "beta", "sourceCommit": null},
-    "summary": "Local scientific research, procedural 3D experiments, and timed AI collaboration.",
-    "description": "Create equations and data-only 3D scenes, run bounded native numerical experiments, inspect measurements, and collaborate with deadline-aware research agents. Supports local CPU solvers and compatible GPU ODE screening. Visual illustrations and numerical results are labelled separately; this is not a validated universal physics, molecular-dynamics, clinical, or distributed-compute platform.",
+    "release": {"id": null, "tag": null, "version": "0.8.0-alpha.1", "channel": "beta", "sourceCommit": null},
+    "summary": "An alpha research workbench for curious people: experiments, detailed 3D and AI collaboration.",
+    "description": "Explore scientific questions with or without a formal scientific background. Build bounded numerical experiments, retrieve public research, inspect detailed 3D models and collaborate with timed research teams. Optional separately installed Blender, CadQuery and KiCad produce rendered scenes, CAD and circuit-board artifacts. The app is free; AI features need one OpenAI OR Anthropic API key with separate provider charges. More features are coming. Visual representations and numerical evidence have distinct scopes; this alpha does not establish scientific discoveries, treatment efficacy or universal solver coverage. Closing the window can keep research running in the app tray; Quit stops the app.",
     "category": "data-science",
     "sourceVisibility": "private",
     "license": "MIT",
@@ -24,7 +24,10 @@
     "offline": false,
     "integrations": [
       {"name": "OpenAI", "required": false, "purpose": "User-requested experiment design and research collaboration.", "costDisclosure": "Bring your own API key. Provider token and tool charges are separate. Local saved simulations do not require paid model calls.", "url": "https://platform.openai.com"},
-      {"name": "Anthropic", "required": false, "purpose": "Optional alternative AI provider.", "costDisclosure": "Bring your own API key; provider charges apply. Native numerical work is local.", "url": "https://www.anthropic.com"}
+      {"name": "Anthropic", "required": false, "purpose": "Alternative AI provider; choose OpenAI or Anthropic, both are not required.", "costDisclosure": "Bring your own API key; provider charges apply. Native numerical work is local.", "url": "https://www.anthropic.com"},
+      {"name": "Blender", "required": false, "purpose": "Separately installed local Cycles rendering and editable 3D exports.", "costDisclosure": "Free engine; installed separately and not bundled in the app.", "url": "https://www.blender.org"},
+      {"name": "CadQuery", "required": false, "purpose": "Separately installed CAD engine for solid validation, STEP and STL.", "costDisclosure": "Free engine and dependencies, installed separately.", "url": "https://cadquery.readthedocs.io"},
+      {"name": "KiCad", "required": false, "purpose": "Separately installed PCB engine for editable boards and native design-rule checks.", "costDisclosure": "Free engine; installed separately and not bundled in the app.", "url": "https://www.kicad.org"}
     ],
     "privacy": {
       "dataLeavesDevice": "Selected research questions, attachments and evidence are sent to the chosen provider for authorized AI calls. Source searches send the submitted query to public scientific catalogs. GPU/CPU diagnostics and numerical computation remain local. Provider background requests may use temporary polling storage.",
@@ -34,13 +37,13 @@
     "permissions": {
       "filesystem": ["Local application data for SQLite, experiment artifacts and logs", "User-selected files for import and export"],
       "credentials": ["User-provided OpenAI or Anthropic API keys stored in the OS credential store"],
-      "domains": ["api.openai.com", "api.anthropic.com", "api.openalex.org", "api.crossref.org", "www.ebi.ac.uk"],
+      "domains": ["api.openai.com", "api.anthropic.com", "api.openalex.org", "api.crossref.org", "www.ebi.ac.uk", "ftp.ebi.ac.uk", "search.rcsb.org", "data.rcsb.org", "files.rcsb.org", "images-api.nasa.gov", "images-assets.nasa.gov", "raw.githubusercontent.com", "zenodo.org", "data.eso.org", "www.eso.org"],
       "elevation": false,
       "backgroundServices": false
     },
     "models": [],
     "executableDownloads": [],
-    "updater": {"mode": "disabled", "coordination": "No updater or release publication is enabled. Marketplace coordination will be configured during a later authorized submission."},
+    "updater": {"mode": "disabled", "coordination": "No in-app automatic updater. Marketplace distribution requires exact accepted release assets; this preparation template has no artifact identities or admission claim."},
     "rollback": {"dataCompatible": false, "backupRequired": true, "notes": "Back up the SQLite database using its backup API before upgrade. Validate restoring with the previous app; do not assume new task/checkpoint objects are supported by earlier versions."},
     "screenshots": [],
     "artifacts": []

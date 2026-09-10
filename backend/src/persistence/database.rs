@@ -17,6 +17,20 @@ pub struct Database {
 }
 
 impl Database {
+    /// Identify the linked database engine for packaged runtime evidence.
+    pub fn sqlite_runtime(&self) -> anyhow::Result<serde_json::Value> {
+        let (version, source_id): (String, String) = self.connection.lock().query_row(
+            "SELECT sqlite_version(), sqlite_source_id()", [],
+            |row| Ok((row.get(0)?, row.get(1)?)),
+        )?;
+        Ok(serde_json::json!({
+            "version": version,
+            "version_number": rusqlite::version_number(),
+            "source_id": source_id,
+            "linkage": "bundled",
+        }))
+    }
+
     pub fn open(path: &Path) -> anyhow::Result<Self> {
         let connection = Connection::open(path)
             .with_context(|| format!("unable to open database at {}", path.display()))?;
@@ -543,4 +557,51 @@ impl Database {
         rows.sort_by_key(|v|v.recorded_at);Ok(rows)
     }
 
+}
+
+#[cfg(test)]
+mod sqlite_runtime_tests {
+    use super::*;
+
+    #[test]
+    fn linked_sqlite_matches_the_reviewed_security_baseline() {
+        let db = Database::open(Path::new(":memory:")).unwrap();
+        let runtime = db.sqlite_runtime().unwrap();
+        // Changing this pin requires reviewing the new bundled source and SBOM.
+        assert_eq!(runtime["version"], "3.53.2");
+        assert_eq!(runtime["version_number"], 3_053_002);
+        assert_eq!(runtime["source_id"], "2026-06-03 19:12:13 d6e03d8c777cfa2d35e3b60d8ec3e0187f3e9f99d8e2ee9cac695fd6fcdf1a24");
+        assert_eq!(runtime["version"], rusqlite::version());
+        println!("{}", runtime);
+    }
+
+    #[test]
+    fn reopening_legacy_database_preserves_records_and_transaction_rollback() {
+        let directory = tempfile::tempdir().unwrap();
+        let path = directory.path().join("legacy.db");
+        let project_id = Uuid::new_v4();
+        let original = serde_json::json!({"id": project_id, "title": "Legacy research", "notes": "DNA α + orbit 🪐"});
+        // The pre-upgrade objects/provider schema remains readable without export/import.
+        {
+            let legacy = Connection::open(&path).unwrap();
+            legacy.execute_batch("CREATE TABLE objects(kind TEXT NOT NULL,id TEXT NOT NULL,json TEXT NOT NULL,updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,PRIMARY KEY(kind,id)); CREATE TABLE provider_settings(provider TEXT PRIMARY KEY,model TEXT NOT NULL,base_url TEXT NOT NULL,updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP);").unwrap();
+            legacy.execute("INSERT INTO objects(kind,id,json) VALUES ('research_project',?1,?2)", params![project_id.to_string(), original.to_string()]).unwrap();
+            legacy.execute("INSERT INTO provider_settings(provider,model,base_url) VALUES (?1,'saved-model','https://api.openai.com')", params![ProviderKind::OpenAi.account_name()]).unwrap();
+        }
+        {
+            let db = Database::open(&path).unwrap();
+            let stored: serde_json::Value = db.get("research_project", &project_id.to_string()).unwrap().unwrap();
+            assert_eq!(stored, original);
+            assert_eq!(db.provider_status(ProviderKind::OpenAi, true).unwrap().model, "saved-model");
+            let mut connection = db.connection.lock();
+            assert_eq!(connection.query_row("PRAGMA journal_mode", [], |r| r.get::<_, String>(0)).unwrap(), "wal");
+            assert_eq!(connection.query_row("PRAGMA foreign_keys", [], |r| r.get::<_, i64>(0)).unwrap(), 1);
+            let transaction = connection.transaction().unwrap();
+            transaction.execute("UPDATE objects SET json='{}' WHERE id=?1", params![project_id.to_string()]).unwrap();
+            transaction.rollback().unwrap();
+        }
+        let reopened = Database::open(&path).unwrap();
+        assert_eq!(reopened.get::<serde_json::Value>("research_project", &project_id.to_string()).unwrap().unwrap(), original);
+        assert_eq!(reopened.connection.lock().query_row("PRAGMA integrity_check", [], |r| r.get::<_, String>(0)).unwrap(), "ok");
+    }
 }

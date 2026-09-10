@@ -7,3 +7,7 @@
 *.py text eol=lf
 *.png binary
 *.jpg binary
+*.ico binary
+# Supplied SVG artwork is copied byte-for-byte; do not normalize its line endings.
+frontend/public/*.svg -text
+frontend/public/brand/*.svg -text

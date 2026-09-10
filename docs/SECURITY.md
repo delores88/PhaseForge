@@ -51,6 +51,40 @@ Run manifests contain finite wall-time, memory, step, candidate, batch, and outp
 
 The default bind address is loopback. Exposing PhaseForge to a network requires additional authentication, authorization, TLS, request isolation, audit logging, and worker security that are outside this release.
 
+The backend checks Host and Origin before every handler, CORS preflight and
+WebSocket upgrade. Host must name an exact loopback address or `localhost` with
+the configured backend port; a configured additional loopback bind address is
+also accepted. Duplicate, malformed or conflicting authorities are rejected.
+Browser origins must exactly match a canonical HTTP(S) loopback origin in
+`allowed_frontend_origins`. The defaults include development port 3000 and the
+desktop origin `http://127.0.0.1:7332`. Other QA/development ports require explicit
+configuration; wildcard origins, `null`, credentials, paths and foreign hosts
+are not accepted. The desktop's existing local proxy remains compatible.
+
+No-Origin local command-line clients remain supported. Explicit cross-site browser
+Fetch Metadata without an approved Origin is rejected. This is a browser-origin
+and DNS-rebinding boundary, not authentication of other local processes. The
+advanced `PHASEFORGE_ALLOW_REMOTE_BIND` override does not supply authentication;
+Host headers can be forged by native clients, so remote exposure still requires
+a separate authenticated deployment. Production desktop launches bind loopback.
+
+Desktop launches can enable `/api/desktop/ready` with a fresh private launch secret
+in the child's environment. The desktop sends only a fresh nonce; the backend
+returns an HMAC-SHA256 proof and its version with caching disabled. The secret is
+never sent to the listener or returned by the endpoint. Ordinary CLI launches
+without that secret keep the public health endpoint and return 404 for readiness.
+The proof supports the desktop's own-child readiness check; it does not protect
+against a same-user process that can read another process's environment or memory.
+
+The packaged engine binds port zero so the OS chooses an available loopback port.
+Its actual endpoint is announced only through the owned child's bounded output
+channel and is still untrusted until that child proves its fresh launch secret.
+The Host guard uses the actual bound port. The desktop never scans common ports
+or adopts a service already listening on one; each recovery authenticates a new
+owned endpoint. The interface keeps dedicated port 7332 for persisted preferences
+and fails if occupied. Development defaults 7331/3000 are separate from packaged
+engine routing, and the proxy forwards the actual approved browser origin.
+
 ## v0.3.1 controls
 
 Every model request, including connection tests and repairs, goes through the same
@@ -93,3 +127,25 @@ have process-group cancellation and memory monitoring. These controls do not
 reserve GPU VRAM or sandbox a compromised native installation. Locally configured
 engine executables and dependencies remain trusted software. Render/fabrication
 jobs interrupted by a restart retain their files and require an explicit new job.
+
+## 3D asset input
+
+Local, public and native-engine GLB artifacts pass the same frontend inspection
+before the Three.js loader. Material names must be bounded single-line text and
+texture-coordinate channels must be numeric integers from 0 to 3, including
+extension metadata. The viewer re-encodes its temporary GLB metadata with trusted
+material identifiers; original downloaded or saved artifact bytes remain unchanged.
+Human-readable material labels are kept as data rather than shader names.
+
+A second boundary checks every decoded material-bearing object before rendering,
+including material arrays, lines and points. It assigns trusted internal names,
+restricts material types/defines and verifies texture channels across material
+maps. Public-file intake also rejects malformed name/channel metadata before
+persistence. Tests exercise the actual loader without compiling attack shaders.
+
+These controls address observed metadata-to-GLSL construction paths in Three.js.
+They do not patch Electron's vendored ANGLE or constitute a general vulnerability
+waiver. The alpha candidate uses supported Electron 43.7.0 with verified security
+backports; remaining runtime findings still need exact-source applicability review
+and marketplace acceptance. Candidate evidence retains raw source, installed-payload,
+ASAR and runtime scan results with their separate scopes.

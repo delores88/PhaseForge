@@ -104,11 +104,7 @@ pub struct AgentService {
 
 impl AgentService {
     pub fn new(database: Database, scheduler: Scheduler) -> anyhow::Result<Self> {
-        let client = reqwest::Client::builder()
-            .timeout(Duration::from_secs(1800))
-            .user_agent(concat!("PhaseForge/",env!("CARGO_PKG_VERSION")))
-            .build()
-            .context("unable to create AI provider HTTP client")?;
+        let client = providers::http_client()?;
         let usage = UsageService::new(database.clone())?;
         let tasks = tasks::TaskRuntime::new(&database)?;
         tasks.stop_restored_runs(&database, &scheduler)?;

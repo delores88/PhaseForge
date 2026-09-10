@@ -35,6 +35,7 @@ __pycache__/
 
 # Local QA, desktop builds and packaging caches
 .local/
+release-coordination/
 node_modules/
 desktop/dist/
 desktop/.cache/

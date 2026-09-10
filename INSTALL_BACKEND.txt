@@ -62,7 +62,7 @@ if (-not (Test-Path (Join-Path $PFBackendRoot "Cargo.toml"))) {
     throw "backend/Cargo.toml was not found. Open PowerShell in the extracted PhaseForge project root before pasting this file."
 }
 
-Write-Host "PhaseForge backend installer (v0.8.0)" -ForegroundColor White
+Write-Host "PhaseForge backend installer (v0.8.0-alpha.1)" -ForegroundColor White
 Write-Host "Repository: $PFRepoRoot"
 Write-Host "Backend:    $PFBackendRoot"
 

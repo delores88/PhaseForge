@@ -632,7 +632,7 @@ export default function ResearchWorkbench({ backend, onHardware, onEventState })
       <div className="backendOffline">
         <FlaskConical size={28} />
         <strong>Connecting to your local research engine</strong>
-        <p>{backend.error || "PhaseForge cannot reach http://127.0.0.1:7331."}</p>
+        <p>{backend.error || "Waiting for your local research engine. Reopen PhaseForge if it stays disconnected."}</p>
         <button className="button button--secondary" onClick={backend.refresh}>
           <RefreshCw size={14} /> Retry
         </button>

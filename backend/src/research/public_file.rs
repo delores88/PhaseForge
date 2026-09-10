@@ -70,6 +70,40 @@ fn check_json_budget(value:&Value,forbid_urls:bool)->anyhow::Result<()> {
     Ok(())
 }
 fn u32le(bytes:&[u8],at:usize)->u32 {u32::from_le_bytes(bytes[at..at+4].try_into().unwrap())}
+fn glb_shader_metadata(value:&Value)->anyhow::Result<()> {
+    // GLTFLoader forwards these labels to Material.name. The viewer replaces
+    // them with trusted shader identifiers before loading and again afterwards;
+    // intake still rejects multiline/control payloads before saving raw bytes.
+    if let Some(materials)=value.get("materials") {
+        let materials=materials.as_array().context("GLB materials must be an array")?;
+        for material in materials {
+            let material=material.as_object().context("GLB materials must contain objects")?;
+            if let Some(name)=material.get("name") {
+                let name=name.as_str().context("GLB material names must be text")?;
+                if name.encode_utf16().count()>1024 || name.chars().any(|ch|ch.is_control()||matches!(ch,'\u{2028}'|'\u{2029}')) {
+                    bail!("GLB material names must be single-line labels of at most 1,024 UTF-16 code units without control characters");
+                }
+            }
+        }
+    }
+    // Cover all core and extension texture-info paths, including texture
+    // transforms; no caller-controlled string may become a *_MAP_UV macro.
+    // check_json_budget has already bounded the complete tree before this walk.
+    let mut stack=vec![value];
+    while let Some(value)=stack.pop() {
+        match value {
+            Value::Object(object)=>for (key,child) in object {
+                if key=="texCoord" && child.as_f64().is_none_or(|number|number.fract()!=0.0||!(0.0..=3.0).contains(&number)) {
+                    bail!("GLB texture coordinates must be numeric integers from 0 through 3");
+                }
+                stack.push(child);
+            },
+            Value::Array(array)=>stack.extend(array),
+            _=>{}
+        }
+    }
+    Ok(())
+}
 fn stl(bytes:&[u8])->anyhow::Result<usize> {
     if bytes.len()>=84 {
         let count=u32le(bytes,80) as usize;
@@ -116,6 +150,7 @@ fn glb(bytes:&[u8])->anyhow::Result<Value> {
     if at!=bytes.len(){bail!("Truncated GLB chunk header");}
     let value=metadata.context("GLB metadata missing")?;check_json_budget(&value,true)?;
     if value["asset"]["version"]!="2.0" {bail!("Unsupported GLB asset version");}
+    glb_shader_metadata(&value)?;
     if value["extensionsUsed"].as_array().into_iter().flatten().any(|ext|["KHR_draco_mesh_compression","EXT_meshopt_compression","KHR_texture_basisu"].contains(&ext.as_str().unwrap_or(""))) {bail!("Public GLB must contain uncompressed geometry and PNG/JPEG textures");}
     let buffers=value["buffers"].as_array().map(Vec::as_slice).unwrap_or(&[]);let bin=binary.unwrap_or(&[]);
     if buffers.len()>1 || buffers.first().is_some_and(|buffer|buffer["byteLength"].as_u64().is_none_or(|length|length>bin.len() as u64)){bail!("GLB embedded buffer does not match its declared size");}
@@ -221,6 +256,58 @@ fn glb(bytes:&[u8])->anyhow::Result<Value> {
         let mut result=b"glTF".to_vec();result.extend(2_u32.to_le_bytes());result.extend(((12+8+metadata.len()+8+bin.len()) as u32).to_le_bytes());
         result.extend((metadata.len() as u32).to_le_bytes());result.extend(0x4e4f534a_u32.to_le_bytes());result.extend(metadata);
         result.extend((bin.len() as u32).to_le_bytes());result.extend(0x004e4942_u32.to_le_bytes());result.extend(bin);result
+    }
+    fn textured_glb_fixture()->(Value,Vec<u8>) {
+        let mut bin=Vec::new();
+        for number in [0.0_f32,0.,0.,1.,0.,0.,0.,1.,0.,0.,0.,1.,0.,0.,1.] {bin.extend(number.to_le_bytes());}
+        // Complete 1x1 transparent PNG. Parser fixtures never create GPU shaders.
+        bin.extend([137,80,78,71,13,10,26,10,0,0,0,13,73,72,68,82,0,0,0,1,0,0,0,1,8,6,0,0,0,31,21,196,137,0,0,0,11,73,68,65,84,120,156,99,96,0,2,0,0,5,0,1,122,94,171,63,0,0,0,0,73,69,78,68,174,66,96,130]);
+        let value=json!({"asset":{"version":"2.0"},"buffers":[{"byteLength":128}],
+            "bufferViews":[{"buffer":0,"byteLength":36},{"buffer":0,"byteOffset":36,"byteLength":24},{"buffer":0,"byteOffset":60,"byteLength":68}],
+            "accessors":[{"bufferView":0,"componentType":5126,"count":3,"type":"VEC3"},{"bufferView":1,"componentType":5126,"count":3,"type":"VEC2"}],
+            "images":[{"bufferView":2,"mimeType":"image/png"}],"textures":[{"source":0}],
+            "materials":[{"name":"Protein surface.001","pbrMetallicRoughness":{"baseColorTexture":{"index":0,"texCoord":0}}}],
+            "meshes":[{"primitives":[{"attributes":{"POSITION":0,"TEXCOORD_0":1,"TEXCOORD_1":1,"TEXCOORD_2":1,"TEXCOORD_3":1},"material":0}]}],
+            "nodes":[{"mesh":0}],"scenes":[{"nodes":[0]}],"scene":0});
+        (value,bin)
+    }
+    #[test]fn glb_preserves_ordinary_material_labels_and_rejects_multiline_or_untyped_names() {
+        let (base,bin)=textured_glb_fixture();
+        for name in [String::new(),"Protein surface.001 (measured α)".into(),"a".repeat(1024),"🧬".repeat(512)] {
+            let mut value=base.clone();value["materials"][0]["name"]=json!(name);
+            assert!(validate("https://zenodo.org/model.glb",&glb_fixture(value,&bin)).is_ok());
+        }
+        let invalid=[json!("surface\nbreak"),json!("surface\rbreak"),json!("surface\tbreak"),json!("name\0"),json!("name\u{7f}"),json!("name\u{85}"),json!("name\u{2028}"),json!("name\u{2029}"),json!("a".repeat(1025)),json!("🧬".repeat(513)),json!(false),json!(0),Value::Null,json!(["surface"]),json!({"label":"surface"})];
+        for name in invalid {
+            let mut value=base.clone();value["materials"][0]["name"]=name;
+            assert!(validate("https://zenodo.org/model.glb",&glb_fixture(value,&bin)).is_err());
+        }
+        for materials in [Value::Null,json!({"0":{"name":"surface"}}),json!([null]),json!(["surface"])] {
+            let mut value=base.clone();value["materials"]=materials;
+            assert!(glb(&glb_fixture(value,&bin)).is_err());
+        }
+    }
+    #[test]fn glb_texture_channels_are_typed_and_bounded_across_core_and_extension_paths() {
+        let (mut base,bin)=textured_glb_fixture();
+        base["materials"][0]["normalTexture"]=json!({"index":0,"texCoord":0});
+        base["materials"][0]["extensions"]=json!({"KHR_materials_clearcoat":{"clearcoatFactor":1,"clearcoatTexture":{"index":0,"texCoord":0}}});
+        base["materials"][0]["pbrMetallicRoughness"]["baseColorTexture"]["extensions"]=json!({"KHR_texture_transform":{"texCoord":0}});
+        base["extensionsUsed"]=json!(["KHR_texture_transform","KHR_materials_clearcoat"]);
+        let paths=["/materials/0/pbrMetallicRoughness/baseColorTexture/texCoord","/materials/0/normalTexture/texCoord",
+            "/materials/0/extensions/KHR_materials_clearcoat/clearcoatTexture/texCoord",
+            "/materials/0/pbrMetallicRoughness/baseColorTexture/extensions/KHR_texture_transform/texCoord"];
+        for path in paths {
+            for channel in [json!(0),json!(1),json!(2),json!(3),json!(0.0),json!(3.0)] {
+                let mut value=base.clone();*value.pointer_mut(path).unwrap()=channel;
+                assert!(glb(&glb_fixture(value,&bin)).is_ok(),"rejected numeric channel at {path}");
+            }
+            for channel in [json!(-1),json!(4),json!(1.5),json!("1"),json!("channel\nbreak"),json!(true),Value::Null,json!([]),json!({"channel":0})] {
+                let mut value=base.clone();*value.pointer_mut(path).unwrap()=channel;
+                assert!(validate("https://zenodo.org/model.glb",&glb_fixture(value,&bin)).is_err(),"accepted invalid channel at {path}");
+            }
+        }
+        let mut value=base;value["extras"]=json!({"nested":[{"texCoord":"0"}]});
+        assert!(glb(&glb_fixture(value,&bin)).is_err());
     }
     #[test]fn glb_disallows_external_payloads_and_expansive_allocations() {
         let base=json!({"asset":{"version":"2.0"},"buffers":[{"byteLength":36}],"bufferViews":[{"buffer":0,"byteLength":36}],

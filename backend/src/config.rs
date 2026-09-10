@@ -8,6 +8,8 @@ use serde::{Deserialize, Serialize};
 #[serde(default)]
 pub struct AppConfig {
     pub bind_address: IpAddr,
+    /// Zero asks the OS for an available port; the bound port replaces this
+    /// value before API admission and application state are constructed.
     pub port: u16,
     pub allowed_frontend_origins: Vec<String>,
     pub data_directory: PathBuf,
@@ -30,6 +32,7 @@ impl Default for AppConfig {
             allowed_frontend_origins: vec![
                 "http://127.0.0.1:3000".to_owned(),
                 "http://localhost:3000".to_owned(),
+                "http://127.0.0.1:7332".to_owned(),
             ],
             data_directory,
             log_filter: "phaseforge_backend=info,tower_http=info".to_owned(),

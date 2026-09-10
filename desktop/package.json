@@ -1,6 +1,6 @@
 {
   "name": "phaseforge-desktop",
-  "version": "0.8.0",
+  "version": "0.8.0-alpha.1",
   "description": "Local scientific research and simulation workbench",
   "homepage": "https://github.com/delores88/PhaseForge",
   "desktopName": "science.phaseforge.desktop",
@@ -16,24 +16,80 @@
     "package:linux:x64": "electron-builder --linux AppImage deb --x64 --publish never",
     "package:linux:arm64": "electron-builder --linux AppImage deb --arm64 --publish never"
   },
-  "devDependencies": {"electron": "44.3.0", "electron-builder": "26.15.3"},
+  "devDependencies": {
+    "electron": "43.7.0",
+    "electron-builder": "26.15.3"
+  },
   "build": {
     "appId": "science.phaseforge.desktop",
     "productName": "PhaseForge",
     "asar": true,
-    "directories": {"output": "dist"},
-    "files": ["main.cjs", "server.cjs", "permissions.cjs", "package.json"],
-    "extraResources": [
-      {"from": "../frontend/out", "to": "ui"},
-      {"from": "runtime/${os}/${arch}", "to": "runtime"},
-      {"from": "../tools", "to": "tools", "filter": ["**/*.py", "requirements-cad.txt", "BLENDER_WORKER_LICENSE.txt"]},
-      {"from": "../LICENSE", "to": "LICENSE"},
-      {"from": "../THIRD_PARTY.md", "to": "THIRD_PARTY.md"},
-      {"from": "../docs/CAD_PCB_ENGINES.md", "to": "docs/CAD_PCB_ENGINES.md"}
+    "directories": {
+      "output": "dist"
+    },
+    "files": [
+      "main.cjs",
+      "server.cjs",
+      "permissions.cjs",
+      "backend-auth.cjs",
+      "package.json"
     ],
-    "win": {"target": "nsis", "icon": "../frontend/public/icon.png", "artifactName": "PhaseForge_${version}_${arch}-setup.${ext}"},
-    "nsis": {"oneClick": false, "perMachine": false, "allowToChangeInstallationDirectory": true, "createDesktopShortcut": true, "deleteAppDataOnUninstall": false},
-    "linux": {"target": ["AppImage", "deb"], "icon": "../frontend/public/icon.png", "category": "Science", "artifactName": "PhaseForge_${version}_${arch}.${ext}", "maintainer": "Ben Van Dorn", "syncDesktopName": true},
+    "extraResources": [
+      {
+        "from": "../frontend/out",
+        "to": "ui"
+      },
+      {
+        "from": "runtime/${os}/${arch}",
+        "to": "runtime"
+      },
+      {
+        "from": "../tools",
+        "to": "tools",
+        "filter": [
+          "**/*.py",
+          "requirements-cad.txt",
+          "BLENDER_WORKER_LICENSE.txt"
+        ]
+      },
+      {
+        "from": "../LICENSE",
+        "to": "LICENSE"
+      },
+      {
+        "from": "../THIRD_PARTY.md",
+        "to": "THIRD_PARTY.md"
+      },
+      {
+        "from": "../docs/CAD_PCB_ENGINES.md",
+        "to": "docs/CAD_PCB_ENGINES.md"
+      }
+    ],
+    "win": {
+      "target": "nsis",
+      "icon": "../frontend/public/icon.ico",
+      "artifactName": "PhaseForge_${version}_${arch}-setup.${ext}"
+    },
+    "nsis": {
+      "oneClick": false,
+      "perMachine": false,
+      "allowToChangeInstallationDirectory": true,
+      "createDesktopShortcut": true,
+      "deleteAppDataOnUninstall": false,
+      "installerIcon": "../frontend/public/icon.ico",
+      "uninstallerIcon": "../frontend/public/icon.ico"
+    },
+    "linux": {
+      "target": [
+        "AppImage",
+        "deb"
+      ],
+      "icon": "../frontend/public/icon.png",
+      "category": "Science",
+      "artifactName": "PhaseForge_${version}_${arch}.${ext}",
+      "maintainer": "Ben Van Dorn",
+      "syncDesktopName": true
+    },
     "publish": null
   }
 }

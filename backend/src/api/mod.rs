@@ -1,4 +1,6 @@
 use std::{sync::Arc, time::Duration};
+mod admission;
+pub(crate) mod desktop_ready;
 
 use anyhow::Context;
 use axum::{
@@ -39,6 +41,11 @@ use crate::{
 };
 
 pub fn router(state: Arc<AppState>) -> anyhow::Result<Router> {
+    router_with_readiness(state, desktop_ready::Readiness::from_environment()?)
+}
+
+pub(crate) fn router_with_readiness(state: Arc<AppState>, readiness: desktop_ready::Readiness) -> anyhow::Result<Router> {
+    let admission=admission::LocalAdmission::from_config(&state.config)?;
     let origins = state
         .config
         .allowed_frontend_origins
@@ -61,6 +68,7 @@ pub fn router(state: Arc<AppState>) -> anyhow::Result<Router> {
         .max_age(Duration::from_secs(3600));
 
     Ok(Router::new()
+        .merge(readiness.router())
         .merge(crate::studio::render::routes())
         .merge(crate::studio::fabrication::routes())
         .merge(crate::research::assets::routes())
@@ -131,6 +139,9 @@ pub fn router(state: Arc<AppState>) -> anyhow::Result<Router> {
         .layer(PropagateRequestIdLayer::x_request_id())
         .layer(SetRequestIdLayer::x_request_id(MakeRequestUuid))
         .layer(cors)
+        // This must wrap CORS too: denied preflights, bodyless mutations and
+        // WebSocket upgrades stop before any route handler can run.
+        .layer(axum::middleware::from_fn_with_state(admission,admission::admit))
         .with_state(state))
 }
 
@@ -153,6 +164,8 @@ async fn health(State(state): State<Arc<AppState>>) -> Json<Value> {
         "status": "ok",
         "name": "PhaseForge",
         "version": env!("CARGO_PKG_VERSION"),
+        "endpoint": {"address": state.config.bind_address.to_string(), "port": state.config.port},
+        "sqlite": state.database.sqlite_runtime().ok(),
         "uptime_seconds": state.started_at.elapsed().as_secs(),
         "local_only": state.config.bind_address.is_loopback(),
     }))

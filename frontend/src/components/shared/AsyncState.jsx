@@ -32,7 +32,7 @@ export function OfflineState() {
     <div className="offlineBanner">
       <WifiOff size={16} />
       <span>
-        Backend is offline. Start <code>START_BACKEND.txt</code>, then refresh.
+        Your local research engine is offline. Restart it, then retry.
       </span>
     </div>
   );

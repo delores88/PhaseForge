@@ -1,4 +1,5 @@
 import {MODEL_LIMITS,readModelAsset} from './model-assets.mjs';
+import {enforceSafeModelMaterials} from './model-assets-shaders.mjs';
 import {createMolecularSurface,createMolecularBackbone,prepareMolecularCoordinates,DISPLAY_RADII_ANGSTROM} from './molecular-surface.mjs';
 import {ELEMENT_COLORS} from './scene.mjs';
 import {releaseRenderer,disposeObjectTree as disposeTree} from './viewer-resources.mjs';
@@ -41,6 +42,8 @@ export async function createScientificModelViewer(host,config) {
   config.signal.addEventListener('abort',dispose,{once:true});
   try{
     model=await loadModel(THREE,config);if(config.signal.aborted){disposeTree(model?.root);dispose();return null;}
+    // Includes material arrays and line/point objects, before renderer creation.
+    enforceSafeModelMaterials(model.root);
     config.onProgress?.(.94);
     let triangles=0,meshes=0;const pickables=[];
     model.root.traverse(object=>{

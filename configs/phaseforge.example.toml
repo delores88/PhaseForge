@@ -2,7 +2,8 @@ bind_address = "127.0.0.1"
 port = 7331
 allowed_frontend_origins = [
   "http://127.0.0.1:3000",
-  "http://localhost:3000"
+  "http://localhost:3000",
+  "http://127.0.0.1:7332"
 ]
 data_directory = ""
 log_filter = "phaseforge_backend=info,tower_http=info"

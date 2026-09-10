@@ -23,7 +23,8 @@ async fn main() -> anyhow::Result<()> {
             tracing_subscriber::EnvFilter::try_new(&config.log_filter)
                 .unwrap_or_else(|_| tracing_subscriber::EnvFilter::new("phaseforge_backend=info")),
         )
-        .with(tracing_subscriber::fmt::layer().with_target(false))
+        // Stdout carries only the bounded endpoint handshake in desktop mode.
+        .with(tracing_subscriber::fmt::layer().with_target(false).with_writer(std::io::stderr))
         .init();
 
     let app = Application::initialize(config).await?;

@@ -1,6 +1,17 @@
 # Loopback API
 
-The default backend is `http://127.0.0.1:7331`. The API serves the local PhaseForge browser client and desktop shell.
+The standalone backend defaults to `http://127.0.0.1:7331`. The packaged desktop
+app asks the operating system for an available loopback backend port and discovers
+it through its owned child process, then verifies the launch identity before
+forwarding requests. Its browser interface stays at `http://127.0.0.1:7332` and
+proxies the API to that verified endpoint; an occupied UI port prevents startup.
+
+All routes, including WebSocket upgrades and OPTIONS requests, require an exact
+loopback Host with the configured backend port. If an Origin is present, it must
+match `allowed_frontend_origins`; configured origins must be canonical HTTP(S)
+loopback origins without paths or credentials. Foreign/null/malformed origins
+and duplicate authority headers are rejected before handlers. No-Origin local CLI
+requests remain supported. See [the security boundary](SECURITY.md).
 
 ## Service and compute
 
@@ -10,6 +21,18 @@ GET  /api/hardware
 GET  /api/capabilities
 GET  /api/scientific/engines
 ```
+
+Health includes `sqlite` with the linked library's version, numeric version,
+source ID and bundled linkage for installed-component inspection. It contains no
+database path or records; unavailable metadata is `null`.
+
+`GET /api/desktop/ready?nonce=HEX` is reserved for desktop startup. A launch with
+`PHASEFORGE_DESKTOP_SECRET` (64 hexadecimal characters representing 32 raw bytes)
+returns `{algorithm:"HMAC-SHA256",nonce,proof,version}` for a 64-character hex nonce.
+The proof is lowercase hexadecimal HMAC-SHA256 of the nonce's UTF-8 bytes, using
+the decoded secret as key. The response sets `Cache-Control: no-store`. The secret
+is never an HTTP parameter. Missing launch secret returns 404; invalid nonce returns
+400. Public `/api/health` does not establish ownership of the responding process.
 
 ## Research projects
 

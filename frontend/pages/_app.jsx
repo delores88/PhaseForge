@@ -15,11 +15,13 @@ export default function PhaseForgeApp({ Component, pageProps }) {
   return (
     <>
       <Head>
-        <title>PhaseForge</title>
+        <title>PhaseForge · Alpha research workbench</title>
         <link rel="icon" type="image/svg+xml" href="/phaseforge.svg" />
+        <link rel="icon" type="image/png" sizes="32x32" href="/brand/favicon-32.png" />
+        <link rel="apple-touch-icon" href="/icon.png" />
         <meta
           name="description"
-          content="An interactive computational discovery laboratory."
+          content="An alpha research workbench for curious people. Build scientific experiments, explore evidence and inspect detailed 3D models. More features are coming."
         />
         <meta name="viewport" content="width=device-width, initial-scale=1" />
       </Head>

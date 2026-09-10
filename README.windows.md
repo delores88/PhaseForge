@@ -1,14 +1,15 @@
-# PhaseForge 0.8.0 on Windows
+# PhaseForge 0.8.0-alpha.1 on Windows
 
-PhaseForge now has an Electron desktop shell bundling the native Rust engine and
-exported interface. Windows x64 is being tested locally, including numerical GPU
-execution on an RTX 4090 Laptop GPU. Windows ARM64 has a native CI packaging target
-prepared; it is not yet verified. No release is published. Consult the
-[validation record](docs/RELEASE_VALIDATION.md) for completed acceptance checks.
+PhaseForge bundles the native Rust engine and interface in a local desktop app.
+The first alpha targets Windows x64. The preceding development build passed local
+acceptance, including numerical GPU execution on an RTX 4090 Laptop GPU; Windows
+ARM64 packaging passed CI but is outside the initial alpha listing. Each alpha
+installer still requires its own native acceptance and marketplace review. Consult
+the [validation record](docs/RELEASE_VALIDATION.md) for completed baseline checks.
 
 ## Packaged application
 
-Local packaging produces `desktop/dist/PhaseForge_0.8.0_x64-setup.exe` on x64, or
+Local packaging produces `desktop/dist/PhaseForge_0.8.0-alpha.1_x64-setup.exe` on x64, or
 the corresponding ARM64 installer when built on ARM64. Launch the installer,
 choose the installation folder, and open PhaseForge. A packaged install includes
 the core Rust engine; Rust, Node.js and a separate browser are unnecessary to run it.
@@ -20,9 +21,13 @@ the tray menu's **Quit PhaseForge** to exit. The desktop attempts at most three
 engine restarts after unexpected exits. Interrupted research sessions return
 paused, with saved work available for explicit resume.
 
-Stop older backend/frontend processes before opening the new desktop app. The
-engine uses loopback port 7331; the desktop UI uses stable loopback port 7332.
-The desktop refuses to reuse a different engine version.
+The packaged engine binds an available loopback port assigned by Windows and
+announces it through its private parent connection. The desktop authenticates
+that owned child before allowing requests, including after a crash restart.
+It does not probe or use development port 3000 or the old engine port 7331.
+The desktop interface retains dedicated loopback port 7332 to preserve browser
+preferences; it fails clearly if that port is occupied, without attaching to the
+other service. Source-development helpers keep their separate 7331/3000 defaults.
 Keep existing data and credentials; an app upgrade does not require deleting them.
 Run only one backend against a given database.
 
@@ -30,7 +35,7 @@ Run only one backend against a given database.
 
 Use native tools for the intended architecture:
 
-- Git and current stable Rust/Cargo; the crate declares Rust 1.85 as its minimum.
+- Git and current stable Rust/Cargo; the crate declares Rust 1.88 as its minimum.
 - Visual Studio C++ Build Tools with the MSVC compiler and Windows SDK.
 - Node.js 22 and npm 10 or newer. The CI package workflow uses Node 22.
 - Current graphics drivers for GPU computation and rendering.

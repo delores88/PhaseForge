@@ -1,0 +1,99 @@
+{
+  "schema_version": 1,
+  "source_archive": "PhaseForge-Brand-System-v1.0-Static-Assets.zip",
+  "source_archive_bytes": 13209294,
+  "source_archive_sha256": "5dea0fc7072eae507ce77f6f18ac10632935cd7f3519354c1afed5ff9fa8b29a",
+  "verified_on": "2026-09-10",
+  "policy": "Original supplied artwork; existing application colors and themes retained. No redraw, recoloring or wordmark replacement.",
+  "files": [
+    {
+      "path": "frontend/public/brand/app-icon-dark.png",
+      "source": "03_PNG/phaseforge-app-icon-dark-512.png",
+      "bytes": 39405,
+      "sha256": "430cff4beee6979f41367cb066f9dac2c4e75fe39e7a29b4f947c56977d60d9e",
+      "transformation": "none; exact original bytes"
+    },
+    {
+      "path": "frontend/public/brand/app-icon-light.png",
+      "source": "03_PNG/phaseforge-app-icon-light-512.png",
+      "bytes": 37402,
+      "sha256": "3b10d91b87e0aab0ded91b4086e6d8cd26d48a15d97ce52960ca213c7006ea67",
+      "transformation": "none; exact original bytes"
+    },
+    {
+      "path": "frontend/public/brand/favicon-16.png",
+      "source": "03_PNG/phaseforge-favicon-16.png",
+      "bytes": 348,
+      "sha256": "ee6c432a4dc05193e773ae7311970c9cbcbee9b3c55b62919075470677abb1c5",
+      "transformation": "none; exact original bytes"
+    },
+    {
+      "path": "frontend/public/brand/favicon-32.png",
+      "source": "03_PNG/phaseforge-favicon-32.png",
+      "bytes": 541,
+      "sha256": "1556a4fd436584059c42da2c8a1a0e8c248492d76864658d160fd3c07e377f58",
+      "transformation": "none; exact original bytes"
+    },
+    {
+      "path": "frontend/public/brand/favicon-64.png",
+      "source": "03_PNG/phaseforge-favicon-64.png",
+      "bytes": 1020,
+      "sha256": "7e0bb6b793611108d1f82b38034ab0ae22eed65d30eb20c30956564f516bb778",
+      "transformation": "none; exact original bytes"
+    },
+    {
+      "path": "frontend/public/brand/phaseforge-horizontal-dark.svg",
+      "source": "02_SVG/phaseforge-horizontal-dark.svg",
+      "bytes": 305660,
+      "sha256": "c8d78dcaec1195fdf9116ffd9b8c7439bbea7bf8686c8feb506511c2b041b64d",
+      "transformation": "none; exact original bytes"
+    },
+    {
+      "path": "frontend/public/brand/phaseforge-horizontal-light.svg",
+      "source": "02_SVG/phaseforge-horizontal-light.svg",
+      "bytes": 324797,
+      "sha256": "8fe2d740591e42b51f16625a5d1cea17077f6e3ea508bf02dd849ed7cfda30cc",
+      "transformation": "none; exact original bytes"
+    },
+    {
+      "path": "frontend/public/brand/phaseforge-symbol-mono-ink.svg",
+      "source": "02_SVG/phaseforge-symbol-mono-ink.svg",
+      "bytes": 4616,
+      "sha256": "d80efdada7a4fa061118f7f98f19bae6a06ec38bc96a09eb4f3b5adb0895acd0",
+      "transformation": "none; exact original bytes"
+    },
+    {
+      "path": "frontend/public/brand/phaseforge-symbol-mono-white.svg",
+      "source": "02_SVG/phaseforge-symbol-mono-white.svg",
+      "bytes": 4618,
+      "sha256": "870c7d425163172e25a450ec16f718514e8c4e6c1a7900b4a337faea631789ef",
+      "transformation": "none; exact original bytes"
+    },
+    {
+      "path": "frontend/public/icon.png",
+      "source": "03_PNG/phaseforge-app-icon-dark-512.png",
+      "bytes": 39405,
+      "sha256": "430cff4beee6979f41367cb066f9dac2c4e75fe39e7a29b4f947c56977d60d9e",
+      "transformation": "none; exact original bytes"
+    },
+    {
+      "path": "frontend/public/phaseforge.svg",
+      "source": "02_SVG/phaseforge-favicon.svg",
+      "bytes": 4596,
+      "sha256": "c70d22b412b8a3de1bc057715d6c5de8aeeacdbd1357468dd75c6423b2cae040",
+      "transformation": "none; exact original bytes"
+    },
+    {
+      "path": "frontend/public/icon.ico",
+      "bytes": 40634,
+      "sha256": "80c471dfa619421a17e5ba31fef408ac2168d8a3de995691f60e0868d97a1673",
+      "transformation": "PNG ICO container; scripts/brand-icons.py, Pillow 10.4.0; approved favicon entries and Lanczos app-icon reductions only"
+    },
+    {
+      "path": "frontend/public/favicon.ico",
+      "bytes": 2154,
+      "sha256": "1d87851cb1eb7f84e706be282ac769f064925c00faeb72d5d6c2af57826b77d0",
+      "transformation": "PNG ICO container; scripts/brand-icons.py, Pillow 10.4.0; approved favicon entries and Lanczos app-icon reductions only"
+    }
+  ]
+}

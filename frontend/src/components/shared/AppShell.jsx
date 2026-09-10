@@ -1,7 +1,7 @@
 import {version as appVersion} from "../../../package.json";
 import Link from "next/link";
 import { useRouter } from "next/router";
-import { Activity, Atom, Command, Cpu, Gauge, House, PanelLeftClose, PanelLeftOpen, Settings, Wallet, Plus, Folder } from "lucide-react";
+import { Activity, Command, Cpu, Gauge, House, PanelLeftClose, PanelLeftOpen, Settings, Wallet, Plus, Folder } from "lucide-react";
 import { useEffect, useState } from "react";
 import CommandPalette from "./CommandPalette";
 import { ThemeToggle } from "@/lib/theme";
@@ -44,7 +44,13 @@ export default function AppShell({ backend, hardware, eventState, title, subtitl
   const gpu = hardware?.adapters?.find((adapter) => adapter.selected);
   return <div className={`appFrame ${collapsed ? "appFrame--compact" : ""}`}>
     <aside className="primarySidebar" aria-label="Primary navigation">
-      <Link href="/" className="primaryBrand" title="PhaseForge"><Atom size={26} /><span><strong>PhaseForge</strong><small>Research workbench · {appVersion}</small></span></Link>
+      <Link href="/" className="primaryBrand" title="PhaseForge · Alpha research workbench" aria-label="PhaseForge · Alpha research workbench">
+        <img className="primaryBrandImage brandDark" src="/brand/phaseforge-horizontal-dark.svg" alt="" />
+        <img className="primaryBrandImage brandLight" src="/brand/phaseforge-horizontal-light.svg" alt="" />
+        <img className="primaryBrandSymbol brandDark" src="/brand/phaseforge-symbol-mono-white.svg" alt="" />
+        <img className="primaryBrandSymbol brandLight" src="/brand/phaseforge-symbol-mono-ink.svg" alt="" />
+        <span><small>ALPHA · {appVersion}</small></span>
+      </Link>
       <button type="button" className="sidebarNew" onClick={newProject} title="New research project"><Plus size={16}/><span>New research</span></button>
       <div className="navSectionLabel">WORKSPACE</div>
       <nav>{navigation.map(({ href, label, icon: Icon }) => {
