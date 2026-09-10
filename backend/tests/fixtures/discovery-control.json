@@ -1,0 +1,72 @@
+{
+  "title": "Schema regression fixture",
+  "question": "Does this test contract validate?",
+  "scientific_boundary": "A representation test, not evidence about nature.",
+  "hypothesis": "No scientific claim.",
+  "model": {
+    "kind": "state_vector_ode",
+    "variables": [
+      {
+        "name": "x",
+        "unit": "",
+        "initial": 1
+      }
+    ],
+    "derivatives": [
+      {
+        "variable": "x",
+        "expression": "-x"
+      }
+    ]
+  },
+  "constants": [],
+  "integration": {
+    "method": "rk4",
+    "start_time": 0,
+    "end_time": 1,
+    "time_step": 0.01,
+    "output_stride": 1,
+    "max_steps": 101
+  },
+  "search": {
+    "enabled": false,
+    "algorithm": "none",
+    "variables": [],
+    "objectives": [],
+    "population": 2,
+    "generations": 1,
+    "elite_fraction": 0.2,
+    "mutation_scale": 0.1,
+    "seed": 1
+  },
+  "observables": [
+    {
+      "name": "state",
+      "expression": "x",
+      "unit": ""
+    }
+  ],
+  "constraints": [],
+  "visualization": {
+    "entities": [],
+    "kind": "trajectory",
+    "x": "t",
+    "y": "x",
+    "z": "0",
+    "point_size": 1,
+    "max_frames": 100,
+    "trails": true
+  },
+  "falsification": [],
+  "compute": {
+    "preference": "cpu",
+    "policy": "interactive",
+    "candidate_count": 1,
+    "batch_size": 0,
+    "max_wall_seconds": 10,
+    "max_memory_mb": 256
+  },
+  "limitations": [
+    "Test fixture only."
+  ]
+}

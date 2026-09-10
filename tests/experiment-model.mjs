@@ -1,0 +1,46 @@
+// Real request builders/API helpers with fetch doubles. No model or backend is
+// simulated as having executed real science; native execution has a separate test.
+import fs from 'node:fs';import assert from 'node:assert/strict';
+const load=async p=>import('data:text/javascript;base64,'+Buffer.from(fs.readFileSync(new URL(p,import.meta.url))).toString('base64'));
+const e=await load('../frontend/src/lib/experiment.js'),{api}=await load('../frontend/src/lib/api.js');let count=0;
+function test(name,fn){fn();count++;console.log('PASS',name);}
+const project={id:'world',question:'Investigate distinct dynamic behaviors'},manifest={id:'revision'},options={...e.DEFAULT_BUILD};
+const request=e.buildRequest({project,manifest,options});
+test('Build explicitly selects experiment intent',()=>assert.equal(request.study_intent,'experiment'));
+test('Build does not enqueue',()=>assert.equal(request.auto_run,false));
+test('Build and run is explicit',()=>assert.equal(e.buildRequest({project,run:true}).auto_run,true));
+test('Truthy text is not permission',()=>assert.equal(e.buildRequest({project,run:'yes'}).auto_run,false));
+test('Selected revision sent instead of unselected newest',()=>assert.equal(request.context_manifest_id,'revision'));
+test('Source run identity preserved',()=>assert.equal(e.buildRequest({project,sourceRun:{id:'run'}}).source_run_id,'run'));
+test('Assumptions off preserved',()=>assert.equal(e.buildRequest({project,options:{...options,assumptions_allowed:false}}).experiment_options.assumptions_allowed,false));
+test('Only true grants assumption permission',()=>assert.equal(e.validateBudget({...options,assumptions_allowed:'yes'}).assumptions_allowed,false));
+for(const [field,value]of [['max_wall_seconds',0],['max_memory_mb',127],['max_candidates',0],['max_candidates',1.1],['max_wall_seconds',Infinity]])test('Reject invalid '+field+' '+value,()=>assert.throws(()=>e.validateBudget({...options,[field]:value})));
+test('A research plan is not implicit setup',()=>assert.equal(e.checkedResponse({assistant_message:{metadata:{research_plan_id:'notes'}},manifest:null}).manifest,null));
+test('Saved execution error is surfaced',()=>assert.equal(e.checkedResponse({assistant_message:{metadata:{execution_error:'memory limit'}},manifest}).queueError,'memory limit'));
+test('Error response not false successful build',()=>assert.throws(()=>e.checkedResponse({assistant_message:{kind:'error',content:'Provider refused'}}),/Provider refused/));
+test('Missing artifact not invented',()=>assert.throws(()=>e.checkedResponse({}),/no assistant/));
+test('Precise gap preserved',()=>assert.equal(e.checkedResponse({assistant_message:{metadata:{}},capability_gap:{reason:'missing input'}}).gap.reason,'missing input'));
+const id='11111111-1111-4111-8111-111111111111';
+test('Old deep link preserves valid selections',()=>assert.deepEqual(e.legacyDestination({project:id,study:id}),{pathname:'/',query:{panel:'advanced',project:id,study:id}}));
+test('Old link cannot redirect to arbitrary site',()=>assert.deepEqual(e.legacyDestination({project:'javascript:bad()',next:'https://evil.invalid',panel:'evil'}),{pathname:'/',query:{panel:'advanced'}}));
+const draftArgs={project,title:'Hand authored control',states:[{name:'x',initial:'1',derivative:'-rate*x',unit:'1'}],constants:[{name:'rate',value:'1'}]};
+const draft=e.localDraft(draftArgs);
+test('Manual editor produces real equations no preset',()=>assert.equal(draft.model.derivatives[0].expression,'-rate*x'));
+test('Manual editor never requests search silently',()=>assert.equal(draft.search.enabled,false));
+test('Manual editor CPU budget',()=>assert.equal(draft.compute.preference,'cpu'));
+test('Missing equations rejected',()=>assert.throws(()=>e.localDraft({...draftArgs,states:[{name:'x',initial:'1',derivative:''}]})));
+test('Duplicate identifiers rejected',()=>assert.throws(()=>e.localDraft({...draftArgs,constants:[{name:'x',value:'1'}]})));
+test('No infinite initial conditions',()=>assert.throws(()=>e.localDraft({...draftArgs,states:[{name:'x',initial:'Infinity',derivative:'0'}]})));
+test('Step ceiling enforced',()=>assert.throws(()=>e.localDraft({...draftArgs,end:1e9,step:.01})));
+const serial=e.createSingleFlight();let finish;const waiting=serial(()=>new Promise(r=>finish=r));
+await assert.rejects(()=>serial(()=>Promise.resolve('second')),/already in progress/);count++;finish('first');await waiting;
+await assert.rejects(()=>serial(()=>Promise.reject(new Error('stop'))),/stop/);test('Stop/failure releases operation lock',()=>assert.ok(true));await serial(()=>Promise.resolve());
+let calls=[];globalThis.fetch=async(url,opts={})=>{calls.push({url,opts});return{ok:true,status:200,json:async()=>url.endsWith('/messages')?{manifest,assistant_message:{kind:'proposal',metadata:{}},submitted_run_id:'run-1'}:{id:'run-1',status:'queued'}};};
+const go=e.buildRequest({project,manifest,run:true});const result=await api.sendMessage('world',go);const outcome=e.checkedResponse(result);await api.run(outcome.runId);
+test('Build to queued-run chain uses actual helper contract',()=>{assert.equal(calls.length,2);assert.equal(JSON.parse(calls[0].opts.body).auto_run,true);assert(calls[1].url.endsWith('/api/runs/run-1'));});
+const signal=new AbortController().signal;await api.nextExperiment('world',{request_id:id,source_run_id:id,operation:'finer_steps',run:true},signal);
+test('Direct next-run route not chat',()=>assert(calls.at(-1).url.endsWith('/api/projects/world/experiments/next')));
+test('Direct action explicit run permission/idempotency',()=>{const q=JSON.parse(calls.at(-1).opts.body);assert.equal(q.run,true);assert.equal(q.request_id,id);});
+test('Direct action carries cancellation signal',()=>assert.equal(calls.at(-1).opts.signal,signal));
+const outfile=process.argv[2];if(outfile)fs.writeFileSync(outfile,JSON.stringify(draft,null,2));
+console.log(`Experiment helpers: ${count} checks passed; fetch doubles, no live models.`);

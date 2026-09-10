@@ -1,0 +1,48 @@
+{
+  "templateVersion": 1,
+  "preparationOnly": true,
+  "listing": {
+    "schemaVersion": 1,
+    "appId": null,
+    "name": "PhaseForge",
+    "slug": "phaseforge",
+    "publisherId": null,
+    "repository": {"id": null, "url": "https://github.com/delores88/PhaseForge"},
+    "release": {"id": null, "tag": null, "version": "0.8.0", "channel": "beta", "sourceCommit": null},
+    "summary": "Local scientific research, procedural 3D experiments, and timed AI collaboration.",
+    "description": "Create equations and data-only 3D scenes, run bounded native numerical experiments, inspect measurements, and collaborate with deadline-aware research agents. Supports local CPU solvers and compatible GPU ODE screening. Visual illustrations and numerical results are labelled separately; this is not a validated universal physics, molecular-dynamics, clinical, or distributed-compute platform.",
+    "category": "data-science",
+    "sourceVisibility": "private",
+    "license": "MIT",
+    "distributionAuthorization": {"freeUse": true, "marketplaceDistribution": true},
+    "free": {"price": 0, "trial": false, "paidUnlocks": false, "mandatoryDeveloperCredits": false},
+    "intelligence": {
+      "capabilities": ["Scientific experiment design", "Collaborating research agents", "Numerical evidence review", "Procedural scientific visualization"],
+      "functionalTest": "To be completed from native package evidence: execute a deterministic local ODE, inspect its retained trajectory, validate bounded task pause/resume with a test provider, and verify finite rendered scene geometry. Run the optional real GPU analytic control on compatible physical hardware. These tests do not demonstrate physical, biological, or clinical validity."
+    },
+    "execution": "hybrid",
+    "offline": false,
+    "integrations": [
+      {"name": "OpenAI", "required": false, "purpose": "User-requested experiment design and research collaboration.", "costDisclosure": "Bring your own API key. Provider token and tool charges are separate. Local saved simulations do not require paid model calls.", "url": "https://platform.openai.com"},
+      {"name": "Anthropic", "required": false, "purpose": "Optional alternative AI provider.", "costDisclosure": "Bring your own API key; provider charges apply. Native numerical work is local.", "url": "https://www.anthropic.com"}
+    ],
+    "privacy": {
+      "dataLeavesDevice": "Selected research questions, attachments and evidence are sent to the chosen provider for authorized AI calls. Source searches send the submitted query to public scientific catalogs. GPU/CPU diagnostics and numerical computation remain local. Provider background requests may use temporary polling storage.",
+      "retention": "Research projects, numerical results, checkpoints and metering receipts persist in the local database until removed. Provider retention follows the account's provider terms and settings.",
+      "telemetry": "Hardware and usage measurements are local; no product analytics service is configured."
+    },
+    "permissions": {
+      "filesystem": ["Local application data for SQLite, experiment artifacts and logs", "User-selected files for import and export"],
+      "credentials": ["User-provided OpenAI or Anthropic API keys stored in the OS credential store"],
+      "domains": ["api.openai.com", "api.anthropic.com", "api.openalex.org", "api.crossref.org", "www.ebi.ac.uk"],
+      "elevation": false,
+      "backgroundServices": false
+    },
+    "models": [],
+    "executableDownloads": [],
+    "updater": {"mode": "disabled", "coordination": "No updater or release publication is enabled. Marketplace coordination will be configured during a later authorized submission."},
+    "rollback": {"dataCompatible": false, "backupRequired": true, "notes": "Back up the SQLite database using its backup API before upgrade. Validate restoring with the previous app; do not assume new task/checkpoint objects are supported by earlier versions."},
+    "screenshots": [],
+    "artifacts": []
+  }
+}

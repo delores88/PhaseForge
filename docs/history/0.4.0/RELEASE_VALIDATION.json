@@ -1,0 +1,41 @@
+{
+  "release": "PhaseForge",
+  "version": "0.4.0",
+  "recorded_at_utc": "2026-09-07T01:11:20.196260+00:00",
+  "baseline": {
+    "name": "PhaseForge-0.3.3-FULL.zip",
+    "sha256": "12c3094208cea83a9ae23fde46a97be12cb3a1d9ba987f0f415673e2ddeed632",
+    "original_paths_required_preserved": true,
+    "cargo_dependency_declarations_unchanged": true,
+    "npm_dependency_declarations_unchanged": true
+  },
+  "executed": {
+    "provider_schema_regressions": 19,
+    "api_helper_checks_with_fetch_doubles": 15,
+    "lab_view_model_checks": 23,
+    "discovery_view_model_and_fetch_helper_checks": 29,
+    "independent_python_reference_and_integrity_tests": 23,
+    "static_source_audit_gates": 79,
+    "chromium_real_jsx_static_layout_fixtures": 18,
+    "javascript_jsx_parsed": 43,
+    "rust_source_lexical_delimiter_files": 37
+  },
+  "native_rust_tests_added": 20,
+  "native_cargo_build_test_executed": false,
+  "nextjs_production_build_executed": false,
+  "real_react_hydration_executed": false,
+  "real_webgl_renderer_executed": false,
+  "windows_powershell_msvc_driver_execution": false,
+  "real_provider_calls_executed": false,
+  "live_crossref_query_executed": false,
+  "real_discovery_campaign_api_executed": false,
+  "native_research_zip_export_executed": false,
+  "ci_executed": false,
+  "validation_boundaries": [
+    "Real Python independent solver tests use analytic controls; they are not a comparison with a running Rust backend in this environment.",
+    "Chromium fixtures render actual new JSX with synthetic state and minimal hooks; not full Next/React hydration, network, GPU, or campaign tests.",
+    "Native backend, campaign, notebook and research ZIP integration acceptance is supplied in tests/discovery_runtime_smoke.py and Windows/Linux CI, but could not run without a Rust binary.",
+    "Compiler, dependency installation, PowerShell and live-provider tests remain native gates. No scientific novelty, validity, or publication acceptance is inferred from structural checks."
+  ],
+  "archive_acceptance": "See the external PhaseForge-0.4.0-PACKAGE_REPORT.json for actual ZIP CRC, clean-extraction, exact baseline-path retention, payload comparisons and SHA-256 results."
+}

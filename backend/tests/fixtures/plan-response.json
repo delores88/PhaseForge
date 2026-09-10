@@ -1,0 +1,40 @@
+{
+  "assistant_message": "Structured proposal.",
+  "action": "research_plan",
+  "manifest": null,
+  "research_plan": {
+    "title": "Planning-only fixture",
+    "goal": "Investigate a mathematical hypothesis",
+    "tractable_question": "Which measurements distinguish the hypotheses?",
+    "rationale": "Test the experiment action does not return another plan",
+    "knowns": [],
+    "unknowns": [
+      "Uncalibrated inputs"
+    ],
+    "tasks": [
+      {
+        "id": "first",
+        "title": "Review inputs",
+        "kind": "expert_review",
+        "question": "Which inputs need review?",
+        "method": "Inspect existing evidence",
+        "inputs": [
+          "Review"
+        ],
+        "depends_on": [],
+        "success_criterion": "Unknowns documented",
+        "deliverable": "Notes",
+        "next_prompt": "Review the assumptions",
+        "search_query": ""
+      }
+    ],
+    "source_ids": [],
+    "limitations": [
+      "This is a software fixture only"
+    ]
+  },
+  "requested_capability": "",
+  "capability_gap_reason": "",
+  "suggested_extension": "",
+  "should_run": false
+}

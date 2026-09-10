@@ -1,0 +1,72 @@
+# PHASEFORGE - OPTIONAL INDEPENDENT VERIFIER INSTALL
+# Paste this WHOLE file into Windows PowerShell from the extracted PhaseForge root.
+# Creates a local Python environment with ONLY the standard library. No pip packages,
+# provider key, paid license, or scientific-engine download is needed for verification.
+
+$ErrorActionPreference = "Stop"
+Set-StrictMode -Version Latest
+$PFRoot = (Get-Location).Path
+if (-not (Test-Path (Join-Path $PFRoot "backend\Cargo.toml"))) {
+    throw "Open PowerShell in the extracted PhaseForge root before pasting this installer."
+}
+
+function PF-PythonWorks([string]$Program, [string[]]$Prefix) {
+    try {
+        & $Program @Prefix -I -c "import sys; assert sys.version_info >= (3,10)" 2>$null
+        return ($LASTEXITCODE -eq 0)
+    } catch { return $false }
+}
+function PF-FindPython {
+    $candidates = @()
+    $localPython = Join-Path $PFRoot ".phaseforge-verifier\Scripts\python.exe"
+    if (Test-Path $localPython) { $candidates += @{ Program=$localPython; Prefix=@() } }
+    foreach ($id in @("py.exe", "python.exe", "python3.exe")) {
+        $found = Get-Command $id -ErrorAction SilentlyContinue
+        if ($null -ne $found) {
+            $prefix = @()
+            if ($id -eq "py.exe") { $prefix = @("-3") }
+            $candidates += @{ Program=$found.Source; Prefix=$prefix }
+        }
+    }
+    foreach ($version in @("Python313", "Python312", "Python311", "Python310")) {
+        $path = Join-Path $env:LOCALAPPDATA "Programs\Python\$version\python.exe"
+        if (Test-Path $path) { $candidates += @{ Program=$path; Prefix=@() } }
+    }
+    foreach ($candidate in $candidates) {
+        if (PF-PythonWorks $candidate.Program $candidate.Prefix) { return $candidate }
+    }
+    return $null
+}
+
+$python = PF-FindPython
+if ($null -eq $python) {
+    if ($null -eq (Get-Command "winget" -ErrorAction SilentlyContinue)) {
+        throw "Python 3.10+ is missing and winget is unavailable. Install a free official Python 3 release, reopen PowerShell, then paste this file again."
+    }
+    Write-Host "Installing official Python 3.12 through winget..." -ForegroundColor Cyan
+    & winget install --id Python.Python.3.12 --exact --accept-package-agreements --accept-source-agreements --disable-interactivity
+    if ($LASTEXITCODE -ne 0) { throw "Python installation failed with exit code $LASTEXITCODE." }
+    $env:Path = @($env:Path, [Environment]::GetEnvironmentVariable("Path", "User"), [Environment]::GetEnvironmentVariable("Path", "Machine")) -join ";"
+    $python = PF-FindPython
+}
+if ($null -eq $python) {
+    throw "Python is not visible yet. Reopen PowerShell in this project root and paste INSTALL_VERIFIER.txt again."
+}
+$target = Join-Path $PFRoot ".phaseforge-verifier"
+$exe = Join-Path $target "Scripts\python.exe"
+if (-not (Test-Path $exe)) {
+    Write-Host "Creating the isolated standard-library verifier environment..." -ForegroundColor Cyan
+    $program = $python.Program
+    $prefix = $python.Prefix
+    & $program @prefix -m venv --without-pip $target
+    if ($LASTEXITCODE -ne 0) { throw "Python environment creation failed with exit code $LASTEXITCODE." }
+}
+if (-not (PF-PythonWorks $exe @())) { throw "Verifier environment is incomplete. Resolve the Python installation before starting verification." }
+$env:PHASEFORGE_VERIFIER_PYTHON = $exe
+& $exe -I -c "import sys; print('Verifier ready:', sys.executable); print('Python:', sys.version)"
+if ($LASTEXITCODE -ne 0) { throw "Verifier Python failed to start." }
+Write-Host "Run the local verification regression suite with the installed interpreter:" -ForegroundColor Cyan
+& $exe (Join-Path $PFRoot "tests\test_verification_worker.py")
+if ($LASTEXITCODE -ne 0) { throw "Independent verification regression tests failed." }
+Write-Host "Independent verifier installed. Restart PhaseForge, then use Discovery > Verify & compare > Check independent worker." -ForegroundColor Green
+Write-Host "No simulation, model call, public query, or publication is started by this installer."

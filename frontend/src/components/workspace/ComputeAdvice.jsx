@@ -1,0 +1,9 @@
+import {useEffect,useState} from 'react';
+import {Cpu,RefreshCw} from 'lucide-react';
+import {api} from '@/lib/api';
+import {designGaps} from '@/lib/research';
+export default function ComputeAdvice({manifest}){
+  const [value,setValue]=useState(null),[error,setError]=useState(''),[refresh,setRefresh]=useState(0);
+  useEffect(()=>{if(!manifest?.id)return;const c=new AbortController();setValue(null);setError('');api.computeAdvice(manifest.id,c.signal).then(v=>{if(!c.signal.aborted)setValue(v);}).catch(e=>{if(!c.signal.aborted)setError(e.message);});return()=>c.abort();},[manifest?.id,refresh]);
+  return <section className="pfAdvice"><header><h3><Cpu size={16}/>Compute preflight</h3><button className="iconButton" aria-label="Refresh compute advice" onClick={()=>setRefresh(v=>v+1)}><RefreshCw size={14}/></button></header>{error?<p role="alert">{error}</p>:!value?<p>Checking available RAM and this solver's GPU compatibility…</p>:<><strong>{value.route} · {value.admissible?'headroom available':'revise allocation'}</strong><p>{value.reason}</p><dl><div><dt>Evaluated candidates</dt><dd>{value.candidate_evaluations.toLocaleString()}</dd></div><div><dt>Admitted batch</dt><dd>{value.recommended_compute.batch_size}</dd></div><div><dt>Estimated resident/capture data</dt><dd>{(value.estimated_peak_bytes/1048576).toFixed(1)} MiB</dd></div><div><dt>Available system RAM</dt><dd>{(value.available_memory_bytes/1073741824).toFixed(1)} GiB</dd></div><div><dt>CPU worker limit</dt><dd>{value.cpu_workers}</dd></div><div><dt>Approved wall-time limit</dt><dd>{value.recommended_compute.max_wall_seconds}s</dd></div></dl>{value.warnings.map((w,i)=><p className="pfWarning" key={i}>{w}</p>)}<small>{value.scope}</small></>}{designGaps(manifest).length>0&&<details><summary>Study-design gaps</summary>{designGaps(manifest).map(g=><p key={g}>{g}</p>)}<small>These are design checks, not a verdict about scientific validity.</small></details>}</section>;
+}

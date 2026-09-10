@@ -1,0 +1,75 @@
+# PHASEFORGE - WINDOWS ENVIRONMENT CHECK
+# Copy this entire file into PowerShell from the extracted PhaseForge project root.
+
+$ErrorActionPreference = "Continue"
+Set-StrictMode -Version Latest
+
+function PF-Report([string]$Name, [bool]$Ok, [string]$Detail) {
+    $state = if ($Ok) { "PASS" } else { "CHECK" }
+    $color = if ($Ok) { "Green" } else { "Yellow" }
+    Write-Host ("{0,-7} {1,-26} {2}" -f $state, $Name, $Detail) -ForegroundColor $color
+}
+
+Write-Host "PhaseForge development environment" -ForegroundColor Cyan
+$rust = Get-Command rustc -ErrorAction SilentlyContinue
+PF-Report "Rust" ($null -ne $rust) $(if ($rust) { (& rustc --version) } else { "not found" })
+$cargo = Get-Command cargo -ErrorAction SilentlyContinue
+PF-Report "Cargo" ($null -ne $cargo) $(if ($cargo) { (& cargo --version) } else { "not found" })
+
+$node = Get-Command node -ErrorAction SilentlyContinue
+$nodeOkay = $false
+$nodeText = "not found"
+if ($node) {
+    $nodeText = (& node --version)
+    try {
+        $nodeOkay = [version]((& node -p "process.versions.node").Trim()) -ge [version]"20.9.0"
+    } catch {}
+}
+PF-Report "Node.js >= 20.9" $nodeOkay $nodeText
+$npm = Get-Command npm.cmd -ErrorAction SilentlyContinue
+if ($null -eq $npm) {
+    $npm = Get-Command npm -ErrorAction SilentlyContinue
+}
+PF-Report "npm" ($null -ne $npm) $(if ($npm) { (& $npm.Source --version) } else { "not found" })
+
+$vsWhere = "${env:ProgramFiles(x86)}\Microsoft Visual Studio\Installer\vswhere.exe"
+$vcPath = ""
+if (Test-Path $vsWhere) {
+    $vcPath = & $vsWhere -latest -products * -requires Microsoft.VisualStudio.Component.VC.Tools.x86.x64 -property installationPath
+}
+PF-Report "MSVC C++ tools" (-not [string]::IsNullOrWhiteSpace($vcPath)) $(if ($vcPath) { $vcPath } else { "required for Rust Windows builds" })
+
+Write-Host "`nGraphics adapters" -ForegroundColor Cyan
+try {
+    $controllers = @(Get-CimInstance Win32_VideoController)
+    foreach ($controller in $controllers) {
+        $memory = if ($controller.AdapterRAM) {
+            "{0:N1} GiB" -f ($controller.AdapterRAM / 1GB)
+        } else {
+            "memory unavailable"
+        }
+        Write-Host "- $($controller.Name) | driver $($controller.DriverVersion) | $memory"
+    }
+    PF-Report "Windows GPU inventory" ($controllers.Count -gt 0) "$($controllers.Count) adapter(s)"
+} catch {
+    PF-Report "Windows GPU inventory" $false $_.Exception.Message
+}
+
+Write-Host "`nOptional scientific engines" -ForegroundColor Cyan
+foreach ($entry in @(
+    @("GROMACS", "gmx"),
+    @("CP2K", "cp2k"),
+    @("xTB", "xtb"),
+    @("LAMMPS", "lmp"),
+    @("Open Babel", "obabel"),
+    @("Python", "python")
+)) {
+    $command = Get-Command $entry[1] -ErrorAction SilentlyContinue
+    PF-Report $entry[0] ($null -ne $command) $(if ($command) { $command.Source } else { "optional; not installed" })
+}
+
+Write-Host "`nPorts" -ForegroundColor Cyan
+foreach ($port in 7331, 3000) {
+    $listener = Get-NetTCPConnection -LocalPort $port -State Listen -ErrorAction SilentlyContinue
+    PF-Report "Port $port" ($null -eq $listener) $(if ($listener) { "listening via PID $($listener.OwningProcess)" } else { "available" })
+}

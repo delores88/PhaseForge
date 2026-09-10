@@ -1,0 +1,127 @@
+# PHASEFORGE BACKEND AND FRONTEND - WINDOWS START
+# Copy this entire file into PowerShell from the extracted PhaseForge project root.
+# It opens the backend and frontend in separate PowerShell windows, then opens the browser.
+
+$ErrorActionPreference = "Stop"
+Set-StrictMode -Version Latest
+
+$PFRepoRoot = (Get-Location).Path
+$PFBackendBinary = Join-Path $PFRepoRoot "backend\target\debug\phaseforge-backend.exe"
+$PFFrontendRoot = Join-Path $PFRepoRoot "frontend"
+$PFFrontendPort = 3000
+$PFPowerShell = (Get-Process -Id $PID).Path
+
+function PF-Quote([string]$Value) {
+    return "'" + $Value.Replace("'", "''") + "'"
+}
+
+function PF-EncodedCommand([string]$Command) {
+    return [Convert]::ToBase64String([Text.Encoding]::Unicode.GetBytes($Command))
+}
+
+function PF-UrlReady([string]$Url) {
+    try {
+        Invoke-WebRequest -Uri $Url -UseBasicParsing -TimeoutSec 2 | Out-Null
+        return $true
+    } catch {
+        return $false
+    }
+}
+
+if (-not (Test-Path $PFBackendBinary)) {
+    throw "The backend executable is missing. Run the complete installation first."
+}
+if (-not (Test-Path (Join-Path $PFFrontendRoot "node_modules\next\package.json"))) {
+    throw "Frontend dependencies are missing. Run the complete installation first."
+}
+$npm = Get-Command "npm.cmd" -ErrorAction SilentlyContinue
+if ($null -eq $npm) {
+    $npm = Get-Command "npm" -ErrorAction SilentlyContinue
+}
+if ($null -eq $npm) {
+    throw "npm is unavailable. Run the complete installation first."
+}
+
+$backendHealth = "http://127.0.0.1:7331/api/health"
+$PFExpectedVersion = "0.8.0"
+$PFExistingHealth = $null
+try { $PFExistingHealth = Invoke-RestMethod -Uri $backendHealth -TimeoutSec 2 } catch {}
+if ($null -ne $PFExistingHealth) {
+    if ($PFExistingHealth.name -ne "PhaseForge" -or $PFExistingHealth.version -ne $PFExpectedVersion) {
+        throw "Another backend version is running. Stop the old PhaseForge backend/frontend windows before starting v0.8.0. Do not reuse the old server."
+    }
+}
+# Refuse a pre-existing frontend: a reachable page could be the old extracted version.
+if ($null -ne (Get-NetTCPConnection -LocalPort $PFFrontendPort -State Listen -ErrorAction SilentlyContinue)) {
+    throw "Port 3000 is already in use. Close the old frontend window (Ctrl+C), then paste START_ALL.txt again."
+}
+if (-not (PF-UrlReady $backendHealth)) {
+    $listener = Get-NetTCPConnection -LocalPort 7331 -State Listen -ErrorAction SilentlyContinue
+    if ($null -ne $listener) {
+        throw "Port 7331 is used by PID $($listener.OwningProcess), but it is not a healthy PhaseForge backend."
+    }
+    $backendCommand = @"
+`$ErrorActionPreference = 'Stop'
+`$env:RUST_LOG = 'phaseforge_backend=info,tower_http=info'
+`$env:RUST_BACKTRACE = '1'
+Set-Location $(PF-Quote $PFRepoRoot)
+& $(PF-Quote $PFBackendBinary)
+if (`$LASTEXITCODE -ne 0) { throw "Backend process exited with code `$LASTEXITCODE." }
+"@
+    Start-Process -FilePath $PFPowerShell -ArgumentList @(
+        "-NoExit", "-EncodedCommand", (PF-EncodedCommand $backendCommand)
+    ) -WorkingDirectory $PFRepoRoot | Out-Null
+}
+
+$frontendUrl = "http://127.0.0.1:$PFFrontendPort"
+if (-not (PF-UrlReady $frontendUrl)) {
+    $listener = Get-NetTCPConnection -LocalPort $PFFrontendPort -State Listen -ErrorAction SilentlyContinue
+    if ($null -ne $listener) {
+        throw "Port $PFFrontendPort is used by PID $($listener.OwningProcess), but it is not serving the PhaseForge browser client."
+    }
+    $frontendCommand = @"
+`$ErrorActionPreference = 'Stop'
+`$env:NEXT_TELEMETRY_DISABLED = '1'
+Set-Location $(PF-Quote $PFFrontendRoot)
+& $(PF-Quote $npm.Source) run dev -- --hostname 127.0.0.1 --port $PFFrontendPort
+if (`$LASTEXITCODE -ne 0) { throw "Frontend process exited with code `$LASTEXITCODE." }
+"@
+    Start-Process -FilePath $PFPowerShell -ArgumentList @(
+        "-NoExit", "-EncodedCommand", (PF-EncodedCommand $frontendCommand)
+    ) -WorkingDirectory $PFFrontendRoot | Out-Null
+}
+
+Write-Host "Waiting for the backend..." -ForegroundColor Cyan
+$backendReady = $false
+for ($attempt = 0; $attempt -lt 60; $attempt++) {
+    if (PF-UrlReady $backendHealth) {
+        $backendReady = $true
+        break
+    }
+    Start-Sleep -Seconds 1
+}
+if (-not $backendReady) {
+    throw "The backend did not become reachable. Read the backend PowerShell window for its error."
+}
+
+$PFVerifiedHealth = Invoke-RestMethod -Uri $backendHealth -TimeoutSec 2
+if ($PFVerifiedHealth.version -ne $PFExpectedVersion) {
+    throw "The running binary is not v0.8.0. Run INSTALL_BACKEND.txt in the new project folder."
+}
+Write-Host "Waiting for the frontend..." -ForegroundColor Cyan
+$frontendReady = $false
+for ($attempt = 0; $attempt -lt 90; $attempt++) {
+    if (PF-UrlReady $frontendUrl) {
+        $frontendReady = $true
+        break
+    }
+    Start-Sleep -Seconds 1
+}
+if (-not $frontendReady) {
+    throw "The frontend did not become reachable. Read the frontend PowerShell window for its error."
+}
+
+Start-Process $frontendUrl | Out-Null
+Write-Host "PhaseForge is running." -ForegroundColor Green
+Write-Host "Backend: $backendHealth"
+Write-Host "Frontend: $frontendUrl"

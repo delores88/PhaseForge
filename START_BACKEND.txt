@@ -1,0 +1,36 @@
+# PHASEFORGE BACKEND - WINDOWS START
+# Copy this entire file into PowerShell from the extracted PhaseForge project root.
+
+$ErrorActionPreference = "Stop"
+Set-StrictMode -Version Latest
+
+$PFRepoRoot = (Get-Location).Path
+$PFBackendRoot = Join-Path $PFRepoRoot "backend"
+$PFBinary = Join-Path $PFBackendRoot "target\debug\phaseforge-backend.exe"
+
+if (-not (Test-Path $PFBinary)) {
+    throw "The backend executable is missing. Run the complete backend installer first."
+}
+$health = $null
+try { $health = Invoke-RestMethod -Uri "http://127.0.0.1:7331/api/health" -TimeoutSec 2 } catch {}
+if ($null -ne $health) {
+    if ($health.status -eq "ok" -and $health.name -eq "PhaseForge" -and $health.version -eq "0.8.0") {
+        Write-Host "PhaseForge v0.8.0 backend is already running." -ForegroundColor Green
+        return
+    }
+    throw "A different backend is running on port 7331. Stop the old backend before starting v0.8.0."
+}
+
+$listener = Get-NetTCPConnection -LocalPort 7331 -State Listen -ErrorAction SilentlyContinue
+if ($null -ne $listener) {
+    throw "Port 7331 is already used by PID $($listener.OwningProcess), but that process is not a healthy PhaseForge backend."
+}
+if ([string]::IsNullOrWhiteSpace($env:RUST_LOG)) {
+    $env:RUST_LOG = "phaseforge_backend=info,tower_http=info"
+}
+$env:RUST_BACKTRACE = "1"
+Write-Host "Starting PhaseForge backend on http://127.0.0.1:7331" -ForegroundColor Cyan
+& $PFBinary
+if ($LASTEXITCODE -ne 0) {
+    throw "Backend process exited with code $LASTEXITCODE."
+}

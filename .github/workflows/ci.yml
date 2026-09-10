@@ -1,0 +1,72 @@
+name: Scientific contracts and native builds
+on: [push, pull_request, workflow_dispatch]
+jobs:
+  backend:
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, windows-latest]
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+      - if: runner.os == 'Linux'
+        run: sudo apt-get update && sudo apt-get install -y pkg-config libdbus-1-dev libssl-dev
+      - run: cargo check --all-targets
+        working-directory: backend
+      - run: cargo test --all-targets
+        working-directory: backend
+      - run: cargo build
+        working-directory: backend
+      - uses: actions/setup-python@v5
+        with: {python-version: '3.12'}
+      - run: python -m pip install jsonschema
+      - if: runner.os == 'Linux'
+        run: python tests/runtime_smoke.py --binary backend/target/debug/phaseforge-backend
+      - if: runner.os == 'Windows'
+        run: python tests/runtime_smoke.py --binary backend/target/debug/phaseforge-backend.exe
+      - if: runner.os == 'Linux'
+        run: python tests/discovery_runtime_smoke.py --binary backend/target/debug/phaseforge-backend
+      - if: runner.os == 'Windows'
+        run: python tests/discovery_runtime_smoke.py --binary backend/target/debug/phaseforge-backend.exe
+      - if: runner.os == 'Linux'
+        run: python tests/verification_runtime_smoke.py --binary backend/target/debug/phaseforge-backend
+      - if: runner.os == 'Windows'
+        run: python tests/verification_runtime_smoke.py --binary backend/target/debug/phaseforge-backend.exe
+      - if: runner.os == 'Linux'
+        run: python tests/research_runtime_smoke.py --binary backend/target/debug/phaseforge-backend
+      - if: runner.os == 'Windows'
+        run: python tests/research_runtime_smoke.py --binary backend/target/debug/phaseforge-backend.exe
+      - if: runner.os == 'Linux'
+        run: python tests/experiment_runtime_smoke.py --binary backend/target/debug/phaseforge-backend
+      - if: runner.os == 'Windows'
+        run: python tests/experiment_runtime_smoke.py --binary backend/target/debug/phaseforge-backend.exe
+  browser:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with: {node-version: '22'}
+      - uses: actions/setup-python@v5
+        with: {python-version: '3.12'}
+      - run: python -m pip install jsonschema
+      - run: python tests/test_proposal_schema.py
+      - run: node tests/frontend-api.mjs
+      - run: node tests/lab-model.mjs
+      - run: node tests/discovery-model.mjs
+      - run: python tests/test_reference_tools.py
+      - run: python tests/test_verification_worker.py
+      - run: node tests/verification-model.mjs
+      - run: python tests/test_research_upgrade.py
+      - run: node tests/research-model.mjs
+      - run: node tests/experiment-model.mjs
+      - run: npm install -g typescript@5.8.3
+      - run: node tests/experiment-ui.cjs
+      - run: python tests/test_experiment_editor.py
+      - run: node scripts/release-audit.mjs
+      - run: npm ci --no-audit --no-fund
+        working-directory: frontend
+      - run: node --test frontend/tests/scene.test.mjs
+      - run: node --test desktop/tests/*.test.cjs
+      - run: npm run build
+        working-directory: frontend

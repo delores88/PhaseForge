@@ -1,0 +1,12 @@
+bind_address = "127.0.0.1"
+port = 7331
+allowed_frontend_origins = [
+  "http://127.0.0.1:3000",
+  "http://localhost:3000"
+]
+data_directory = ""
+log_filter = "phaseforge_backend=info,tower_http=info"
+default_compute_policy = "balanced"
+max_parallel_jobs = 0
+gpu_enabled = true
+gpu_preference = "auto"

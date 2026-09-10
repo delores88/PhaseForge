@@ -1,0 +1,1061 @@
+{
+  "type": "object",
+  "properties": {
+    "assistant_message": {
+      "type": "string"
+    },
+    "action": {
+      "type": "string",
+      "enum": [
+        "create_manifest",
+        "revise_manifest",
+        "explain",
+        "capability_gap",
+        "research_plan"
+      ]
+    },
+    "research_plan": {
+      "anyOf": [
+        {
+          "$ref": "#/$defs/research_plan"
+        },
+        {
+          "type": "null"
+        }
+      ]
+    },
+    "manifest": {
+      "anyOf": [
+        {
+          "$ref": "#/$defs/manifest"
+        },
+        {
+          "type": "null"
+        }
+      ]
+    },
+    "requested_capability": {
+      "type": "string"
+    },
+    "capability_gap_reason": {
+      "type": "string"
+    },
+    "suggested_extension": {
+      "type": "string"
+    },
+    "should_run": {
+      "type": "boolean"
+    }
+  },
+  "required": [
+    "assistant_message",
+    "action",
+    "research_plan",
+    "manifest",
+    "requested_capability",
+    "capability_gap_reason",
+    "suggested_extension",
+    "should_run"
+  ],
+  "additionalProperties": false,
+  "$defs": {
+    "distribution": {
+      "anyOf": [
+        {
+          "type": "object",
+          "properties": {
+            "kind": {
+              "type": "string",
+              "enum": [
+                "explicit"
+              ]
+            },
+            "values": {
+              "type": "array",
+              "items": {
+                "type": "array",
+                "items": {
+                  "type": "number"
+                }
+              }
+            }
+          },
+          "required": [
+            "kind",
+            "values"
+          ],
+          "additionalProperties": false
+        },
+        {
+          "type": "object",
+          "properties": {
+            "kind": {
+              "type": "string",
+              "enum": [
+                "uniform"
+              ]
+            },
+            "min": {
+              "type": "array",
+              "items": {
+                "type": "number"
+              }
+            },
+            "max": {
+              "type": "array",
+              "items": {
+                "type": "number"
+              }
+            }
+          },
+          "required": [
+            "kind",
+            "min",
+            "max"
+          ],
+          "additionalProperties": false
+        },
+        {
+          "type": "object",
+          "properties": {
+            "kind": {
+              "type": "string",
+              "enum": [
+                "normal"
+              ]
+            },
+            "mean": {
+              "type": "array",
+              "items": {
+                "type": "number"
+              }
+            },
+            "std_dev": {
+              "type": "array",
+              "items": {
+                "type": "number"
+              }
+            }
+          },
+          "required": [
+            "kind",
+            "mean",
+            "std_dev"
+          ],
+          "additionalProperties": false
+        },
+        {
+          "type": "object",
+          "properties": {
+            "kind": {
+              "type": "string",
+              "enum": [
+                "grid"
+              ]
+            },
+            "extent": {
+              "type": "array",
+              "items": {
+                "type": "integer"
+              }
+            },
+            "spacing": {
+              "type": "number"
+            },
+            "jitter": {
+              "type": "number"
+            }
+          },
+          "required": [
+            "kind",
+            "extent",
+            "spacing",
+            "jitter"
+          ],
+          "additionalProperties": false
+        },
+        {
+          "type": "object",
+          "properties": {
+            "kind": {
+              "type": "string",
+              "enum": [
+                "sphere"
+              ]
+            },
+            "radius": {
+              "type": "number"
+            },
+            "thickness": {
+              "type": "number"
+            }
+          },
+          "required": [
+            "kind",
+            "radius",
+            "thickness"
+          ],
+          "additionalProperties": false
+        }
+      ]
+    },
+    "boundary": {
+      "anyOf": [
+        {
+          "type": "object",
+          "properties": {
+            "kind": {
+              "type": "string",
+              "enum": [
+                "open"
+              ]
+            }
+          },
+          "required": [
+            "kind"
+          ],
+          "additionalProperties": false
+        },
+        {
+          "type": "object",
+          "properties": {
+            "kind": {
+              "type": "string",
+              "enum": [
+                "periodic"
+              ]
+            },
+            "min": {
+              "type": "array",
+              "items": {
+                "type": "number"
+              }
+            },
+            "max": {
+              "type": "array",
+              "items": {
+                "type": "number"
+              }
+            }
+          },
+          "required": [
+            "kind",
+            "min",
+            "max"
+          ],
+          "additionalProperties": false
+        },
+        {
+          "type": "object",
+          "properties": {
+            "kind": {
+              "type": "string",
+              "enum": [
+                "reflective"
+              ]
+            },
+            "min": {
+              "type": "array",
+              "items": {
+                "type": "number"
+              }
+            },
+            "max": {
+              "type": "array",
+              "items": {
+                "type": "number"
+              }
+            }
+          },
+          "required": [
+            "kind",
+            "min",
+            "max"
+          ],
+          "additionalProperties": false
+        }
+      ]
+    },
+    "model": {
+      "anyOf": [
+        {
+          "type": "object",
+          "properties": {
+            "kind": {
+              "type": "string",
+              "enum": [
+                "state_vector_ode"
+              ]
+            },
+            "variables": {
+              "type": "array",
+              "items": {
+                "type": "object",
+                "properties": {
+                  "name": {
+                    "type": "string"
+                  },
+                  "unit": {
+                    "type": "string"
+                  },
+                  "initial": {
+                    "type": "number"
+                  }
+                },
+                "required": [
+                  "name",
+                  "unit",
+                  "initial"
+                ],
+                "additionalProperties": false
+              }
+            },
+            "derivatives": {
+              "type": "array",
+              "items": {
+                "type": "object",
+                "properties": {
+                  "variable": {
+                    "type": "string"
+                  },
+                  "expression": {
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "variable",
+                  "expression"
+                ],
+                "additionalProperties": false
+              }
+            }
+          },
+          "required": [
+            "kind",
+            "variables",
+            "derivatives"
+          ],
+          "additionalProperties": false
+        },
+        {
+          "type": "object",
+          "properties": {
+            "kind": {
+              "type": "string",
+              "enum": [
+                "pairwise_particles"
+              ]
+            },
+            "dimensions": {
+              "type": "integer"
+            },
+            "population": {
+              "type": "object",
+              "properties": {
+                "count": {
+                  "type": "integer"
+                },
+                "mass": {
+                  "type": "number"
+                },
+                "position": {
+                  "$ref": "#/$defs/distribution"
+                },
+                "velocity": {
+                  "$ref": "#/$defs/distribution"
+                }
+              },
+              "required": [
+                "count",
+                "mass",
+                "position",
+                "velocity"
+              ],
+              "additionalProperties": false
+            },
+            "interaction": {
+              "type": "object",
+              "properties": {
+                "radial_force": {
+                  "type": "string"
+                },
+                "cutoff": {
+                  "type": [
+                    "number",
+                    "null"
+                  ]
+                },
+                "softening": {
+                  "type": "number"
+                },
+                "linear_damping": {
+                  "type": "number"
+                },
+                "external_acceleration": {
+                  "type": "array",
+                  "items": {
+                    "type": "string"
+                  }
+                }
+              },
+              "required": [
+                "radial_force",
+                "cutoff",
+                "softening",
+                "linear_damping",
+                "external_acceleration"
+              ],
+              "additionalProperties": false
+            },
+            "boundary": {
+              "$ref": "#/$defs/boundary"
+            }
+          },
+          "required": [
+            "kind",
+            "dimensions",
+            "population",
+            "interaction",
+            "boundary"
+          ],
+          "additionalProperties": false
+        }
+      ]
+    },
+    "integration": {
+      "type": "object",
+      "properties": {
+        "method": {
+          "type": "string",
+          "enum": [
+            "euler",
+            "rk4",
+            "velocity_verlet"
+          ]
+        },
+        "start_time": {
+          "type": "number"
+        },
+        "end_time": {
+          "type": "number"
+        },
+        "time_step": {
+          "type": "number"
+        },
+        "output_stride": {
+          "type": "integer"
+        },
+        "max_steps": {
+          "type": "integer"
+        }
+      },
+      "required": [
+        "method",
+        "start_time",
+        "end_time",
+        "time_step",
+        "output_stride",
+        "max_steps"
+      ],
+      "additionalProperties": false
+    },
+    "manifest": {
+      "type": "object",
+      "properties": {
+        "title": {
+          "type": "string"
+        },
+        "question": {
+          "type": "string"
+        },
+        "scientific_boundary": {
+          "type": "string"
+        },
+        "hypothesis": {
+          "type": "string"
+        },
+        "model": {
+          "$ref": "#/$defs/model"
+        },
+        "constants": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "properties": {
+              "name": {
+                "type": "string"
+              },
+              "value": {
+                "type": "number"
+              },
+              "unit": {
+                "type": "string"
+              },
+              "description": {
+                "type": "string"
+              }
+            },
+            "required": [
+              "name",
+              "value",
+              "unit",
+              "description"
+            ],
+            "additionalProperties": false
+          }
+        },
+        "trajectory": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "properties": {
+              "name": {
+                "type": "string"
+              },
+              "expression": {
+                "type": "string"
+              },
+              "reducer": {
+                "type": "string",
+                "enum": [
+                  "minimum",
+                  "maximum",
+                  "range",
+                  "time_mean",
+                  "integral",
+                  "duration_below",
+                  "duration_above",
+                  "entries_below",
+                  "entries_above",
+                  "first_below",
+                  "first_above"
+                ]
+              },
+              "unit": {
+                "type": "string"
+              },
+              "threshold": {
+                "type": "number"
+              },
+              "hysteresis": {
+                "type": "number"
+              }
+            },
+            "required": [
+              "name",
+              "expression",
+              "reducer",
+              "unit",
+              "threshold",
+              "hysteresis"
+            ],
+            "additionalProperties": false
+          }
+        },
+        "integration": {
+          "$ref": "#/$defs/integration"
+        },
+        "search": {
+          "type": "object",
+          "properties": {
+            "enabled": {
+              "type": "boolean"
+            },
+            "algorithm": {
+              "type": "string",
+              "enum": [
+                "none",
+                "random",
+                "evolutionary",
+                "latin_hypercube",
+                "differential_evolution"
+              ]
+            },
+            "variables": {
+              "type": "array",
+              "items": {
+                "type": "object",
+                "properties": {
+                  "name": {
+                    "type": "string"
+                  },
+                  "target": {
+                    "type": "string"
+                  },
+                  "minimum": {
+                    "type": "number"
+                  },
+                  "maximum": {
+                    "type": "number"
+                  }
+                },
+                "required": [
+                  "name",
+                  "target",
+                  "minimum",
+                  "maximum"
+                ],
+                "additionalProperties": false
+              }
+            },
+            "objectives": {
+              "type": "array",
+              "items": {
+                "type": "object",
+                "properties": {
+                  "name": {
+                    "type": "string"
+                  },
+                  "expression": {
+                    "type": "string"
+                  },
+                  "goal": {
+                    "type": "string",
+                    "enum": [
+                      "minimize",
+                      "maximize"
+                    ]
+                  },
+                  "weight": {
+                    "type": "number"
+                  }
+                },
+                "required": [
+                  "name",
+                  "expression",
+                  "goal",
+                  "weight"
+                ],
+                "additionalProperties": false
+              }
+            },
+            "population": {
+              "type": "integer"
+            },
+            "generations": {
+              "type": "integer"
+            },
+            "elite_fraction": {
+              "type": "number"
+            },
+            "mutation_scale": {
+              "type": "number"
+            },
+            "seed": {
+              "type": "integer"
+            }
+          },
+          "required": [
+            "enabled",
+            "algorithm",
+            "variables",
+            "objectives",
+            "population",
+            "generations",
+            "elite_fraction",
+            "mutation_scale",
+            "seed"
+          ],
+          "additionalProperties": false
+        },
+        "observables": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "properties": {
+              "name": {
+                "type": "string"
+              },
+              "expression": {
+                "type": "string"
+              },
+              "unit": {
+                "type": "string"
+              }
+            },
+            "required": [
+              "name",
+              "expression",
+              "unit"
+            ],
+            "additionalProperties": false
+          }
+        },
+        "constraints": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "properties": {
+              "name": {
+                "type": "string"
+              },
+              "expression": {
+                "type": "string"
+              },
+              "tolerance": {
+                "type": "number"
+              }
+            },
+            "required": [
+              "name",
+              "expression",
+              "tolerance"
+            ],
+            "additionalProperties": false
+          }
+        },
+        "visualization": {
+          "type": "object",
+          "properties": {
+            "kind": {
+              "type": "string",
+              "enum": [
+                "trajectory",
+                "particle_cloud",
+                "scatter",
+                "none"
+              ]
+            },
+            "x": {
+              "type": "string"
+            },
+            "y": {
+              "type": "string"
+            },
+            "z": {
+              "type": "string"
+            },
+            "point_size": {
+              "type": "number"
+            },
+            "max_frames": {
+              "type": "integer"
+            },
+            "trails": {
+              "type": "boolean"
+            },
+            "entities": {
+              "type": "array",
+              "items": {
+                "type": "object",
+                "properties": {
+                  "id": {
+                    "type": "string"
+                  },
+                  "x": {
+                    "type": "string"
+                  },
+                  "y": {
+                    "type": "string"
+                  },
+                  "z": {
+                    "type": "string"
+                  },
+                  "vx": {
+                    "type": "string"
+                  },
+                  "vy": {
+                    "type": "string"
+                  },
+                  "vz": {
+                    "type": "string"
+                  },
+                  "radius": {
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "id",
+                  "x",
+                  "y",
+                  "z",
+                  "vx",
+                  "vy",
+                  "vz",
+                  "radius"
+                ],
+                "additionalProperties": false
+              }
+            }
+          },
+          "required": [
+            "kind",
+            "x",
+            "y",
+            "z",
+            "point_size",
+            "max_frames",
+            "trails",
+            "entities"
+          ],
+          "additionalProperties": false
+        },
+        "falsification": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "properties": {
+              "name": {
+                "type": "string"
+              },
+              "kind": {
+                "type": "string",
+                "enum": [
+                  "step_halving",
+                  "resolution_ladder",
+                  "seed_replication",
+                  "initial_perturbation",
+                  "parameter_perturbation"
+                ]
+              },
+              "target": {
+                "type": [
+                  "string",
+                  "null"
+                ]
+              },
+              "magnitude": {
+                "type": "number"
+              },
+              "repetitions": {
+                "type": "integer"
+              },
+              "checks": {
+                "type": "array",
+                "items": {
+                  "type": "object",
+                  "properties": {
+                    "metric": {
+                      "type": "string"
+                    },
+                    "expectation": {
+                      "type": "string",
+                      "enum": [
+                        "stable",
+                        "change",
+                        "decrease",
+                        "increase"
+                      ]
+                    },
+                    "absolute_tolerance": {
+                      "type": "number"
+                    },
+                    "relative_tolerance": {
+                      "type": "number"
+                    }
+                  },
+                  "required": [
+                    "metric",
+                    "expectation",
+                    "absolute_tolerance",
+                    "relative_tolerance"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            },
+            "required": [
+              "name",
+              "kind",
+              "target",
+              "magnitude",
+              "repetitions",
+              "checks"
+            ],
+            "additionalProperties": false
+          }
+        },
+        "compute": {
+          "type": "object",
+          "properties": {
+            "preference": {
+              "type": "string",
+              "enum": [
+                "auto",
+                "cpu",
+                "gpu"
+              ]
+            },
+            "policy": {
+              "type": "string",
+              "enum": [
+                "interactive",
+                "balanced",
+                "throughput"
+              ]
+            },
+            "candidate_count": {
+              "type": "integer"
+            },
+            "batch_size": {
+              "type": "integer"
+            },
+            "max_wall_seconds": {
+              "type": "integer"
+            },
+            "max_memory_mb": {
+              "type": "integer"
+            }
+          },
+          "required": [
+            "preference",
+            "policy",
+            "candidate_count",
+            "batch_size",
+            "max_wall_seconds",
+            "max_memory_mb"
+          ],
+          "additionalProperties": false
+        },
+        "limitations": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        }
+      },
+      "required": [
+        "title",
+        "question",
+        "scientific_boundary",
+        "hypothesis",
+        "model",
+        "constants",
+        "trajectory",
+        "integration",
+        "search",
+        "observables",
+        "constraints",
+        "visualization",
+        "falsification",
+        "compute",
+        "limitations"
+      ],
+      "additionalProperties": false
+    },
+    "research_task": {
+      "type": "object",
+      "properties": {
+        "id": {
+          "type": "string"
+        },
+        "title": {
+          "type": "string"
+        },
+        "kind": {
+          "type": "string",
+          "enum": [
+            "literature",
+            "data_analysis",
+            "simulation",
+            "external_engine",
+            "expert_review"
+          ]
+        },
+        "question": {
+          "type": "string"
+        },
+        "method": {
+          "type": "string"
+        },
+        "inputs": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "depends_on": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "success_criterion": {
+          "type": "string"
+        },
+        "deliverable": {
+          "type": "string"
+        },
+        "next_prompt": {
+          "type": "string"
+        },
+        "search_query": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "id",
+        "title",
+        "kind",
+        "question",
+        "method",
+        "inputs",
+        "depends_on",
+        "success_criterion",
+        "deliverable",
+        "next_prompt",
+        "search_query"
+      ],
+      "additionalProperties": false
+    },
+    "research_plan": {
+      "type": "object",
+      "properties": {
+        "title": {
+          "type": "string"
+        },
+        "goal": {
+          "type": "string"
+        },
+        "tractable_question": {
+          "type": "string"
+        },
+        "rationale": {
+          "type": "string"
+        },
+        "knowns": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "unknowns": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "tasks": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/research_task"
+          }
+        },
+        "source_ids": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "limitations": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        }
+      },
+      "required": [
+        "title",
+        "goal",
+        "tractable_question",
+        "rationale",
+        "knowns",
+        "unknowns",
+        "tasks",
+        "source_ids",
+        "limitations"
+      ],
+      "additionalProperties": false
+    }
+  }
+}

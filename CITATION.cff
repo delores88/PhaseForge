@@ -1,0 +1,10 @@
+cff-version: 1.2.0
+message: "Cite the exact PhaseForge commit used for your analysis. This is an unreleased development version; no DOI is asserted."
+type: software
+title: PhaseForge computational discovery laboratory
+version: 0.8.0
+license: MIT
+authors:
+  - name: PhaseForge contributors
+abstract: "Local-first computational studies, bounded numerical search, evidence-linked research records and reproducible publication bundles."
+repository-code: "https://github.com/delores88/PhaseForge"

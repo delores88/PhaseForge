@@ -1,0 +1,45 @@
+{
+  "version": "0.8.0",
+  "date": "2026-09-10",
+  "published_release": false,
+  "native_platform": "windows-x64",
+  "gpu": "NVIDIA GeForce RTX 4090 Laptop GPU / DX12",
+  "executed": {
+    "rust_all_targets_passed": 156,
+    "rust_opt_in_excluded": 1,
+    "separate_gpu_test_passed": true,
+    "native_http_smoke_programs": 5,
+    "schema_tests": 22,
+    "python_reference_tests": 23,
+    "python_verification_tests": 34,
+    "research_upgrade_tests": 30,
+    "equation_editor_tests": 5,
+    "javascript_helpers": 165,
+    "jsx_handlers": 19,
+    "scene_tests": 14,
+    "desktop_tests": 3,
+    "source_audit": 121,
+    "frontend_build": true,
+    "rust_release_build": true,
+    "live_openai_session": {
+      "model": "gpt-5.6-sol",
+      "reasoning": "high",
+      "specialists": 1,
+      "cycles": 1,
+      "completed": true,
+      "scene_nodes": 12,
+      "frames": 201,
+      "validated_repair": true
+    }
+  },
+  "pending": [
+    "Final Windows x64 installation acceptance",
+    "Four native package workflow builds"
+  ],
+  "roadmap": [
+    "NPU execution",
+    "Cluster orchestration",
+    "Local open-source LLMs",
+    "External MD/CFD/QM solvers"
+  ]
+}

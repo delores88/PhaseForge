@@ -1,0 +1,22 @@
+{
+  "name": "phaseforge-frontend",
+  "version": "0.8.0",
+  "private": true,
+  "scripts": {
+    "dev": "next dev",
+    "build": "next build",
+    "start": "next dev",
+    "check": "next build"
+  },
+  "dependencies": {
+    "lucide-react": "0.468.0",
+    "next": "16.3.3",
+    "react": "19.2.1",
+    "react-dom": "19.2.1",
+    "three": "0.179.1"
+  },
+  "engines": {
+    "node": ">=20.9.0",
+    "npm": ">=10.0.0"
+  }
+}

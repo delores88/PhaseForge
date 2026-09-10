@@ -1,0 +1,19 @@
+# PHASEFORGE - WINDOWS STOP
+# Paste the whole file. Only identifiable PhaseForge processes are stopped.
+# When identification is unavailable, close the corresponding launch window with Ctrl+C.
+$ErrorActionPreference = "Stop"
+foreach ($port in 7331, 3000) {
+    $listeners = @(Get-NetTCPConnection -LocalPort $port -State Listen -ErrorAction SilentlyContinue)
+    foreach ($listener in $listeners) {
+        $owner = Get-CimInstance Win32_Process -Filter "ProcessId=$($listener.OwningProcess)" -ErrorAction SilentlyContinue
+        if ($null -eq $owner) { continue }
+        $isBackend = $owner.Name -eq "phaseforge-backend.exe"
+        $isFrontend = $owner.Name -eq "node.exe" -and $owner.CommandLine -match "(?i)phaseforge"
+        if ($isBackend -or $isFrontend) {
+            Stop-Process -Id $listener.OwningProcess -Force
+            Write-Host "Stopped PhaseForge PID $($listener.OwningProcess) on port $port." -ForegroundColor Yellow
+        } else {
+            Write-Warning "Port $port belongs to PID $($listener.OwningProcess), which cannot be positively identified as PhaseForge. Close its launch window manually; it was not killed."
+        }
+    }
+}

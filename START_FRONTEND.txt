@@ -1,0 +1,56 @@
+# PHASEFORGE FRONTEND - WINDOWS START
+# Start the backend first, then copy this entire file into a second PowerShell window
+# from the extracted PhaseForge project root.
+
+$ErrorActionPreference = "Stop"
+Set-StrictMode -Version Latest
+
+$PFRepoRoot = (Get-Location).Path
+$PFFrontendRoot = Join-Path $PFRepoRoot "frontend"
+$PFPort = 3000
+$PFMinimumNode = [version]"20.9.0"
+
+$node = Get-Command "node" -ErrorAction SilentlyContinue
+if ($null -eq $node) {
+    throw "Node.js is missing. Run the complete frontend installer first."
+}
+$nodeVersion = [version]((& node -p "process.versions.node").Trim())
+if ($nodeVersion -lt $PFMinimumNode) {
+    throw "Node.js $PFMinimumNode or newer is required; detected v$nodeVersion."
+}
+$npm = Get-Command "npm.cmd" -ErrorAction SilentlyContinue
+if ($null -eq $npm) {
+    $npm = Get-Command "npm" -ErrorAction SilentlyContinue
+}
+if ($null -eq $npm) {
+    throw "npm is missing. Run the complete frontend installer first."
+}
+if (-not (Test-Path (Join-Path $PFFrontendRoot "node_modules\next\package.json"))) {
+    throw "Frontend dependencies are missing. Run the complete frontend installer first."
+}
+
+$listener = Get-NetTCPConnection -LocalPort $PFPort -State Listen -ErrorAction SilentlyContinue
+if ($null -ne $listener) {
+    Write-Host "A process is already listening at http://127.0.0.1:$PFPort (PID $($listener.OwningProcess))." -ForegroundColor Yellow
+    return
+}
+try {
+    $health = Invoke-RestMethod -Uri "http://127.0.0.1:7331/api/health" -TimeoutSec 2
+    if ($health.status -eq "ok") {
+        Write-Host "Backend connection verified." -ForegroundColor Green
+    }
+} catch {
+    Write-Warning "The backend is not responding at http://127.0.0.1:7331. Start it with the complete backend start file."
+}
+
+$env:NEXT_TELEMETRY_DISABLED = "1"
+Push-Location $PFFrontendRoot
+try {
+    Write-Host "Starting PhaseForge browser client on http://127.0.0.1:$PFPort" -ForegroundColor Cyan
+    & $npm.Source run dev -- --hostname 127.0.0.1 --port $PFPort
+    if ($LASTEXITCODE -ne 0) {
+        throw "Frontend process exited with code $LASTEXITCODE."
+    }
+} finally {
+    Pop-Location
+}

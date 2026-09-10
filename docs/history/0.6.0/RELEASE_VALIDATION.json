@@ -1,0 +1,40 @@
+{
+  "product": "PhaseForge",
+  "version": "0.6.0",
+  "baseline": "0.5.0",
+  "date": "2026-09-08",
+  "release_type": "complete incremental source",
+  "executed": {
+    "python_unittest_total": 106,
+    "existing_schema": 19,
+    "existing_reference_tools": 23,
+    "existing_independent_worker": 34,
+    "new_research_upgrade_tests": 30,
+    "frontend_api_checks": 15,
+    "lab_helper_checks": 23,
+    "discovery_helper_checks": 29,
+    "verification_helper_checks": 41,
+    "research_helper_checks": 24,
+    "chromium_research_layout_cases": 24,
+    "chromium_discovery_layout_cases": 18,
+    "chromium_verification_layout_cases": 24,
+    "frontend_jsx_js_syntax_files": 48,
+    "rust_module_include_paths": 48,
+    "rust_powershell_lexical_files": 57,
+    "bash_scripts": 5
+  },
+  "native_tests_added_not_executed": 33,
+  "not_executed": [
+    "Cargo check/build/native tests",
+    "Real Rust HTTP smoke tests",
+    "Full Next.js production build and hydration",
+    "Windows PowerShell/MSVC installers",
+    "Physical GPU/driver execution",
+    "Live OpenAI or Anthropic requests",
+    "Live Europe PMC queries",
+    "Backend-generated research-bundle export"
+  ],
+  "dependency_versions_changed": false,
+  "archive_acceptance": "External package report records actual final ZIP checks",
+  "scientific_discovery_certified": false
+}

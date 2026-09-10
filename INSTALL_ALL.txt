@@ -1,0 +1,277 @@
+# PHASEFORGE BACKEND AND FRONTEND - WINDOWS INSTALL
+# Copy this entire file, open PowerShell in the extracted PhaseForge project root,
+# paste it, and press Enter. Both complete installers are embedded below.
+
+$ErrorActionPreference = "Stop"
+Set-StrictMode -Version Latest
+Write-Host "PhaseForge complete installer (v0.8.0)" -ForegroundColor White
+
+# Backend installation runs in its own scope.
+& {
+    $ErrorActionPreference = "Stop"
+    Set-StrictMode -Version Latest
+
+    $PFRepoRoot = (Get-Location).Path
+    $PFBackendRoot = Join-Path $PFRepoRoot "backend"
+    $PFToolchain = "stable-x86_64-pc-windows-msvc"
+
+    function PF-Step([string]$Message) {
+        Write-Host "`n==> $Message" -ForegroundColor Cyan
+    }
+
+    function PF-HasCommand([string]$Name) {
+        return $null -ne (Get-Command $Name -ErrorAction SilentlyContinue)
+    }
+
+    function PF-RefreshPath {
+        $paths = @(
+            [Environment]::GetEnvironmentVariable("Path", "Process"),
+            [Environment]::GetEnvironmentVariable("Path", "User"),
+            [Environment]::GetEnvironmentVariable("Path", "Machine"),
+            (Join-Path $HOME ".cargo\bin")
+        ) | Where-Object { -not [string]::IsNullOrWhiteSpace($_) }
+        $env:Path = ($paths -join ";")
+    }
+
+    function PF-Run([string]$Label, [string]$Program, [string[]]$Arguments) {
+        PF-Step $Label
+        & $Program @Arguments
+        if ($LASTEXITCODE -ne 0) {
+            throw "$Label failed with exit code $LASTEXITCODE."
+        }
+    }
+
+    function PF-WingetInstall([string]$Id, [string]$Name, [string]$Override = "") {
+        if (-not (PF-HasCommand "winget")) {
+            throw "$Name is missing and winget is unavailable. Install Microsoft App Installer, then paste this installer again."
+        }
+        $arguments = @(
+            "install", "--id", $Id, "--exact",
+            "--accept-package-agreements", "--accept-source-agreements",
+            "--disable-interactivity"
+        )
+        if (-not [string]::IsNullOrWhiteSpace($Override)) {
+            $arguments += @("--override", $Override)
+        }
+        PF-Run "Installing $Name" "winget" $arguments
+        PF-RefreshPath
+    }
+
+    function PF-HasVcTools {
+        $vsWhere = "${env:ProgramFiles(x86)}\Microsoft Visual Studio\Installer\vswhere.exe"
+        if (-not (Test-Path $vsWhere)) { return $false }
+        $installation = & $vsWhere -latest -products * -requires Microsoft.VisualStudio.Component.VC.Tools.x86.x64 -property installationPath
+        return -not [string]::IsNullOrWhiteSpace($installation)
+    }
+
+    if (-not (Test-Path (Join-Path $PFBackendRoot "Cargo.toml"))) {
+        throw "backend/Cargo.toml was not found. Open PowerShell in the extracted PhaseForge project root before pasting this file."
+    }
+
+    Write-Host "PhaseForge backend installer (v0.8.0)" -ForegroundColor White
+    Write-Host "Repository: $PFRepoRoot"
+    Write-Host "Backend:    $PFBackendRoot"
+
+    PF-RefreshPath
+    if (-not (PF-HasCommand "git")) {
+        PF-WingetInstall "Git.Git" "Git"
+    }
+    if (-not (PF-HasCommand "rustup")) {
+        PF-WingetInstall "Rustlang.Rustup" "Rustup"
+    }
+    if (-not (PF-HasVcTools)) {
+        PF-WingetInstall `
+            "Microsoft.VisualStudio.2022.BuildTools" `
+            "Visual Studio 2022 C++ Build Tools" `
+            "--wait --passive --norestart --add Microsoft.VisualStudio.Workload.VCTools --includeRecommended"
+    }
+
+    PF-RefreshPath
+    foreach ($command in @("rustup", "rustc", "cargo")) {
+        if (-not (PF-HasCommand $command)) {
+            throw "$command is still unavailable. Close PowerShell once, reopen it in this project root, and paste INSTALL_BACKEND.txt again."
+        }
+    }
+    if (-not (PF-HasVcTools)) {
+        throw "Visual Studio C++ Build Tools were not detected. Install the Desktop development with C++ workload, then paste this installer again."
+    }
+
+    PF-Run "Installing the stable Windows MSVC Rust toolchain" "rustup" @(
+        "toolchain", "install", $PFToolchain, "--profile", "minimal"
+    )
+
+    Push-Location $PFBackendRoot
+    try {
+        PF-Run "Selecting the PhaseForge Rust toolchain" "rustup" @(
+            "override", "set", $PFToolchain
+        )
+
+        PF-Step "Reporting compiler versions"
+        & rustc --version
+        if ($LASTEXITCODE -ne 0) { throw "rustc could not start." }
+        & cargo --version
+        if ($LASTEXITCODE -ne 0) { throw "cargo could not start." }
+
+        $env:CARGO_TERM_COLOR = "always"
+        $env:RUST_BACKTRACE = "1"
+
+        if (Test-Path "Cargo.lock") {
+            & cargo metadata --locked --format-version 1 --no-deps *> $null
+            if ($LASTEXITCODE -ne 0) {
+                PF-Run "Synchronizing Cargo.lock with Cargo.toml" "cargo" @("generate-lockfile")
+            }
+        } else {
+            PF-Run "Resolving backend dependencies and creating Cargo.lock" "cargo" @("generate-lockfile")
+        }
+
+        PF-Run "Fetching locked backend dependencies" "cargo" @("fetch", "--locked")
+        PF-Run "Compiling every backend target" "cargo" @("build", "--locked", "--all-targets")
+        PF-Run "Running backend tests" "cargo" @("test", "--locked", "--all-targets")
+
+        $binary = Join-Path $PFBackendRoot "target\debug\phaseforge-backend.exe"
+        if (-not (Test-Path $binary)) {
+            throw "Cargo completed without producing $binary."
+        }
+    } finally {
+        Pop-Location
+    }
+
+    PF-Step "Backend installation complete"
+    Write-Host "Executable: backend\target\debug\phaseforge-backend.exe" -ForegroundColor Green
+    Write-Host "Next: install the frontend or use START_BACKEND.txt." -ForegroundColor Green
+}
+
+# Frontend installation runs in its own scope.
+& {
+    $ErrorActionPreference = "Stop"
+    Set-StrictMode -Version Latest
+
+    $PFRepoRoot = (Get-Location).Path
+    $PFFrontendRoot = Join-Path $PFRepoRoot "frontend"
+    $PFMinimumNode = [version]"20.9.0"
+
+    function PF-Step([string]$Message) {
+        Write-Host "`n==> $Message" -ForegroundColor Cyan
+    }
+
+    function PF-RefreshPath {
+        $paths = @(
+            [Environment]::GetEnvironmentVariable("Path", "Process"),
+            [Environment]::GetEnvironmentVariable("Path", "User"),
+            [Environment]::GetEnvironmentVariable("Path", "Machine")
+        ) | Where-Object { -not [string]::IsNullOrWhiteSpace($_) }
+        $env:Path = ($paths -join ";")
+    }
+
+    function PF-NodeVersion {
+        if ($null -eq (Get-Command "node" -ErrorAction SilentlyContinue)) {
+            return $null
+        }
+        $value = (& node -p "process.versions.node").Trim()
+        if ($LASTEXITCODE -ne 0 -or [string]::IsNullOrWhiteSpace($value)) {
+            return $null
+        }
+        try { return [version]$value } catch { return $null }
+    }
+
+    function PF-NpmCommand {
+        $command = Get-Command "npm.cmd" -ErrorAction SilentlyContinue
+        if ($null -eq $command) {
+            $command = Get-Command "npm" -ErrorAction SilentlyContinue
+        }
+        if ($null -eq $command) { return $null }
+        return $command.Source
+    }
+
+    function PF-Run([string]$Label, [string]$Program, [string[]]$Arguments) {
+        PF-Step $Label
+        & $Program @Arguments
+        if ($LASTEXITCODE -ne 0) {
+            throw "$Label failed with exit code $LASTEXITCODE."
+        }
+    }
+
+    function PF-InstallNode([bool]$Upgrade) {
+        if ($null -eq (Get-Command "winget" -ErrorAction SilentlyContinue)) {
+            throw "Node.js $PFMinimumNode or newer is required and winget is unavailable. Install a current Node.js LTS release, reopen PowerShell, and paste this file again."
+        }
+        $verb = if ($Upgrade) { "upgrade" } else { "install" }
+        PF-Run "Installing or upgrading Node.js LTS" "winget" @(
+            $verb, "--id", "OpenJS.NodeJS.LTS", "--exact",
+            "--accept-package-agreements", "--accept-source-agreements",
+            "--disable-interactivity"
+        )
+        PF-RefreshPath
+    }
+
+    if (-not (Test-Path (Join-Path $PFFrontendRoot "package.json"))) {
+        throw "frontend/package.json was not found. Open PowerShell in the extracted PhaseForge project root before pasting this file."
+    }
+
+    Write-Host "PhaseForge frontend installer (v0.8.0)" -ForegroundColor White
+    Write-Host "Repository: $PFRepoRoot"
+    Write-Host "Frontend:   $PFFrontendRoot"
+    Write-Host "Node minimum: $PFMinimumNode"
+
+    PF-RefreshPath
+    $nodeVersion = PF-NodeVersion
+    if ($null -eq $nodeVersion) {
+        PF-InstallNode $false
+        $nodeVersion = PF-NodeVersion
+    } elseif ($nodeVersion -lt $PFMinimumNode) {
+        PF-InstallNode $true
+        $nodeVersion = PF-NodeVersion
+    }
+    if ($null -eq $nodeVersion -or $nodeVersion -lt $PFMinimumNode) {
+        throw "A supported Node.js installation was not found after installation. Close and reopen PowerShell in this project root, then paste INSTALL_FRONTEND.txt again."
+    }
+
+    $npm = PF-NpmCommand
+    if ([string]::IsNullOrWhiteSpace($npm)) {
+        throw "npm was not found beside Node.js. Repair the Node.js LTS installation and paste this file again."
+    }
+
+    PF-Step "Reporting frontend tool versions"
+    Write-Host "Node.js v$nodeVersion accepted (minimum $PFMinimumNode)." -ForegroundColor Green
+    & $npm --version
+    if ($LASTEXITCODE -ne 0) { throw "npm could not start." }
+
+    $env:NEXT_TELEMETRY_DISABLED = "1"
+    Push-Location $PFFrontendRoot
+    try {
+        if (-not (Test-Path ".env.local")) {
+            if (-not (Test-Path ".env.example")) {
+                throw "frontend/.env.example is missing."
+            }
+            Copy-Item ".env.example" ".env.local"
+            Write-Host "Created frontend/.env.local from frontend/.env.example."
+        }
+
+        if (Test-Path "package-lock.json") {
+            PF-Run "Installing the locked frontend dependencies" $npm @(
+                "ci", "--no-audit", "--no-fund"
+            )
+        } else {
+            PF-Run "Installing frontend dependencies and creating package-lock.json" $npm @(
+                "install", "--no-audit", "--no-fund"
+            )
+        }
+
+        # The production build is the authoritative dependency and integration check.
+        PF-Run "Building the production browser client" $npm @("run", "build")
+
+        $exportedIndex = Join-Path $PFFrontendRoot "out\index.html"
+        if (-not (Test-Path $exportedIndex)) {
+            throw "The frontend build completed without producing out/index.html."
+        }
+    } finally {
+        Pop-Location
+    }
+
+    PF-Step "Frontend installation complete"
+    Write-Host "Static build: frontend\out\index.html" -ForegroundColor Green
+    Write-Host "Next: use START_FRONTEND.txt or START_ALL.txt." -ForegroundColor Green
+}
+
+Write-Host "`nPhaseForge backend and frontend installation completed." -ForegroundColor Green
+Write-Host "Next: copy and paste the complete START_ALL.txt file." -ForegroundColor Green

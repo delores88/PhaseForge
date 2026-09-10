@@ -1,0 +1,52 @@
+{
+  "release": "PhaseForge",
+  "version": "0.3.3",
+  "recorded_at_utc": "2026-09-06T23:19:52.243032+00:00",
+  "baseline": {
+    "name": "PhaseForge-0.3.2-FULL.zip",
+    "sha256": "846a56122a213e2b609c9554a3eaa61e6b273e067f67bbe851d98c7560b24038",
+    "files": 106,
+    "original_files_preserved": true,
+    "frontend_dependency_versions_unchanged": true,
+    "v032_schema_compiler_fix_preserved_byte_for_byte": true
+  },
+  "executed": {
+    "provider_schema_regressions": 19,
+    "api_helper_checks_with_fetch_doubles": 15,
+    "shipped_lab_view_model_checks": 23,
+    "static_source_audit_gates": 61,
+    "chromium_layout_fixtures": 14,
+    "javascript_jsx_syntax": {
+      "javascript_files": 37,
+      "local_imports_checked": 68,
+      "errors": []
+    },
+    "other_static_syntax": {
+      "json": 4,
+      "toml": 3,
+      "python_syntax": 3,
+      "bash_syntax": 4,
+      "rust_lexical_delimiters": 28,
+      "rust_modules": 26,
+      "powershell_structure": 8,
+      "errors": []
+    }
+  },
+  "native_rust_tests_added": 13,
+  "native_rust_tests_executed": false,
+  "native_cargo_check_build_test_executed": false,
+  "nextjs_production_build_executed": false,
+  "real_react_hydration_executed": false,
+  "real_webgl_renderer_executed": false,
+  "windows_powershell_msvc_driver_execution": false,
+  "real_provider_calls_executed": false,
+  "ci_executed": false,
+  "runtime_smoke_executed": false,
+  "limitations": [
+    "No Rust/Cargo, PowerShell/MSVC or package registry access in the packaging environment.",
+    "Layout checks use actual JSX-derived markup and actual CSS with static hook snapshots; not the real application runtime.",
+    "GPU telemetry is best-effort, driver-dependent, machine/device-wide. Unknown fields are not zero.",
+    "No hardware acceleration, numerical correctness, provider billing or end-to-end scientific workflow claim is inferred from source tests."
+  ],
+  "archive_checks": "ZIP CRC, fresh extraction, byte comparison and internal SHA-256 verification performed by the release packaging script; external checksum identifies final ZIP bytes."
+}

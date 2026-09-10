@@ -1,0 +1,27 @@
+// Executes the real frontend API helper with a local fetch double. No network or provider calls.
+import fs from 'node:fs';import assert from 'node:assert/strict';
+const source=fs.readFileSync(new URL('../frontend/src/lib/api.js',import.meta.url),'utf8');
+const {api}=await import('data:text/javascript;base64,'+Buffer.from(source).toString('base64'));
+let calls=[];let body={ok:true};let status=200;
+globalThis.fetch=async(url,options={})=>{calls.push({url,options});return{status,ok:status>=200&&status<300,statusText:'mock',json:async()=>body};};
+let count=0;
+const last=()=>calls.at(-1);
+await api.saveProviderKey('open_ai',{api_key:'fixture-not-a-real-key'});
+assert.equal(last().options.method,'PUT');assert(last().url.endsWith('/api/providers/open_ai/key'));
+assert.deepEqual(JSON.parse(last().options.body),{api_key:'fixture-not-a-real-key'});count++;
+await api.saveProviderModel('open_ai','fixture-model');assert.deepEqual(JSON.parse(last().options.body),{model:'fixture-model'});count++;
+await api.providerModels('anthropic');assert(last().url.endsWith('/api/providers/anthropic/models'));count++;
+await api.usage();assert(last().url.endsWith('/api/usage'));count++;
+await api.saveUsageSettings({paused:true});assert.equal(last().options.method,'PUT');assert.deepEqual(JSON.parse(last().options.body),{paused:true});count++;
+await api.cancelChatRequest('test-id');assert(last().url.endsWith('/api/chat/requests/test-id/cancel'));assert.equal(last().options.method,'POST');count++;
+await api.cancelAllAgents();assert(last().url.endsWith('/api/chat/cancel-all'));count++;
+const controller=new AbortController();const payload={content:'fixture',request_id:'test',branch_from_message_id:'prior',attachments:[]};
+await api.sendMessage('world',payload,controller.signal);assert.equal(last().options.signal,controller.signal);assert.deepEqual(JSON.parse(last().options.body),payload);count++;
+await api.workflow(controller.signal);assert(last().url.endsWith('/api/workflow'));assert.equal(last().options.signal,controller.signal);count++;
+await api.telemetry(controller.signal);assert(last().url.endsWith('/api/telemetry'));count++;
+await api.findings('run-id',controller.signal);assert(last().url.endsWith('/api/runs/run-id/findings'));assert.equal(last().options.signal,controller.signal);count++;
+await api.explainRun('run-id',{request_id:'request',provider:null},controller.signal);assert(last().url.endsWith('/api/runs/run-id/explain'));assert.equal(last().options.method,'POST');assert.deepEqual(JSON.parse(last().options.body),{request_id:'request',provider:null});count++;
+await api.sendMessage('world',{content:'revise',source_run_id:'immutable-source',auto_run:false},controller.signal);assert.deepEqual(JSON.parse(last().options.body),{content:'revise',source_run_id:'immutable-source',auto_run:false});count++;
+status=422;body={error:{message:'Precise validation error'}};await assert.rejects(api.usage(),/Precise validation error/);count++;
+status=204;assert.equal(await api.deleteProject('test'),null);count++;
+console.log(`PASS ${count} real frontend API-helper checks with fetch doubles.`);

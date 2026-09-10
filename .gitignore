@@ -1,0 +1,45 @@
+# Rust
+/backend/target/
+**/*.rs.bk
+
+# Node / Next
+/frontend/node_modules/
+/frontend/.next/
+/frontend/out/
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+
+# Runtime and local secrets
+/data/
+*.sqlite3
+*.sqlite3-shm
+*.sqlite3-wal
+*.log
+.env
+.env.*
+!.env.example
+
+# IDE / OS
+.vscode/
+.idea/
+.DS_Store
+Thumbs.db
+
+# Python developer checks
+__pycache__/
+*.pyc
+
+# Independent verifier interpreter and transient scientific worker artifacts
+.phaseforge-verifier/
+
+# Local QA, desktop builds and packaging caches
+.local/
+node_modules/
+desktop/dist/
+desktop/.cache/
+desktop/runtime/
+artifacts/
+*.db
+*.db-wal
+*.db-shm

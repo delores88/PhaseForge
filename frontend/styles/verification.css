@@ -1,0 +1,41 @@
+/* No new navigation shell: this workflow lives inside Discovery and inherits both themes. */
+.verificationLab {display:grid;gap:17px;min-width:0;}
+.verificationHero {display:flex;align-items:center;justify-content:space-between;gap:28px;padding:25px 27px;background:linear-gradient(105deg,var(--surface),var(--accent-soft));border:1px solid var(--border);border-radius:14px;}
+.verificationHero h2{font-size:27px;margin:7px 0 10px;}.verificationHero p{max-width:760px;margin:0;}.verificationHero .button{flex-shrink:0;}
+.verificationTabs {display:flex;flex-wrap:wrap;gap:6px;}
+.verificationTabs button{padding:10px 15px;border:1px solid var(--border);border-radius:8px;color:var(--muted);background:var(--surface);font-size:12px;font-weight:650;}
+.verificationTabs button.active{border-color:var(--accent);color:var(--accent);background:var(--accent-soft);}
+.verificationProtocol{display:grid;gap:17px;}.verificationProtocol h3{margin:12px 0 0;}.verificationProtocol .discNotice{margin:0;}
+.verificationTable{overflow-x:auto;max-width:100%;min-width:0;border:1px solid var(--border);border-radius:8px;}
+.verificationTable table{border-collapse:collapse;min-width:650px;width:100%;font-size:12px;}
+.verificationTable th{background:var(--surface-2);color:var(--muted);text-align:left;font-weight:650;font-size:11px;}
+.verificationTable td,.verificationTable th{padding:10px;border-bottom:1px solid var(--border);vertical-align:top;}
+.verificationTable td{color:var(--text-soft);overflow-wrap:anywhere;}.verificationTable input{min-width:110px;}
+.verificationControl{display:grid;grid-template-columns:2fr 1.3fr 1fr 1fr;gap:11px;padding:16px;border:1px solid var(--border);border-radius:9px;background:var(--surface-2);}
+.verificationControl label:nth-of-type(5){grid-column:1/-1;}.verificationControl button{justify-self:start;}
+.verificationReferences{display:grid;gap:12px;padding:18px;border:1px solid var(--border);border-radius:10px;background:var(--surface-2);}
+.verificationReferenceList{display:grid;gap:7px;max-height:245px;overflow:auto;}
+.verificationReferenceList .discCheck{align-items:flex-start;}.verificationReferenceList strong,.verificationReferenceList small{display:block;}
+.verificationReferenceForm{display:grid;gap:12px;padding:16px;background:var(--surface);border:1px solid var(--border);border-radius:9px;}
+.verificationDossierPicker{max-width:780px;}.verificationVerdict{display:grid;gap:14px;}.verificationVerdict>h3{font-size:19px;line-height:1.5;max-width:900px;}
+.verificationVerdict .button{justify-self:start;}
+.verificationGates{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:10px;}
+.verificationGates article{display:flex;align-items:flex-start;gap:11px;padding:14px;border:1px solid var(--border);background:var(--surface-2);border-radius:9px;min-width:0;}
+.verificationGates svg{color:var(--warning);flex:0 0 auto;}.verificationGates article.good svg{color:var(--success);}
+.verificationGates strong,.verificationGates small{display:block;}.verificationGates strong{font-size:13px;margin-top:4px;text-transform:capitalize;}
+.verificationProgress{display:flex;align-items:center;justify-content:space-between;gap:20px;padding:15px;background:var(--accent-soft);border-radius:9px;}.verificationProgress>div{flex:1;min-width:0;display:grid;gap:8px;}
+.verificationProgress progress{width:100%;height:8px;accent-color:var(--accent);}.verificationProgress span{font-size:12px;color:var(--muted);}
+.verificationCheckGroup{margin:15px 0;}.verificationCheckGroup h4{font-size:14px;text-transform:capitalize;}
+.verificationPriorResult{padding:15px;margin:12px 0;border:1px solid var(--border);border-left:3px solid var(--accent);border-radius:9px;background:var(--surface-2);}
+.verificationPriorResult>strong{font-size:14px;color:var(--text);}.verificationPriorResult span,.verificationPriorResult small{display:block;margin-top:6px;font-size:12px;overflow-wrap:anywhere;}
+.verificationSearchRecord{margin-top:20px;padding:17px;border:1px solid var(--border);border-radius:10px;}.verificationSearchRecord>div{padding:12px 0;border-top:1px solid var(--border);}
+.verificationSearchRecord>div strong,.verificationSearchRecord>div span{display:block;font-size:12px;}.verificationSearchRecord a{display:block;color:var(--accent);margin-top:4px;font-size:12px;overflow-wrap:anywhere;}
+.verificationInspector{margin:20px 0 4px;padding:16px;border:1px solid var(--border);border-radius:10px;}.verificationInspector summary{cursor:pointer;color:var(--text);font-weight:650;font-size:13px;}.verificationInspector[open] summary{margin-bottom:15px;}
+.verificationSignal{padding:12px;margin:12px 0;background:var(--surface-2);border-radius:9px;}.verificationSignal strong{display:block;font-size:12px;}.verificationSignal svg{display:block;width:100%;height:auto;margin:8px 0;}.verificationSignal circle{fill:var(--accent);}.verificationSignal .axes{fill:none;stroke:var(--muted);stroke-width:1;}
+.discoveryTabs{flex-wrap:wrap;}.verificationLab a{overflow-wrap:anywhere;}.verificationLab .discoveryCard>label{margin:12px 0;}.verificationLab .discoveryCard .discCheck{display:flex;}
+@media(max-width:1100px){.verificationHero{align-items:flex-start;flex-direction:column;gap:14px;}.verificationGates{grid-template-columns:1fr;}.verificationControl{grid-template-columns:1fr 1fr;}}
+@media(max-width:640px){.verificationHero{padding:19px;}.verificationHero h2{font-size:23px;}.verificationControl{grid-template-columns:1fr;}.verificationProgress{align-items:stretch;flex-direction:column;}.verificationTabs{display:grid;grid-template-columns:1fr 1fr;}.verificationTabs button{padding:10px 7px;font-size:11px;}.verificationReferences{padding:12px;}.verificationTable td,.verificationTable th{padding:8px;}}
+/* Paragraph notices must wrap prose as text, not independent flex items. */
+.verificationLab p.discNotice { display:block; }
+.verificationLab label.discCheck { display:flex;align-items:flex-start;gap:10px; }
+.verificationLab .discCheck input[type="checkbox"] { width:16px;height:16px;min-height:16px;flex:0 0 16px;margin:3px 0 0; }

@@ -1,0 +1,83 @@
+{
+  "assistant_message": "An exploratory equation has been built; parameters are not measured data.",
+  "action": "create_manifest",
+  "manifest": {
+    "title": "Schema regression fixture",
+    "question": "Does this test contract validate?",
+    "scientific_boundary": "A representation test, not evidence about nature.",
+    "hypothesis": "No scientific claim.",
+    "model": {
+      "kind": "state_vector_ode",
+      "variables": [
+        {
+          "name": "x",
+          "unit": "",
+          "initial": 0
+        }
+      ],
+      "derivatives": [
+        {
+          "variable": "x",
+          "expression": "1"
+        }
+      ]
+    },
+    "constants": [],
+    "trajectory": [],
+    "integration": {
+      "method": "rk4",
+      "start_time": 0,
+      "end_time": 1,
+      "time_step": 0.01,
+      "output_stride": 1,
+      "max_steps": 100
+    },
+    "search": {
+      "enabled": false,
+      "algorithm": "none",
+      "variables": [],
+      "objectives": [],
+      "population": 2,
+      "generations": 1,
+      "elite_fraction": 0.2,
+      "mutation_scale": 0.1,
+      "seed": 1
+    },
+    "observables": [
+      {
+        "name": "state",
+        "expression": "x",
+        "unit": "1"
+      }
+    ],
+    "constraints": [],
+    "visualization": {
+      "scene": null,
+      "entities": [],
+      "kind": "trajectory",
+      "x": "t",
+      "y": "x",
+      "z": "0",
+      "point_size": 1,
+      "max_frames": 100,
+      "trails": true
+    },
+    "falsification": [],
+    "compute": {
+      "preference": "cpu",
+      "policy": "interactive",
+      "candidate_count": 1,
+      "batch_size": 0,
+      "max_wall_seconds": 30,
+      "max_memory_mb": 1024
+    },
+    "limitations": [
+      "Test fixture only."
+    ]
+  },
+  "research_plan": null,
+  "requested_capability": "",
+  "capability_gap_reason": "",
+  "suggested_extension": "",
+  "should_run": false
+}

@@ -1,0 +1,50 @@
+name: Desktop packages (no release publication)
+on:
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  package:
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - {runner: windows-2025, platform: win, arch: x64}
+          - {runner: windows-11-arm, platform: win, arch: arm64}
+          - {runner: ubuntu-24.04, platform: linux, arch: x64}
+          - {runner: ubuntu-24.04-arm, platform: linux, arch: arm64}
+    runs-on: ${{ matrix.runner }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with: {node-version: '22'}
+      - uses: dtolnay/rust-toolchain@stable
+      - uses: actions/setup-python@v5
+        with: {python-version: '3.12'}
+      - if: runner.os == 'Linux'
+        run: sudo apt-get update && sudo apt-get install -y pkg-config libdbus-1-dev libssl-dev libfuse2 libopenjp2-tools
+      - run: cargo test --locked --all-targets
+        working-directory: backend
+      - run: cargo build --locked --release
+        working-directory: backend
+      - run: npm ci --no-audit --no-fund
+        working-directory: frontend
+      - run: node --test frontend/tests/scene.test.mjs
+      - run: npm run build
+        working-directory: frontend
+      - run: npm ci --no-audit --no-fund
+        working-directory: desktop
+      - run: npm test
+        working-directory: desktop
+      - run: node scripts/stage-desktop.mjs
+      - run: npm run package:${{ matrix.platform }}:${{ matrix.arch }}
+        working-directory: desktop
+      - uses: actions/upload-artifact@v4
+        with:
+          name: PhaseForge-${{ matrix.platform }}-${{ matrix.arch }}
+          path: |
+            desktop/dist/*.exe
+            desktop/dist/*.AppImage
+            desktop/dist/*.deb
+          if-no-files-found: error
+          retention-days: 14

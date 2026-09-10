@@ -1,0 +1,45 @@
+{
+  "release": "PhaseForge",
+  "version": "0.5.0",
+  "recorded_at_utc": "2026-09-07T14:28:12.261075+00:00",
+  "baseline": {
+    "name": "PhaseForge-0.4.0-FULL.zip",
+    "sha256": "9faaefae7bd85e83570e8a6307bf25921148a60312808c68d84709dc62a58639",
+    "original_project_paths_preserved": true,
+    "cargo_dependency_declarations_unchanged": true,
+    "npm_dependency_declarations_unchanged": true
+  },
+  "executed": {
+    "strict_proposal_schema_tests": 19,
+    "frontend_api_fetch_double_checks": 15,
+    "lab_view_model_checks": 23,
+    "discovery_view_model_checks": 29,
+    "independent_reference_and_integrity_tests": 23,
+    "verification_ui_and_fetch_helper_checks": 41,
+    "independent_verification_worker_tests": 34,
+    "source_contract_audit_gates": 95,
+    "discovery_chromium_static_layout_fixtures": 18,
+    "verification_chromium_static_layout_fixtures": 24,
+    "frontend_js_jsx_files_parsed": 45,
+    "rust_source_files_lexically_checked": 43
+  },
+  "native_rust_unit_tests_added": 26,
+  "native_cargo_build_test_executed": false,
+  "nextjs_production_build_executed": false,
+  "real_react_hydration_executed": false,
+  "real_webgl_renderer_executed": false,
+  "windows_powershell_msvc_driver_execution": false,
+  "real_provider_calls_executed": false,
+  "live_crossref_query_executed": false,
+  "real_discovery_campaign_api_executed": false,
+  "real_native_verification_api_executed": false,
+  "native_research_zip_export_executed": false,
+  "ci_executed": false,
+  "boundaries": [
+    "Executed verifier tests really compute analytic controls, a SciPy DOP853 comparison when available, process CLI/checkpoints, provenance and failure cases, but do not run the Rust service.",
+    "Chromium fixtures render actual JSX through minimal hook/network doubles, not live React/Next hydration or a real API.",
+    "The optional verifier uses shipped static Python 3.10+ code and its standard library. No generated code or pip/scientific packages execute in that lane.",
+    "Native compile, orchestration, windows installs, live provider/Crossref and research export still require native/CI acceptance. No scientific novelty, correctness of a physical model or publication acceptance is inferred."
+  ],
+  "archive_acceptance": "See the external PhaseForge-0.5.0-PACKAGE_REPORT.json for actual final CRC, clean extraction, exact baseline path retention, byte comparison and checksums."
+}

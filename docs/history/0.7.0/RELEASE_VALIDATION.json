@@ -1,0 +1,31 @@
+{
+  "version": "0.7.0",
+  "date": "2026-09-08",
+  "release_type": "complete incremental source project",
+  "baseline": "0.6.0",
+  "baseline_paths_retained": 197,
+  "executed": {
+    "python_unittest": 111,
+    "javascript_helper_checks": 165,
+    "jsx_handler_checks": 19,
+    "chromium_static_layouts": 122,
+    "source_audit_gates": 119,
+    "frontend_syntax_files": 51,
+    "rust_module_paths": 50,
+    "lexical_delimiter_files": 59,
+    "python_compilation_files": 20,
+    "bash_syntax_files": 5
+  },
+  "not_executed": [
+    "Native Rust compile/tests",
+    "Full Next.js production build and hydration",
+    "Windows installation/keyring and physical GPU",
+    "Live model-provider or public-source calls",
+    "Native-backend acceptance tests"
+  ],
+  "additional_native_unit_tests_supplied": 12,
+  "native_acceptance": "tests/experiment_runtime_smoke.py",
+  "dependency_versions_unchanged": true,
+  "legacy_verifier_hashes_unchanged": true,
+  "scientific_novelty_certified": false
+}

@@ -1,0 +1,15 @@
+import fs from 'node:fs';
+import path from 'node:path';
+import {fileURLToPath} from 'node:url';
+import {execFileSync} from 'node:child_process';
+const root=path.resolve(path.dirname(fileURLToPath(import.meta.url)),'..');
+const arch=process.arch,os=process.platform==='win32'?'win':process.platform;
+if(!['win','linux'].includes(os)||!['x64','arm64'].includes(arch))throw Error('Build on Windows or Linux x64/ARM64. Cross-labelled native binaries are not accepted.');
+const binary=path.join(root,'backend','target','release',os==='win'?'phaseforge-backend.exe':'phaseforge-backend');
+const version=JSON.parse(fs.readFileSync(path.join(root,'desktop/package.json'),'utf8')).version;
+const actual=execFileSync(binary,['--version'],{encoding:'utf8'}).trim();
+if(actual!==`PhaseForge ${version}`)throw Error(`Rebuild the native engine: expected ${version}, got ${actual}`);
+if(!fs.existsSync(path.join(root,'frontend/out/index.html')))throw Error('Build the frontend before packaging.');
+const dest=path.join(root,'desktop','runtime',os,arch);fs.mkdirSync(dest,{recursive:true});fs.copyFileSync(binary,path.join(dest,path.basename(binary)));
+fs.writeFileSync(path.join(dest,'build.json'),JSON.stringify({version,platform:process.platform,architecture:arch,sourceCommit:execFileSync('git',['rev-parse','HEAD'],{cwd:root,encoding:'utf8'}).trim(),sourceDirty:!!execFileSync('git',['status','--porcelain'],{cwd:root,encoding:'utf8'}).trim(),builtAt:new Date().toISOString()},null,2)+'\n');
+console.log(`Staged ${actual}, ${os}/${arch}`);

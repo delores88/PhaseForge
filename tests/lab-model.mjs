@@ -1,0 +1,30 @@
+// Executes shipped display/view-model logic, without React, drivers or remote providers.
+import fs from 'node:fs';import assert from 'node:assert/strict';
+const source=fs.readFileSync(new URL('../frontend/src/lib/lab.js',import.meta.url),'utf8');
+const lab=await import('data:text/javascript;base64,'+Buffer.from(source).toString('base64'));
+let passed=0;function test(name,fn){fn();passed++;console.log('PASS',name);}
+test('unknown resource is not zero',()=>{for(const x of [null,undefined,'',false,{},[],'N/A','NaN'])assert.equal(lab.finite(x),null);});
+test('real zero stays zero',()=>{assert.equal(lab.finite(0),0);assert.equal(lab.number(0),'0');assert.equal(lab.bytes(0),'0 B');});
+test('MiB bytes scale',()=>assert(lab.bytes(1073741824).includes('GiB')));
+test('unknown capacity cannot produce percentage',()=>{assert.equal(lab.memoryPercent(100,null),null);assert.equal(lab.memoryPercent(0,0),null);});
+test('memory pressure ratio',()=>assert.equal(lab.memoryPercent(2048,4096),50));
+test('percentage bounded',()=>{assert.equal(lab.percent(150),100);assert.equal(lab.percent(-1),0);});
+test('legacy green pass is downgraded',()=>assert.equal(lab.challengeStatus({survived:true,relative_change:0}),'inconclusive'));
+test('versioned passed check shown',()=>assert.equal(lab.challengeStatus({evidence_version:2,status:'passed'}),'passed'));
+test('unrecognized versioned verdict inconclusive',()=>assert.equal(lab.challengeStatus({evidence_version:2,status:'maybe'}),'inconclusive'));
+const frames=[{time:0,entities:[{id:'a',position:[0,0,0]}]},{time:2,entities:[{id:'a',position:[4,0,0]}]},{time:10,entities:[{id:'a',position:[20,0,0]}]}];
+test('irregular simulation timestamps interpolated',()=>{const s=lab.sampleFrames(frames,6);assert.equal(s.index,1);assert.equal(s.alpha,.5);});
+test('timeline clamps both ends',()=>{assert.equal(lab.sampleFrames(frames,-2).index,0);assert.equal(lab.sampleFrames(frames,12).index,2);});
+test('interpolation uses identities not array order',()=>{assert.deepEqual(lab.interpolateEntity(frames[0].entities[0],frames[1].entities[0],.5),[2,0,0]);assert.deepEqual(lab.interpolateEntity(frames[0].entities[0],{id:'b',position:[100,0,0]},.5),[0,0,0]);});
+test('invalid-only frames cannot initialize a scene',()=>assert.deepEqual(lab.normalizedFrames([{time:0,entities:[{id:'x',position:[1,NaN,3]}]}]),[]));
+test('render budget preserves first and last frame',()=>{const f=Array.from({length:200},(_,i)=>({time:i,entities:Array.from({length:50},(_,j)=>({id:j,position:[j,i,0]}))}));const n=lab.normalizedFrames(f,4000,50,1000);assert.equal(n[0].time,0);assert.equal(n.at(-1).time,199);assert(n.reduce((sum,f)=>sum+f.entities.length,0)<=1000);});
+test('frame ordering normalized',()=>assert.deepEqual(lab.normalizedFrames([...frames].reverse()).map(f=>f.time),[0,2,10]));
+test('request progress does not invent a percentage',()=>{const p=lab.phaseDetails({requests:[{project_id:'p',phase:'requesting_model'}]},'p',null,false);assert.equal(p.stage,1);assert.equal(p.progress,undefined);});
+test('numerical progress is a work plan only',()=>{const p=lab.phaseDetails({runs:[{project_id:'p',status:'running',progress:.6,phase:'validating'}]},'p',null,true);assert.equal(p.progress,60);assert(p.detail.includes('not a wall-clock ETA'));});
+test('explanation follows numerical stage',()=>assert.equal(lab.phaseDetails({requests:[{project_id:'p',phase:'explaining_evidence'}]},'p',null,true).stage,4));
+test('new pending revision beats previous completed results',()=>{const p=lab.phaseDetails({},'p',{status:'completed'},true,false,true);assert.equal(p.stage,2);assert.equal(p.busy,false);});
+test('failed run is not success',()=>{const p=lab.phaseDetails({},'p',{status:'failed',error:'failed'},true);assert.equal(p.stage,3);assert.equal(p.busy,false);assert(p.label.includes('failed'));});
+test('late wide frame still respects the total render budget',()=>{const f=Array.from({length:10002},(_,i)=>({time:i,entities:i<10000?[{id:0,position:[0,0,0]}]:Array.from({length:500},(_,j)=>({id:j,position:[j,0,0]}))}));const n=lab.normalizedFrames(f,4000,500,1000);assert(n.reduce((total,frame)=>total+frame.entities.length,0)<=1000);assert.equal(n.at(-1).time,10001);});
+test('no frames stays empty',()=>assert.deepEqual(lab.normalizedFrames(null),[]));
+test('one valid point is retained without a synthetic path',()=>{const n=lab.normalizedFrames([{time:12,entities:[{id:'a',position:[2,4,6]}]}]);assert.equal(n.length,1);assert.deepEqual(n[0].entities[0].position,[2,4,6]);});
+console.log(`PASS ${passed} real lab view-model checks.`);
