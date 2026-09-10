@@ -50,4 +50,4 @@
 .alphaNotice{font-size:11px;text-transform:uppercase;letter-spacing:.06em;color:var(--accent);}
 .settingsAbout{padding:24px;}
 .settingsAbout p{max-width:85ch;line-height:1.7;font-size:13px;}
-@media(max-width:1050px){.primaryBrandImage{display:none!important;}.primaryBrandSymbol.brandDark{display:block;}:root[data-theme="light"] .primaryBrandSymbol.brandDark{display:none;}:root[data-theme="light"] .primaryBrandSymbol.brandLight{display:block;}.primaryBrand{align-items:center;}}
+@media(max-width:950px){.primaryBrandImage{display:none!important;}.primaryBrandSymbol.brandDark{display:block;}:root[data-theme="light"] .primaryBrandSymbol.brandDark{display:none;}:root[data-theme="light"] .primaryBrandSymbol.brandLight{display:block;}.primaryBrand{align-items:center;}}

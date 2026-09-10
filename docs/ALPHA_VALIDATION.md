@@ -46,7 +46,14 @@ redirect rejection, key redaction and SQLite preservation tests are included in
 the full Rust result above. Runtime and dependency scanner findings remain
 separate from application regression tests.
 
-## Exact candidate packages
+## Superseded candidate packages
+
+The packages below are retained engineering evidence. They were superseded by a
+branding correction: the full wordmark previously disappeared at 1050 pixels
+while the sidebar stayed expanded until 950 pixels. The corrected CSS aligns
+those breakpoints. Original artwork and application theme colors are unchanged.
+Replacement packages must bind the corrected source before installation or
+release; the hashes below do not identify that correction.
 
 Both native jobs in [candidate run 34540332559](https://github.com/delores88/PhaseForge/actions/runs/34540332559)
 passed at clean source `b868e93b4a5ae4c356263684a515a8787ef5b4b7`.
@@ -84,8 +91,8 @@ The workflow verified all six attested subjects against a freshly obtained trust
 root. Subsequent local checksum/receipt consistency checks are not a separate
 cryptographic replay. Neither package has been published by the candidate workflow.
 
-Local installation and visual inspection of this same Windows installer on the
-developer's Windows 11 machine remain pending.
+Local installation and visual inspection on the developer's Windows 11 machine
+remain pending a replacement package from the corrected source.
 
 ## Security review status
 
