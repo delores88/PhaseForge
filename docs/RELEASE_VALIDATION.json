@@ -17,7 +17,7 @@
     "jsx_handlers": 19,
     "scene_tests": 17,
     "conversation_presentation_tests": 3,
-    "desktop_tests": 3,
+    "desktop_tests": 7,
     "source_audit": 122,
     "frontend_build": true,
     "rust_release_build": true,
@@ -107,15 +107,75 @@
       "bound_scene_fullscreen_checked": true,
       "bound_scene_all_five_http_downloads_match_bytes": true,
       "bound_scene_direct_worker_validation_seconds": 62.594,
-      "bound_scene_scope": "Per-job source coordinates and fingerprints retained; solvent exclusions disclosed. Env-Fab template placement, membrane and capsid are morphological reconstruction."
+      "bound_scene_scope": "Per-job source coordinates and fingerprints retained; solvent exclusions disclosed. Env-Fab template placement, membrane and capsid are morphological reconstruction.",
+      "installed_cad_acceptance": {
+        "source_commit": "6123022",
+        "job_id": "98e7a5ca-2f0d-4928-97e4-2a099c3dc56e",
+        "completed": true,
+        "execution_seconds": 2.97191,
+        "engine": "CadQuery 2.6.1",
+        "valid_solid": true,
+        "solid_count": 1,
+        "volume_mm3": 9938.486900714375,
+        "files": [
+          "model.step",
+          "model.stl"
+        ],
+        "input": "Fresh execution of the saved AI-designed plate"
+      },
+      "installed_blender_acceptance": {
+        "source_commit": "6123022",
+        "job_id": "e6928a16-1fb5-4065-89c4-53609c2bc943",
+        "completed": true,
+        "resolution": [
+          512,
+          512
+        ],
+        "samples": 32,
+        "elapsed_seconds": 5.109,
+        "max_seconds": 180,
+        "memory_budget_bytes": 2147483648,
+        "source_atoms": 1686,
+        "hidden_solvent_atoms": 127,
+        "actual_compute": {
+          "attempted_backend": "OPTIX",
+          "backend": "CPU",
+          "devices": [
+            "Cycles CPU"
+          ],
+          "fallback": "GPU render failed: Error: System is out of GPU memory\nError: System is out of GPU memory\n",
+          "probes": []
+        },
+        "all_five_downloaded_through_desktop_proxy": true,
+        "artifact_bytes": {
+          "render.png": 323873,
+          "scene.blend": 15093046,
+          "scene.glb": 10853756,
+          "renderer.json": 1906,
+          "input.json": 564150
+        },
+        "scope": "Observed bounded recovery from an OptiX GPU-memory error to CPU in the same authorized job; not arbitrary driver/process failure recovery"
+      },
+      "saved_source_selection_fix": {
+        "source_review_completed": true,
+        "material_regressions_found": false,
+        "frontend_build_passed": true,
+        "selected_job_original_source_retained": true,
+        "scene_bindings_and_recorded_camera_preserved": true,
+        "missing_source_blocks_render_instead_of_manifest_fallback": true,
+        "late_molecular_loads_gated_by_selection": true,
+        "saved_input_inspection_limit_bytes": 33554432,
+        "tests_passed": 7,
+        "installed_acceptance_pending": true
+      }
     },
     "cpu_only_tests_passed": 186,
     "viewer_lifecycle_tests": 4,
     "research_helper_tests": 25,
     "viewer_resource_tests": 2,
-    "frontend_node_tests": 30,
+    "frontend_node_tests": 38,
     "javascript_helper_suites_passed": true,
-    "test_counts_note": "Frontend Node total of 30 predates the latest targeted 17-test scene run. Viewer-resource suite has 2 tests; lifecycle regressions are subsets. Desktop tests are separate. No unverified combined helper total is reported.",
+    "test_counts_note": "Combined Node run passed 45 tests: 38 frontend plus 7 desktop. Scene, resource, model, molecular, conversation and saved-source selection counts are subsets; lifecycle regressions are subsets. No unverified combined helper total is reported.",
     "blackhole_scoped_baseline": {
       "model": "gpt-6-astra",
       "reasoning": "medium",
@@ -151,7 +211,72 @@
       "doi_results": 5,
       "results_visible_in_ui": true,
       "scope": "Metadata retrieval only; relevance varies. Earlier orbital inputs remain illustrative and no stellar census is established."
-    }
+    },
+    "blackhole_original_prompt_installed_retest": {
+      "installed_source_commit": "6123022",
+      "original_prompt_unchanged": true,
+      "model": "gpt-6-astra",
+      "reasoning": "medium",
+      "research_mode": true,
+      "output_token_ceiling": 12000,
+      "request_id": "fbe46bf9-dd29-4f49-a15a-46edc731e699",
+      "manifest_id": "aa333c09-91d6-44e4-a0c7-58337728fc08",
+      "run_id": "74bd5f2e-0915-4060-85bd-51ae0c67e0f0",
+      "completed": true,
+      "backend": "Rayon CPU / f64",
+      "integration_method": "rk4",
+      "state_dimension": 12,
+      "steps": 10000,
+      "simulated_myr": 50,
+      "execution_seconds": 2.250268,
+      "frames": 501,
+      "scene_nodes": 5,
+      "conservation_checks_passed": 2,
+      "challenges": [
+        {
+          "name": "time_resolution",
+          "kind": "ResolutionLadder",
+          "status": "passed",
+          "trials": 2,
+          "comparisons_passed": 6
+        },
+        {
+          "name": "bulge_mass_sensitivity",
+          "kind": "ParameterPerturbation",
+          "status": "passed",
+          "trials": 2,
+          "comparisons_passed": 3
+        }
+      ],
+      "point_energy_error": 6.381893973055811e-15,
+      "bulge_energy_error": 1.1405180582468042e-14,
+      "point_residence_myr": 9.192013981220272,
+      "bulge_residence_myr": 50.0,
+      "recorded_public_catalog_searches": 2,
+      "research_assets_attached": 1,
+      "full_object_census_completed": false,
+      "observational_calibration": false,
+      "scope": "Runnable bounded interpretation of the unchanged original prompt: alternative evolutions of one hypothetical tracer in fixed black-hole-only and black-hole-plus-Hernquist-bulge potentials. Not catalogued objects or interacting bodies. Historical output-limit failures remain retained."
+    },
+    "interim_installed_acceptance": {
+      "source_commit": "6123022",
+      "accepted": true,
+      "installer_bytes": 117740097,
+      "installer_sha256": "E95F37B0678757A5A7E86F635BD1BB15BF1EBE3231796C2247478F74489260BF",
+      "saved_projects_preserved": 7,
+      "existing_credential_preserved": true,
+      "openai_model_entries": 71,
+      "native_fullscreen_enter_passed": true,
+      "native_fullscreen_exit_passed": true,
+      "recommended_selection": {
+        "model": "gpt-6-astra",
+        "reasoning": "max",
+        "additional_generation_call": false
+      },
+      "scope": "Interim installed acceptance; subsequent viewer source-selection corrections require another package. This is not the final installer checksum."
+    },
+    "frontend_and_desktop_node_tests": 45,
+    "studio_source_selection_tests": 7
   },
   "pending": [
     "Final Windows x64 installation acceptance",
@@ -182,9 +307,11 @@
       "id": 34531093553,
       "status_when_recorded": "running"
     },
-    "additional_viewer_corrections_pending_verification": false,
+    "additional_viewer_corrections_pending_verification": true,
     "latest_application_targeted_scene_tests_passed": 17
   },
-  "source_application_commit": "5a26384",
-  "build_source_commit": null
+  "source_application_commit": "6123022",
+  "build_source_commit": null,
+  "source_application_scope": "Latest installed acceptance snapshot; saved-source correction passes source review, tests and frontend build but awaits final installed acceptance and build provenance",
+  "final_installer_sha256": null
 }

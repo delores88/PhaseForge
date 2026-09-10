@@ -24,7 +24,7 @@ No GitHub release has been published for this overhaul. See the
    call. A changed experiment receives an immutable revision.
 5. Open **Agents** for a timed research session with specialist collaborators,
    experiment building, simulation, evidence review and bounded follow-up cycles.
-6. Use **Studio** for a **3D scene**, **CAD / fabrication**, or **Circuit board**.
+6. Open **3D & fabrication** for a **3D scene**, **CAD / fabrication**, or **Circuit board**.
    **Build design** saves a declarative artifact. Inspect it, then choose
    **Render in Blender** or **Build engineering files** for local execution.
 

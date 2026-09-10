@@ -2,7 +2,8 @@
 
 Date: 2026-09-10. Unreleased development build. Historical reports are retained in
 `docs/history/`; their unexecuted or static checks are not current runtime evidence.
-Application source commit: `5a26384`. Final package-build provenance remains pending.
+Latest installed acceptance snapshot: `6123022`. Final installation of the
+saved-source correction and final package-build provenance remain pending.
 
 ## Executed on Windows x64
 
@@ -21,10 +22,11 @@ Machine: Windows 11, RTX 4090 Laptop GPU (16 GiB VRAM), approximately 32 GiB RAM
 | Research upgrade and equation editor | 30 + 5 passed | Measurements and emitted equation setups |
 | Existing JavaScript helper suites | Passed; research helpers: 25 checks | API, lab, experiment, research, discovery, verification; no unverified combined total |
 | JSX event-handler checks | 19 passed | Actual callbacks with deterministic hook doubles |
-| Frontend Node tests | 30 passed | Model intake, molecular surfaces, procedural scenes, lifecycle and conversation presentation; the following scene/presentation counts are subsets |
-| Procedural scene and lifecycle tests | Latest targeted scene suite: 17 passed; resource suite: 2 passed | Four preset geometries, disposal, budgets, mesh validation, trajectory binding and opacity; includes a correction after the 30-test frontend run |
+| Frontend Node tests | 38 passed | Model intake, molecular surfaces, procedural scenes, lifecycle, conversation presentation and seven saved-source selection tests; scene/presentation counts below are subsets |
+| Procedural scene and lifecycle tests | Scene suite: 17 passed; resource suite: 2 passed | Four preset geometries, disposal, budgets, mesh validation, trajectory binding and opacity |
 | Research conversation presentation | 3 passed | Team attribution, retained audit data, legacy session display and ordinary user text |
-| Desktop proxy tests | 3 passed | Static export, host/origin checks, traversal, interrupted upstream connection |
+| Desktop tests | 7 passed | Static proxy, host/origin checks, traversal, interrupted upstream connection, scoped fullscreen permissions and policy packaging |
+| Combined frontend and desktop Node run | 45 passed | 38 frontend plus 7 desktop; these are the same tests listed above, not additional checks |
 | Source audit | 122 gates passed | Integration contracts and shipping file/credential checks; not a native build |
 
 ## Live OpenAI build–run–review session
@@ -47,12 +49,13 @@ check, not biomedical validation.
 
 ## Scoped Galactic-center experiment
 
-The original request to gather nearby-object data and simulate everything within
-5,000 light years of Sagittarius A* remains incomplete. Two inspected broad
-attempts reached the provider's output ceiling without an accepted manifest or
-submitted numerical run. The successful follow-up explicitly narrowed the prompt
-to one illustrative S2-like test star around a fixed central point mass; this was
-not autonomous completion of the original request.
+Two earlier attempts at the original request to gather nearby-object data and
+simulate everything within 5,000 light years of Sagittarius A* reached the
+provider's output ceiling without an accepted manifest or numerical run. A first
+successful follow-up explicitly narrowed the prompt to one illustrative S2-like
+test star around a fixed central point mass. A later installed-app retest of the
+unchanged original prompt also produced a completed bounded model, as recorded
+below. Neither executable stage constitutes a complete observed-object census.
 
 GPT-6 Astra/medium generated and submitted that six-state Newtonian baseline.
 CPU/f64 RK4 completed 64,000 steps over 32 simulated years in 2.168 seconds,
@@ -73,6 +76,27 @@ completed in 1.17 seconds and exposed five DOI-bearing literature results in the
 It included an S2-orbit paper alongside less relevant Sagittarius matches. This
 verifies public metadata retrieval and visible citations; it does not retroactively
 source the earlier illustrative orbital parameters or establish a stellar census.
+
+The unchanged original prompt was then retested on installed commit `6123022`
+using OpenAI GPT-6 Astra/medium, research mode enabled and the existing 12,000-token
+output ceiling. It produced accepted manifest `aa333c09-91d6-44e4-a0c7-58337728fc08`
+and completed run `74bd5f2e-0915-4060-85bd-51ae0c67e0f0`. This time the model selected
+an executable interpretation: compare one hypothetical tracer under black-hole-only
+gravity with the same tracer under black-hole-plus-Hernquist-bulge gravity, inside
+a diagnostic 5,000-light-year sphere. The two trajectories are alternative model
+evolutions, not catalogued stars or interacting bodies.
+
+The 12-state CPU/f64 RK4 system completed 10,000 steps over 50 simulated Myr in
+2.250 seconds, retaining 501 frames and five scene nodes. Both energy-conservation
+constraints passed. A resolution ladder at half and quarter time steps passed all
+six declared comparisons; ±20% bulge-mass sensitivity trials passed all three
+declared comparisons. The hypothetical tracer spent 9.192 Myr inside the sphere
+under point-mass gravity and 50 Myr with the assumed bulge. These are conditional
+model results, not observations. The recorded research turn completed two catalog
+searches and attached one asset, but those materials supplied no usable stellar
+phase-space census or observational calibration. The installed workflow now turns
+the original broad prompt into a runnable, explicitly bounded experiment; the
+historical output-limit failures and missing population data remain disclosed.
 
 ## Scientific studio follow-up
 
@@ -106,6 +130,17 @@ The production UI now displays the large surface, collapses the design composer 
 saved work, removes the unrelated run footer, and keeps the model picker within the
 window. Public research mode and per-turn provider settings remain explicit controls.
 
+The saved-source correction was then reviewed and passed the frontend production
+build. Rerendering a saved job resolves that job's original scene, structure,
+bindings and recorded camera instead of borrowing the current experiment scene.
+The UI waits for a matching saved request and blocks rendering when it cannot
+recover that source. Imported models, imagery and engineering artifacts no longer
+fall through to an unrelated Blender scene. Selection changes cancel pending
+saved-input reads, and stale molecular loads cannot replace a newer selection.
+Seven source-selection tests cover these source contracts and bounded input reads.
+The independent JSX handler check passed all 19 checks, and the source audit
+passed all 122 gates. Final installed-app acceptance of this correction is pending.
+
 A second render submitted through the actual app API bound the full 4NCO complex
 to illustrative virion envelope placements and 1HSG coordinates to a separate
 protein node. Blender completed a 1024 × 1024, 48-sample image in 56.234 seconds
@@ -120,12 +155,31 @@ checked fullscreen with 1,091,365 expanded triangles. Source fingerprints, hidde
 solvent counts and coordinate mappings remain in the per-job evidence. The earlier
 62.594-second, 768-pixel test was a separate direct-worker validation.
 
+Installed commit `6123022` also ran fresh native jobs through the desktop proxy.
+The saved AI-designed plate completed again in 2.972 seconds with one valid solid
+and the same volume and STEP/STL outputs. A 512 × 512, 32-sample 1HSG render first
+attempted OptiX, which reported GPU memory exhaustion. The worker retried on CPU
+and completed in 5.109 seconds within the original 180-second deadline and 2 GiB
+RAM grant. All five render artifacts downloaded through the desktop proxy. This
+is an observed bounded GPU-to-CPU recovery; it does not establish recovery from
+every graphics-driver crash or arbitrary memory failure.
+
 ## Packaging and remaining acceptance
 
 The Windows x64 NSIS installer built and installed successfully with the existing
 projects and OS-stored credential preserved. The installed app opened the retained
 3D experiment with playback. An idle-engine crash test recovered a healthy native
 backend automatically in 4.95 seconds. The installer is unsigned.
+
+The `6123022` installer received a further local acceptance check: seven saved
+projects and the existing credential remained available, the OpenAI model list
+contained 71 entries, and the installed 3D viewport entered and exited native
+fullscreen after the scoped permission fix. The recommended Astra/max setting
+was selected without an additional model-generation call. This interim installer
+was 117,740,097 bytes with SHA-256
+`E95F37B0678757A5A7E86F635BD1BB15BF1EBE3231796C2247478F74489260BF`.
+Further viewer source-selection corrections require a new package; this checksum
+is not the final installer checksum.
 
 An earlier scientific CI run, `34530065047`, completed all three jobs successfully.
 At the recorded interim packaging check, Linux x64 and ARM64 packages succeeded
