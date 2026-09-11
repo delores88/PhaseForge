@@ -317,7 +317,11 @@ mod tests {
     }
     #[test]
     fn frozen_runtime_contract_refuses_missing_extra_modified_and_linked_members() {
-        let dir = tempfile::tempdir().unwrap(); let root = &dir.path().join("runtime"); fs::create_dir(root).unwrap(); let bytes = fixture(root); let token = CancellationToken::new();
+        let dir = tempfile::tempdir().unwrap();
+        // A newly owned fixture may inherit an 8.3 spelling from Windows TEMP.
+        // Keep inspected input paths canonical without relaxing the handle guard.
+        let parent = fs::canonicalize(dir.path()).unwrap();
+        let root = &parent.join("runtime"); fs::create_dir(root).unwrap(); let bytes = fixture(root); let token = CancellationToken::new();
         assert_eq!(verify_contract(root, RuntimeKind::Science, &bytes, &token).unwrap().file_count, 3);
         fs::write(root.join("surprise.py"), b"untracked").unwrap(); assert!(verify_contract(root, RuntimeKind::Science, &bytes, &token).is_err()); fs::remove_file(root.join("surprise.py")).unwrap();
         fs::write(root.join("Lib/os.py"), b"# fixture SOURCe\n").unwrap(); assert!(verify_contract(root, RuntimeKind::Science, &bytes, &token).is_err());

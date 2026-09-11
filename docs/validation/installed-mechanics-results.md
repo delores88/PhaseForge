@@ -4,7 +4,51 @@ The scientific criteria remain in
 [the frozen proposal](mechanics-lab-proposal.md) and
 [installed preregistration](installed-mechanics-preregistration.md).
 The separate [23-group component acceptance](mechanics-lab-results.md) passed.
-The installed gate has **not passed** as of the attempt recorded below.
+**Stage A installed numerical acceptance passed on 2026-09-11.** The ordinary-chat
+parent completed; native mechanics playback/navigation and the fresh reviewer
+variant remain deferred under the user's release reprioritization. This is not a
+claim that the complete installed review gate passed. Earlier failures remain below.
+
+## Corrected 0.9.0: Stage A numerical pass
+
+The frozen v3 request ran through the installed ordinary-chat API using
+`open_ai` / `gpt-5.6-sol`, medium effort and Timer Off for exactly two experiments.
+The installed backend was SHA-256
+`00878c10363d14f0648059168275b98ac531774c024d1c5b3362b5dcebeaf480`,
+with the bundled v2 runtime and unchanged mechanics worker `455056ac…c1d125`.
+The corrected JSON path preserved the exact preregistered timestep.
+
+Project `7a4e31d2-57ac-401c-a5c3-3ceb652d054e`, parent
+`1bb93598-07bf-4aec-a321-47961c24830a`, ran control
+`25f259f8-2ef2-48c2-9f9c-8e1d53843b0b` and reduced-speed intervention
+`88d8e7f2-72d8-4c34-afec-7e1b6d23143c` sequentially. Both completed 4,400
+steps and retained 1,101 states. The external observer paused the control after
+observing step 412; it stopped at checkpoint 428 with original process exit code 3,
+then resumed the same job. All 218 files captured at that checkpoint remained
+unchanged. These are actual application control/API and process-handle receipts,
+not a claim of observed native clicks.
+
+The unchanged frozen checker read the installed artifacts without executing a
+solver or calling a provider. Its
+[numerical report](../../.local/science/installed-mechanics/stage-a-0.9/numerical-audit/report.json)
+passed all declared comparisons, source/array hashes, reference acceleration,
+instrument consistency, retained images and pause-prefix checks. Position RMS
+errors were `1.7510e-6` and `4.6854e-6 L0`; relative energy drifts were
+`1.5221e-12` and `5.2600e-6`. The measured intervention/control period ratio was
+`0.6305118615`. Marker positions matched their stored coordinates within 0.6 pixels.
+Only the already-preregistered initial signed-zero hash canonicalization applied;
+no numerical threshold or physics was changed.
+
+The parent completed naturally at `2026-09-11T20:39:35.949Z`, after 29 model turns,
+47 tool calls and one retained compaction. Its
+[final controller receipt](../../.local/science/installed-mechanics/stage-a-0.9/final-controller.json)
+shows no active jobs. Isolated analysis `891cca51-4731-467c-9085-382159a05c1a`
+and an additional pinned view `ca7072cc-cdd5-4b1b-8f21-108ad3d05539` completed.
+The earlier additional-view attempt `8e02a346-2186-4af5-9c21-d5233cbaf5fa`
+failed on a color argument and remains retained; it did not rerun science.
+No fresh reviewer variant was requested or executed. The new analysis, final prose
+and extra view have not received the separate full independent review; release
+work and the requested CAR-T deliverable now take priority.
 
 ## Fourth checkpoint: input preservation failure before integration
 
@@ -57,7 +101,7 @@ the external controller exited and retained its
 [failure receipt](../../.local/science/installed-mechanics/stage-a-20260911/controller-failure.json).
 No replacement solver or reviewer variant was launched.
 
-## Native observation limit
+## Fourth-checkpoint native observation limit
 
 A read-only Windows UI Automation capture found the PhaseForge window titled
 “Application error: a client-side exception has occurred.” Its accessible document

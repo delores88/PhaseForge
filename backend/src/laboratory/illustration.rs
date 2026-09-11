@@ -8,6 +8,20 @@ use sha2::{Digest,Sha256};
 use crate::{app::AppState,studio::render::{RenderRequest,resolved_input}};
 use super::{LabJob,LaboratoryService,write_json,process};
 
+const MAX_SCENE_SOURCE_BYTES: usize = 4 * 1024 * 1024;
+
+pub fn admission_limits() -> Value {
+    let mut limits=crate::sandbox::scene_admission_limits();
+    limits["scene_source_json_bytes"]=json!(MAX_SCENE_SOURCE_BYTES);
+    limits["authoring_guidance"]=json!("Before writing a generated scene, count vertices, points and inline atoms across all nodes and check both compact UTF-8 JSON bytes and final file bytes. Use supported procedural primitive parameters instead of hand-tessellating large surfaces. Renderer's internal tessellation does not increase authored-input budgets. Preserve registered PDB coordinates in structure bindings; do not independently recenter chains or fabricate/decimate source coordinates to fit these authoring limits.");
+    limits
+}
+
+fn validate_scene_source_bytes(bytes:&[u8])->anyhow::Result<()> {
+    anyhow::ensure!(bytes.len()<=MAX_SCENE_SOURCE_BYTES,"Scene source JSON exceeds 4 MiB");
+    Ok(())
+}
+
 pub fn create(state:&Arc<AppState>,session:&LabJob,id:Uuid,args:&Value)->anyhow::Result<LabJob>{
     let job=state.laboratory.admit_illustration(session,id,args,||resolve_request(state,session,args))?;
     if job.state=="queued"&&!state.laboratory.executing(id){state.laboratory.start_illustration(id)?;}
@@ -55,7 +69,7 @@ fn resolve_scene_source(service:&LaboratoryService,project:Uuid,args:&Value)->an
     anyhow::ensure!(path.ends_with(".json"),"Scene source must be a data-only JSON artifact");
     let expected=reference["sha256"].as_str().context("Pin the retained scene source SHA256")?;
     let bytes=service.read_generated_artifact(id,path)?;
-    anyhow::ensure!(bytes.len()<=4*1024*1024,"Scene source JSON exceeds 4 MiB");
+    validate_scene_source_bytes(&bytes)?;
     let hash=format!("{:x}",Sha256::digest(&bytes));
     anyhow::ensure!(hash==expected,"Scene source bytes differ from the requested SHA256");
     let scene:Value=serde_json::from_slice(&bytes)?;
@@ -75,6 +89,20 @@ mod tests{
         (dir,service,parent)
     }
     fn saved_input(args:&Value)->Value{json!({"engine":"blender_cycles","request":args,"resolved":{"request":{"scene":{"nodes":[{"color":"blue"}]}},"presentation":{"camera":{"position":[1,2,3]},"contrast":1.25}}})}
+    #[test]fn advertised_admission_limits_enforce_retained_source_bytes_before_json_parsing(){
+        let (_dir,service,parent)=fixture();
+        let source=service.create(Uuid::new_v4(),parent.project_id,Some(parent.id),"generated","Scene size boundary",json!({}),None).unwrap();
+        service.update(source.id,|job|job.state="completed".into()).unwrap();
+        let scene=json!({"schema_version":"1.0","provenance":{"kind":"conceptual","description":"Bounded fixture"},"nodes":[{"id":"cell","type":"sphere","parameters":{"radius":1.0}}]});
+        let compact=serde_json::to_vec(&scene).unwrap();let cap=admission_limits()["scene_source_json_bytes"].as_u64().unwrap() as usize;
+        let root=service.directory(source.id);std::fs::create_dir_all(root.join("work")).unwrap();
+        for (length,accepted) in [(cap,true),(cap+1,false)] {
+            let mut bytes=compact.clone();bytes.resize(length,b' ');let hash=format!("{:x}",Sha256::digest(&bytes));
+            std::fs::write(root.join("work/scene.json"),&bytes).unwrap();write_json(&root.join("generated-artifacts.json"),&json!({"artifacts":[{"path":"work/scene.json","bytes":bytes.len(),"sha256":hash}]})).unwrap();
+            let result=resolve_scene_source(&service,parent.project_id,&json!({"scene_source":{"job_id":source.id,"path":"work/scene.json","sha256":hash}}));
+            if accepted{assert_eq!(result.unwrap().unwrap().0,scene);}else{assert!(result.unwrap_err().to_string().contains("4 MiB"));}
+        }
+    }
     #[test]fn retained_scene_source_requires_registered_exact_bytes_project_and_valid_data_schema(){
         let (_dir,service,parent)=fixture();
         let source=service.create(Uuid::new_v4(),parent.project_id,Some(parent.id),"generated","Scene authoring fixture",json!({}),None).unwrap();

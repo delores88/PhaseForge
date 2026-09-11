@@ -164,6 +164,19 @@ impl AgentService {
         output_recovery::reconcile(&state,id,&journal)?;
         self.reconcile_lab_compaction(&state,&job,&request,&journal_path,&mut journal,token).await?;
         let attachment_ids=data::references(&request).iter().map(|file|file.job_id).collect::<Vec<_>>();
+        if let Some(pending)=journal.pending.as_ref(){
+            let usage_id=Uuid::parse_str(pending["usage_id"].as_str().context("Pending usage receipt is invalid")?)?;
+            if let Some(row)=self.database.get_usage_record(usage_id)?.filter(|row|row.status=="not_sent"){
+                anyhow::ensure!(row.request_id==id&&row.project_id==Some(job.project_id)&&row.provider==provider&&row.model==model
+                    &&row.purpose=="laboratory_tool_turn"&&row.attempt==journal.round&&row.provider_response_id.is_none()&&!row.usage.reported
+                    &&pending["response_id"].is_null()
+                    &&!state.laboratory.directory(id).join(format!("provider-{:05}.json",journal.round)).exists(),
+                    "Unsent reservation does not match the saved dispatch or a provider receipt already exists");
+                // A durable local-preparation failure proves HTTP was never entered.
+                // Retain its usage row, but do not treat it as an uncertain paid call.
+                journal.pending=None;write_json(&journal_path,&journal)?;
+            }
+        }
         if let Some(pending)=journal.pending.clone(){
             let usage_id=Uuid::parse_str(pending["usage_id"].as_str().context("Pending usage receipt is invalid")?)?;
             let receipt_path=state.laboratory.directory(id).join(format!("provider-{:05}.json",journal.round));
@@ -232,10 +245,13 @@ impl AgentService {
             let tools=team::tools_for(&job,tool_definitions());
             let limit=self.usage.settings()?.max_output_tokens;
             let row=team::reserve_call(self,&state,id,provider,model,"laboratory_tool_turn",journal.round,context_cost_bytes(&context)+INSTRUCTIONS.len()+tools.to_string().len(),limit,token).await?;
-            let vision=native::save_dispatch(&state,id,row.id,provider,model,request.reasoning_effort.as_deref(),&journal,&context)?;
-            let image_call_ids=journal.image_outbox.iter().map(|image|image.call_id.clone()).collect::<Vec<_>>();
-            journal.pending=Some(json!({"usage_id":row.id,"round":journal.round,"started_at":Utc::now(),"state":"requesting","max_output_tokens":limit,"image_call_ids":image_call_ids,"vision":vision}));write_json(&journal_path,&journal)?;
-            state.laboratory.event(id,"model_started","The agent is interpreting evidence and choosing its next action.",json!({"usage_id":row.id,"round":journal.round,"model":model,"reasoning_effort":request.reasoning_effort}))?;
+            self.usage.prepare_request(row.id,||{
+                anyhow::ensure!(!token.is_cancelled(),"Session stopped before provider dispatch");
+                let vision=native::save_dispatch(&state,id,row.id,provider,model,request.reasoning_effort.as_deref(),&journal,&context)?;
+                let image_call_ids=journal.image_outbox.iter().map(|image|image.call_id.clone()).collect::<Vec<_>>();
+                journal.pending=Some(json!({"usage_id":row.id,"round":journal.round,"started_at":Utc::now(),"state":"requesting","max_output_tokens":limit,"image_call_ids":image_call_ids,"vision":vision}));write_json(&journal_path,&journal)?;
+                state.laboratory.event(id,"model_started","The agent is interpreting evidence and choosing its next action.",json!({"usage_id":row.id,"round":journal.round,"model":model,"reasoning_effort":request.reasoning_effort}))
+            })?;
             let response=tokio::select!{_=token.cancelled()=>Err(anyhow::anyhow!("Provider request interrupted; remote usage may remain billable")),r=client.request_tool_turn(&context,tools.as_array().unwrap(),INSTRUCTIONS,limit)=>r};
             let mut response=match response{
                 Ok(response)=>response,
@@ -376,7 +392,7 @@ impl AgentService {
             "import_structure"=>crate::laboratory::structure::import(&state.laboratory,session,target,args,token),
             "watch_experiment"=>monitor::watch(state,session,target,args,token,journal).await,
             "render_observation"=>{let job=crate::laboratory::observation::create(&state,session,target,args)?;Ok(json!({"job_id":job.id,"state":job.state,"scientific_rerun":false,"next":"Wait with inspect_result, inspect result.renderer for source frame/hash/camera, then call observe_frame on this job's first-frame.png. This is an additional camera view of retained numerical state, not the original checkpoint image."}))},
-            "scene_contract"=>Ok(json!({"schema":serde_json::from_str::<Value>(include_str!("../../../docs/scene.schema.json"))?,"renderer":"Blender Cycles","scope":"Explicit scientific illustration only. Use conceptual provenance for authored geometry; use a retained structure_id for real imported atom coordinates.","colors":"Use style=studio for requested colors; microscopy is intentionally grayscale.","large_scenes":"Use generated_experiment_contract and run_generated_experiment to construct a scene JSON file with concise code and loops in the isolated runtime. After completion obtain its artifact SHA256 and pass scene_source:{job_id,path,sha256} to render_illustration. The renderer validates the data-only scene and retains exact source pins; it never executes generated Blender Python.","next":"Call render_illustration with a data-only scene, scene_source or a project structure_id, then inspect_result and observe_frame on render.png."})),
+            "scene_contract"=>Ok(json!({"schema":serde_json::from_str::<Value>(include_str!("../../../docs/scene.schema.json"))?,"renderer":"Blender Cycles","admission_limits":crate::laboratory::illustration::admission_limits(),"scope":"Explicit scientific illustration only. Use conceptual provenance for authored geometry; use a retained structure_id for real imported atom coordinates.","colors":"Use style=studio for requested colors; microscopy is intentionally grayscale.","large_scenes":"Use generated_experiment_contract and run_generated_experiment to construct a scene JSON file with concise code and loops in the isolated runtime. Before writing, check aggregate authored vertices/points across all nodes and compact UTF-8 JSON plus final-file byte counts against admission_limits. Prefer supported procedural primitives and retained structure bindings; renderer tessellation is separate from authored-input budgets. After completion obtain its artifact SHA256 and pass scene_source:{job_id,path,sha256} to render_illustration. The renderer validates the data-only scene and retains exact source pins; it never executes generated Blender Python.","next":"Call render_illustration with a data-only scene, scene_source or a project structure_id, then inspect_result and observe_frame on render.png."})),
             "render_illustration"=>{let job=crate::laboratory::illustration::create(&state,session,target,args)?;Ok(json!({"job_id":job.id,"state":job.state,"next":"Wait with inspect_result, then inspect render.png. Scene and editable Blender/GLB assets are retained. No solver is run."}))},
             "delegate_specialist"=>team::delegate(self,state,session,args,target,token),
             "inspect_specialist"=>team::inspect(self,state,session,args,token).await,
@@ -583,6 +599,42 @@ mod receipt_recovery_tests {
         f.state.laboratory.update(f.job.id,|job|job.state="paused".into()).unwrap();row.id
     }
     fn exhausted_response()->Value{json!({"id":"saved_response","status":"incomplete","incomplete_details":{"reason":"max_output_tokens"},"max_output_tokens":12000,"output":[{"type":"reasoning","summary":[]},{"type":"function_call","call_id":"partial_render","name":"render_illustration","arguments":"{\"title\":\"CAR-T\",\"scene\":{","status":"incomplete"}],"usage":{"input_tokens":4817,"output_tokens":12000,"output_tokens_details":{"reasoning_tokens":7768}}})}
+    #[tokio::test]
+    async fn reservation_native_image_preparation_failure_never_posts_or_leaks_the_slot(){
+        let f=fixture().await;let path=f.state.laboratory.directory(f.job.id).join("journal.json");
+        let invalid=Journal{items:vec![json!({"role":"user","content":[{"type":"input_image","image_url":"data:image/png;base64,not-valid-base64!"}]})],..Default::default()};
+        write_json(&path,&invalid).unwrap();let original=std::fs::read(&path).unwrap();
+        assert!(f.state.agent.run_lab_session(f.state.clone(),f.job.id,&CancellationToken::new()).await.is_err());
+        assert!(f.posts.lock().is_empty());assert_eq!(*f.gets.lock(),0);assert_eq!(std::fs::read(&path).unwrap(),original);
+        let rows=f.state.database.list_usage_records().unwrap();assert_eq!(rows.len(),1);assert_eq!(rows[0].status,"not_sent");assert!(rows[0].provider_response_id.is_none());
+        assert!(f.state.agent.usage.report().unwrap()["active_calls"].as_array().unwrap().is_empty());
+        write_json(&path,&Journal{items:vec![json!({"role":"user","content":"Inspect saved fixture evidence."})],..Default::default()}).unwrap();
+        f.state.agent.run_lab_session(f.state.clone(),f.job.id,&CancellationToken::new()).await.unwrap();
+        assert_final_once(&f,"Tool continuation complete.");assert_eq!(f.posts.lock().len(),1);assert_eq!(*f.gets.lock(),0);
+        let retained=f.state.database.get_usage_record(rows[0].id).unwrap().unwrap();assert_eq!(serde_json::to_value(retained).unwrap(),serde_json::to_value(&rows[0]).unwrap());
+    }
+    #[tokio::test]
+    async fn reservation_saved_unsent_dispatch_recovers_without_retrieving_or_repeating_a_paid_call(){
+        let f=fixture().await;let usage=seed_pending(&f,None);let mut saved=journal(&f);saved.pending.as_mut().unwrap().as_object_mut().unwrap().remove("response_id");
+        write_json(&f.state.laboratory.directory(f.job.id).join("journal.json"),&saved).unwrap();
+        f.state.agent.usage.prepare_request::<()>(usage,||bail!("job event persistence failed before POST")).unwrap_err();
+        f.state.agent.run_lab_session(f.state.clone(),f.job.id,&CancellationToken::new()).await.unwrap();
+        assert_final_once(&f,"Tool continuation complete.");assert_eq!(f.posts.lock().len(),1);assert_eq!(*f.gets.lock(),0);
+        assert_eq!(f.state.database.get_usage_record(usage).unwrap().unwrap().status,"not_sent");
+        assert_eq!(f.state.database.list_usage_records().unwrap().len(),2);
+        f.state.agent.resume_lab_session(f.state.clone(),f.job.id).unwrap();assert_eq!(f.posts.lock().len(),1);
+    }
+    #[tokio::test]
+    async fn reservation_unsent_marker_cannot_discard_a_conflicting_retained_provider_receipt(){
+        let f=fixture().await;let usage=seed_pending(&f,Some(&answer("Already paid receipt.")));let mut saved=journal(&f);
+        saved.pending.as_mut().unwrap().as_object_mut().unwrap().remove("response_id");
+        write_json(&f.state.laboratory.directory(f.job.id).join("journal.json"),&saved).unwrap();
+        f.state.agent.usage.prepare_request::<()>(usage,||bail!("synthetic conflicting local marker")).unwrap_err();
+        let path=f.state.laboratory.directory(f.job.id).join("provider-00000.json");let original=std::fs::read(&path).unwrap();
+        let error=f.state.agent.run_lab_session(f.state.clone(),f.job.id,&CancellationToken::new()).await.unwrap_err();
+        assert!(error.to_string().contains("provider receipt already exists"));assert!(f.posts.lock().is_empty());assert_eq!(*f.gets.lock(),0);
+        assert_eq!(std::fs::read(&path).unwrap(),original);assert!(journal(&f).pending.is_some());
+    }
     #[tokio::test] async fn output_limit_recovery_replays_a_billed_receipt_once_without_executing_partial_tools(){
         let f=fixture().await;let body=exhausted_response();let usage=seed_pending(&f,Some(&body));
         f.state.agent.run_lab_session(f.state.clone(),f.job.id,&CancellationToken::new()).await.unwrap();

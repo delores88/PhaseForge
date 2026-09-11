@@ -83,10 +83,12 @@ and the acceptance of an exact release artifact:
   controlled comparison checked against an independent reference, with failed
   operational attempts preserved.
 - [Mechanics component results](docs/validation/mechanics-lab-results.md): the
-  independent component study passed. The
-  [installed mechanics gate](docs/validation/installed-mechanics-results.md) remains pending.
+  independent component study and installed two-run numerical comparison passed,
+  including checkpoint continuation and rendered-position checks. See the
+  [installed mechanics evidence](docs/validation/installed-mechanics-results.md)
+  for the completed checks and remaining scope.
 - [Installed ML study](docs/validation/installed-ml-study.md): full installed
-  evaluation remains pending; implementation and pilot checks do not establish
+  99-run evaluation is deferred; implementation and pilot checks do not establish
   predictive usefulness or acceleration.
 - [Bundled runtime checks](docs/validation/runtime-v2.md) and
   [Windows isolation](docs/SCIENTIFIC_ISOLATION.md): actual copied-runtime physics,

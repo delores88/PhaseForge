@@ -16,6 +16,10 @@ pub fn validate_scene(value: &serde_json::Value) -> anyhow::Result<()> {
     scene::validate(value)
 }
 
+pub fn scene_admission_limits() -> serde_json::Value {
+    scene::admission_limits()
+}
+
 const MAX_ODE_STEPS: usize = 2_000_000;
 const MAX_PARTICLE_STEPS: usize = 500_000;
 const MAX_SEARCH_CANDIDATES: usize = 1_000_000;

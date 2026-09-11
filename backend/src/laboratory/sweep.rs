@@ -79,6 +79,9 @@ mod tests {
         assert_eq!(service.sweep_retained_bytes(&sweep,&ledger).unwrap(),expected);
         let duplicate=ledger.cases[0].attempts[0];ledger.cases[0].attempts.push(duplicate);assert!(service.sweep_retained_bytes(&sweep,&ledger).is_err());
     }
+    // This exercises the validated Windows storage supervisor; other platforms
+    // refuse execution before reaching the retained-byte admission check.
+    #[cfg(windows)]
     #[tokio::test]async fn retained_failed_attempt_over_budget_prevents_new_solver_admission(){
         let temp=tempfile::tempdir().unwrap();let (service,project)=fixture(temp.path());let sweep=service.create(Uuid::new_v4(),project,None,"sweep","batch",input(),None).unwrap();
         let case=validate(&sweep.input).unwrap().cases.remove(0);let child_input=solver_input(&sweep,&case);

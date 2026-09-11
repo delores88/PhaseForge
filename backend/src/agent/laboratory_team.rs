@@ -32,7 +32,7 @@ pub(super) async fn reserve_call(agent:&AgentService,state:&AppState,job_id:Uuid
         anyhow::ensure!(!token.is_cancelled(),"Stopped while waiting for provider admission");
         match agent.usage.begin(job_id,Some(state.laboratory.get(job_id)?.project_id),provider,model,purpose,attempt,input_bytes,output_limit){
             Ok(row)=>{
-                if waiting{state.laboratory.update(job_id,|job|{if job.active(){job.state="running".into();job.event("model_slot_acquired","The configured provider-call slot is available.",json!({"usage_id":row.id}));}})?;}
+                if waiting{agent.usage.prepare_request(row.id,||state.laboratory.update(job_id,|job|{if job.active(){job.state="running".into();job.event("model_slot_acquired","The configured provider-call slot is available.",json!({"usage_id":row.id}));}}))?;}
                 return Ok(row);
             },
             Err(error) if error.downcast_ref::<crate::usage::ConcurrentCallLimit>().is_some()=>{

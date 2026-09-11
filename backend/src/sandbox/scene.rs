@@ -2,14 +2,33 @@ use anyhow::{bail, Context};
 use serde_json::Value;
 use std::collections::HashSet;
 
+const MAX_SCENE_JSON_BYTES: usize = 2 * 1024 * 1024;
+const MAX_NODES: usize = 64;
+const MAX_VERTICES: usize = 24_000;
+const MAX_POINTS: usize = 12_000;
+const MAX_INLINE_ATOMS: usize = 12_000;
+const MAX_BONDS: usize = 20_000;
+const MAX_INDICES_PER_NODE: usize = 72_000;
+
+pub(super) fn admission_limits() -> Value {
+    serde_json::json!({
+        "compact_scene_json_bytes":MAX_SCENE_JSON_BYTES,"nodes":MAX_NODES,
+        "authored_vertices_total":MAX_VERTICES,"authored_points_total":MAX_POINTS,
+        "inline_atoms_total":MAX_INLINE_ATOMS,"bonds_total":MAX_BONDS,
+        "triangle_indices_per_node":MAX_INDICES_PER_NODE,
+        "counting":"Totals sum authored arrays across every scene node; bonds include node and scene-level arrays. Registered structure bindings are validated separately. These are input limits, not renderer-generated tessellation limits.",
+        "json_measurement":"UTF-8 byte length of the compact serialized scene; raw retained scene_source files have an additional separate byte limit."
+    })
+}
+
 /// An authored, data-only scene is visual context, never an executable solver.
 pub(super) fn validate(scene: &Value) -> anyhow::Result<()> {
-    if serde_json::to_vec(scene)?.len() > 2 * 1024 * 1024 { bail!("scene exceeds the 2 MiB geometry budget"); }
+    if serde_json::to_vec(scene)?.len() > MAX_SCENE_JSON_BYTES { bail!("scene exceeds the 2 MiB geometry budget"); }
     if scene["schema_version"] != "1.0" { bail!("scene.schema_version must be 1.0"); }
     let kinds = ["conceptual", "computed", "measured"];
     if !kinds.contains(&scene["provenance"]["kind"].as_str().unwrap_or("")) || scene["provenance"]["description"].as_str().unwrap_or("").trim().is_empty() { bail!("scene must declare its provenance kind and description"); }
     let nodes=scene["nodes"].as_array().context("scene.nodes must be an array")?;
-    if nodes.len()>64 {bail!("scene supports at most 64 nodes");}
+    if nodes.len()>MAX_NODES {bail!("scene supports at most 64 nodes");}
     let types=["atom","molecule","dna","virus","protein","planet","star","black_hole","field","streamlines","mesh","curve","surface","box","sphere"];
     let mut ids=HashSet::new();let(mut vertices,mut points,mut atoms,mut bonds)=(0,0,0,0);
     for node in nodes {
@@ -18,20 +37,20 @@ pub(super) fn validate(scene: &Value) -> anyhow::Result<()> {
         if !types.contains(&node["type"].as_str().unwrap_or("")){bail!("unsupported scene node type");}
         for key in ["position","rotation","scale"] {if !node[key].is_null(){ vector(&node[key],key)?; }}
         let params=&node["parameters"];
-        for (key,count,max) in [("vertices",&mut vertices,24000),("points",&mut points,12000)] {
+        for (key,count,max) in [("vertices",&mut vertices,MAX_VERTICES),("points",&mut points,MAX_POINTS)] {
             if let Some(rows)=params[key].as_array(){*count+=rows.len();if *count>max{bail!("scene {key} geometry budget exceeded");}for row in rows{vector(row,key)?;}}
         }
-        if let Some(rows)=params["atoms"].as_array(){atoms+=rows.len();if atoms>12000{bail!("scene atom budget exceeded");}for row in rows{vector(&row["position"],"atom position")?;}}
+        if let Some(rows)=params["atoms"].as_array(){atoms+=rows.len();if atoms>MAX_INLINE_ATOMS{bail!("scene atom budget exceeded");}for row in rows{vector(&row["position"],"atom position")?;}}
         if let Some(rows)=params["bonds"].as_array(){bonds+=rows.len();}
         if let Some(indices)=params["indices"].as_array(){
             let count=params["vertices"].as_array().map_or(0,|v|v.len());
-            if indices.len()>72000||indices.len()%3!=0||indices.iter().any(|v|v.as_u64().is_none_or(|n|n>=count as u64)){bail!("scene mesh indices must reference complete valid triangles");}
+            if indices.len()>MAX_INDICES_PER_NODE||indices.len()%3!=0||indices.iter().any(|v|v.as_u64().is_none_or(|n|n>=count as u64)){bail!("scene mesh indices must reference complete valid triangles");}
         }
         for key in ["radius","length","thickness"]{if !params[key].is_null()&&params[key].as_f64().is_none_or(|n|!n.is_finite()||n<=0.0||n>1e12){bail!("scene {key} must be finite, positive, and at most 1e12");}}
         if node["type"] == "dna" { validate_dna(params)?; }
     }
     if let Some(rows)=scene["bonds"].as_array(){bonds+=rows.len();for row in rows{if !ids.contains(row["from"].as_str().unwrap_or(""))||!ids.contains(row["to"].as_str().unwrap_or("")){bail!("scene bonds must reference existing node ids");}}}
-    if bonds>20000{bail!("scene bond budget exceeded");}
+    if bonds>MAX_BONDS{bail!("scene bond budget exceeded");}
     if !scene["camera"].is_null(){vector(&scene["camera"]["position"],"camera position")?;vector(&scene["camera"]["target"],"camera target")?;}
     Ok(())
 }
@@ -56,6 +75,23 @@ fn vector(value:&Value,label:&str)->anyhow::Result<()>{
     use super::*;use serde_json::json;
     fn scene()->Value{json!({"schema_version":"1.0","provenance":{"kind":"conceptual","description":"Illustrative surface"},"nodes":[{"id":"membrane","type":"virus","position":[0,0,0]}]})}
     #[test]fn accepts_labelled_context(){assert!(validate(&scene()).is_ok());}
+    #[test]fn advertised_admission_limits_enforce_aggregate_geometry_and_compact_bytes(){
+        let limits=admission_limits();
+        for (array,field) in [("vertices","authored_vertices_total"),("points","authored_points_total"),("atoms","inline_atoms_total")] {
+            let cap=limits[field].as_u64().unwrap() as usize;
+            let row=if array=="atoms"{json!({"position":[0,0,0]})}else{json!([0,0,0])};
+            let mut s=scene();let mut second=s["nodes"][0].clone();second["id"]=json!("second");s["nodes"].as_array_mut().unwrap().push(second);
+            s["nodes"][0]["parameters"]=json!({array:vec![row.clone();cap/2]});
+            s["nodes"][1]["parameters"]=json!({array:vec![row.clone();cap-cap/2]});
+            assert!(validate(&s).is_ok(),"{array} exactly at aggregate advertised cap");
+            s["nodes"][1]["parameters"][array].as_array_mut().unwrap().push(row);
+            assert!(validate(&s).unwrap_err().to_string().contains("budget"),"{array} cap must apply across nodes");
+        }
+        let mut s=scene();s["padding"]=json!("");let base=serde_json::to_vec(&s).unwrap().len();
+        let cap=limits["compact_scene_json_bytes"].as_u64().unwrap() as usize;
+        s["padding"]=json!("x".repeat(cap-base));assert_eq!(serde_json::to_vec(&s).unwrap().len(),cap);assert!(validate(&s).is_ok());
+        s["padding"]=json!("x".repeat(cap-base+1));assert!(validate(&s).unwrap_err().to_string().contains("2 MiB"));
+    }
     #[test]fn rejects_unbounded_or_invalid_geometry(){let mut s=scene();s["nodes"][0]["parameters"]=json!({"vertices":[[0,0,0]],"indices":[0,1,2]});assert!(validate(&s).is_err());s=scene();s["nodes"]=json!([s["nodes"][0],s["nodes"][0]]);assert!(validate(&s).is_err());}
     #[test]fn rejects_missing_provenance_and_executable_type(){let mut s=scene();s["provenance"]=Value::Null;assert!(validate(&s).is_err());s=scene();s["nodes"][0]["type"]=json!("javascript");assert!(validate(&s).is_err());}
     #[test]fn dna_requires_supported_exact_geometry_and_color_parameters(){let mut s=scene();s["nodes"][0]["type"]=json!("dna");s["nodes"][0]["parameters"]=json!({"radius":2.25,"length":10.0,"turns":2.6,"count":24,"thickness":0.19,"colors":["#2878D0","#E5B94C","#E95678","#43D6C5"]});assert!(validate(&s).is_ok());for (key,value) in [("count",json!(24.5)),("count",json!(161)),("turns",json!(25)),("thickness",json!(2.3)),("colors",json!(["blue","gold"])),("colors",json!(["#123456"]))] {let mut bad=s.clone();bad["nodes"][0]["parameters"][key]=value;assert!(validate(&bad).is_err(),"{key}");}}

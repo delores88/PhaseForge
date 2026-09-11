@@ -44,9 +44,13 @@ export function hostedWorkspace(){
   releaseTarget();
   if(process.platform==='darwin'&&command('/usr/bin/uname',['-m'])!=='arm64')throw Error('Native macOS acceptance requires an actual Apple Silicon host, not Rosetta');
   sourceIdentity();
-  const temporary=process.env.RUNNER_TEMP;
+  return hostedTemporaryDirectory(process.env.RUNNER_TEMP);
+}
+// The caller owns this disposable root. Normalize its spelling before deriving
+// application paths; the Rust file-handle checks still reject unexpected aliases.
+export function hostedTemporaryDirectory(temporary){
   if(!temporary||!path.isAbsolute(temporary)||!fs.statSync(temporary).isDirectory())throw Error('Missing hosted temporary directory');
-  return fs.realpathSync(temporary);
+  return fs.realpathSync.native(temporary);
 }
 export function machine(file){
   const descriptor=fs.openSync(file,'r');try{

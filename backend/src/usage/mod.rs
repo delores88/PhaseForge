@@ -247,17 +247,44 @@ impl UsageService {
     pub fn finish(&self, id: Uuid, status: &str, body: Option<&Value>, error: Option<&str>) -> anyhow::Result<()> {
         let _guard = self.gate.lock();
         let mut row = self.database.get_usage_record(id)?.context("usage record not found")?;
+        anyhow::ensure!(status != "running" || row.status != "completed",
+            "A completed provider receipt cannot be reopened by a late background update");
+        let response_id = body.and_then(|body| body.get("id")).and_then(Value::as_str);
+        anyhow::ensure!(response_id.is_none() || row.provider_response_id.as_deref().is_none_or(|saved| Some(saved) == response_id),
+            "Provider receipt identity does not match its usage reservation");
+        // An acknowledged background request is still executing. Its initial
+        // receipt is not a completion timestamp or a final usage report.
+        if status == "running" { row.completed_at = None; }
+        else if row.status != status || row.completed_at.is_none() { row.completed_at = Some(Utc::now()); }
         row.status = status.to_owned();
-        row.completed_at = Some(Utc::now());
         row.error = error.map(|s| redact_credentials(s, None).chars().take(2000).collect());
         if let Some(body) = body {
-            row.usage = TokenUsage::from_response(row.provider, body);
-            row.provider_response_id = body.get("id").and_then(Value::as_str).map(str::to_owned);
+            let reported = TokenUsage::from_response(row.provider, body);
+            if reported.reported || !row.usage.reported { row.usage = reported; }
+            if let Some(id) = response_id { row.provider_response_id = Some(id.to_owned()); }
             if row.usage.reported {
                 row.estimated_cost_usd = row.rate.as_ref().map(|rate| row.usage.estimate_cost(rate));
             }
         }
         self.database.put_usage_record(&row)
+    }
+    /// Covers synchronous local preparation only, before any provider request.
+    /// Unknown remote outcomes must never pass through this release path.
+    pub(crate) fn prepare_request<T>(&self, id: Uuid, prepare: impl FnOnce() -> anyhow::Result<T>) -> anyhow::Result<T> {
+        match prepare() {
+            Ok(value) => Ok(value),
+            Err(error) => {
+                let _guard = self.gate.lock();
+                let mut row = self.database.get_usage_record(id)?.context("usage record not found")?;
+                anyhow::ensure!(row.status == "running" && row.provider_response_id.is_none() && !row.usage.reported,
+                    "Cannot release an admission reservation after a provider outcome exists");
+                row.status = "not_sent".into();
+                row.completed_at = Some(Utc::now());
+                row.error = Some(redact_credentials(&format!("Local preparation failed before provider dispatch: {error:#}"), None).chars().take(2000).collect());
+                self.database.put_usage_record(&row)?;
+                Err(error)
+            }
+        }
     }
     pub fn report(&self) -> anyhow::Result<Value> {
         let _guard = self.gate.lock();
@@ -309,6 +336,60 @@ fn reserved_cost(input: u64, output: u64, rate: &ModelRate) -> f64 {
 #[cfg(test)]
 mod tests {
     use super::*;
+    #[test]
+    fn reservation_background_receipt_is_active_without_a_completion_timestamp() {
+        let db=Database::open(std::path::Path::new(":memory:")).unwrap();let svc=UsageService::new(db.clone()).unwrap();
+        let row=svc.begin(Uuid::new_v4(),None,ProviderKind::OpenAi,"fixture","background",0,100,512).unwrap();
+        svc.finish(row.id,"running",Some(&json!({"id":"pending_fixture","status":"queued","usage":null})),None).unwrap();
+        let saved=db.get_usage_record(row.id).unwrap().unwrap();
+        assert_eq!(saved.status,"running");assert!(saved.completed_at.is_none());assert!(!saved.usage.reported);
+        assert_eq!(saved.provider_response_id.as_deref(),Some("pending_fixture"));
+        assert_eq!(svc.report().unwrap()["active_calls"].as_array().unwrap().len(),1);
+        assert!(svc.begin(Uuid::new_v4(),None,ProviderKind::OpenAi,"fixture","blocked",0,1,512).unwrap_err().downcast_ref::<ConcurrentCallLimit>().is_some());
+        svc.finish(row.id,"completed",Some(&json!({"id":"pending_fixture","usage":{"input_tokens":49,"output_tokens":8}})),None).unwrap();
+        assert!(db.get_usage_record(row.id).unwrap().unwrap().completed_at.is_some());
+        svc.begin(Uuid::new_v4(),None,ProviderKind::OpenAi,"fixture","next",0,1,512).unwrap();
+    }
+
+    #[test]
+    fn reservation_late_background_update_cannot_reopen_a_completed_paid_receipt() {
+        let db=Database::open(std::path::Path::new(":memory:")).unwrap();let svc=UsageService::new(db.clone()).unwrap();
+        let row=svc.begin(Uuid::new_v4(),None,ProviderKind::OpenAi,"fixture","background",0,100,512).unwrap();
+        let (finished,after_finished)=std::sync::mpsc::channel();let late=svc.clone();
+        let thread=std::thread::spawn(move||{after_finished.recv().unwrap();late.finish(row.id,"running",Some(&json!({"id":"same_response","status":"in_progress"})),None)});
+        svc.finish(row.id,"completed",Some(&json!({"id":"same_response","usage":{"input_tokens":49,"output_tokens":8}})),None).unwrap();
+        let bytes=serde_json::to_vec(&db.get_usage_record(row.id).unwrap().unwrap()).unwrap();finished.send(()).unwrap();
+        assert!(thread.join().unwrap().unwrap_err().to_string().contains("cannot be reopened"));
+        assert_eq!(serde_json::to_vec(&db.get_usage_record(row.id).unwrap().unwrap()).unwrap(),bytes);
+        assert!(svc.report().unwrap()["active_calls"].as_array().unwrap().is_empty());
+    }
+
+    #[test]
+    fn reservation_partial_followup_preserves_reported_usage_and_response_identity() {
+        let db=Database::open(std::path::Path::new(":memory:")).unwrap();let svc=UsageService::new(db.clone()).unwrap();
+        let row=svc.begin(Uuid::new_v4(),None,ProviderKind::OpenAi,"fixture","background",0,100,512).unwrap();
+        svc.finish(row.id,"received",Some(&json!({"id":"paid_response","usage":{"input_tokens":49,"output_tokens":8}})),None).unwrap();
+        svc.finish(row.id,"cancelled",Some(&json!({"status":"cancelled"})),None).unwrap();
+        let saved=db.get_usage_record(row.id).unwrap().unwrap();assert_eq!(saved.provider_response_id.as_deref(),Some("paid_response"));assert!(saved.usage.reported);assert_eq!(saved.usage.total_tokens,57);
+        let before=serde_json::to_vec(&saved).unwrap();
+        assert!(svc.finish(row.id,"completed",Some(&json!({"id":"unrelated_response"})),None).is_err());
+        assert_eq!(serde_json::to_vec(&db.get_usage_record(row.id).unwrap().unwrap()).unwrap(),before);
+    }
+
+    #[test]
+    fn reservation_unsent_exception_releases_only_local_admission() {
+        let db=Database::open(std::path::Path::new(":memory:")).unwrap();let svc=UsageService::new(db.clone()).unwrap();
+        let row=svc.begin(Uuid::new_v4(),None,ProviderKind::OpenAi,"fixture","background",0,100,512).unwrap();
+        let error=svc.prepare_request::<()>(row.id,||bail!("retained image hash mismatch")).unwrap_err();
+        assert!(error.to_string().contains("hash mismatch"));let saved=db.get_usage_record(row.id).unwrap().unwrap();
+        assert_eq!(saved.status,"not_sent");assert!(saved.completed_at.is_some());assert!(saved.provider_response_id.is_none());
+        let next=svc.begin(Uuid::new_v4(),None,ProviderKind::OpenAi,"fixture","next",0,1,512).unwrap();
+        svc.finish(next.id,"running",Some(&json!({"id":"remote_exists"})),None).unwrap();
+        let before=serde_json::to_vec(&db.get_usage_record(next.id).unwrap().unwrap()).unwrap();
+        assert!(svc.prepare_request::<()>(next.id,||bail!("not a local-only failure")).unwrap_err().to_string().contains("Cannot release"));
+        assert_eq!(serde_json::to_vec(&db.get_usage_record(next.id).unwrap().unwrap()).unwrap(),before);
+    }
+
     #[test]
     fn provider_security_historical_errors_are_scrubbed_without_changing_usage() {
         let db = Database::open(std::path::Path::new(":memory:")).unwrap();
