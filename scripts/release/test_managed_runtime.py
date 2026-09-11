@@ -13,9 +13,13 @@ import managed_runtime as inventory
 
 class ManagedRuntimeTests(unittest.TestCase):
     def setUp(self):
-        self.temporary = tempfile.TemporaryDirectory(prefix="phaseforge-managed-materials-")
+        # Leave room for nested fixtures and package metadata on Windows hosts
+        # whose developer interpreter still enforces the legacy path limit.
+        self.temporary = tempfile.TemporaryDirectory(prefix="pf-managed-")
         self.addCleanup(self.temporary.cleanup)
-        self.root = Path(self.temporary.name)
+        # Windows CI may supply an 8.3 temp ancestor. Canonicalize only this
+        # newly created trusted fixture; production must still reject aliases.
+        self.root = Path(self.temporary.name).resolve(strict=True)
         self.workspace = self.root / "app-data"
         self.science = self.workspace / "environments/science-v1"
         self.runtime = self.workspace / "environments/python-numpy-v1/runtime"
@@ -130,6 +134,48 @@ class ManagedRuntimeTests(unittest.TestCase):
         with self.assertRaisesRegex(inventory.InventoryError, "outside inspected"):
             inventory.main(["--workspace", str(self.workspace), "--bootstrap-python", str(self.bootstrap), "--output", str(output)])
         self.assertFalse(output.exists())
+
+    @unittest.skipUnless(os.name == "nt", "Requires the actual Windows short-path API")
+    def test_short_temp_fixture_is_canonicalized_without_admitting_input_aliases(self):
+        import ctypes
+        from ctypes import wintypes
+
+        kernel = ctypes.WinDLL("kernel32", use_last_error=True)
+        kernel.GetShortPathNameW.argtypes = [wintypes.LPCWSTR, wintypes.LPWSTR, wintypes.DWORD]
+        kernel.GetShortPathNameW.restype = wintypes.DWORD
+        buffer = ctypes.create_unicode_buffer(32768)
+        count = kernel.GetShortPathNameW(str(self.root), buffer, len(buffer))
+        if not count:
+            raise ctypes.WinError(ctypes.get_last_error())
+        self.assertLess(count, len(buffer))
+        short_root = Path(buffer.value)
+        if os.path.normcase(str(short_root)) == os.path.normcase(str(self.root)):
+            self.skipTest("This volume does not provide a distinct 8.3 directory alias")
+        self.assertEqual(short_root.resolve(strict=True), self.root)
+
+        # The production opened-handle location check remains strict even when
+        # an alternative spelling happens to refer to the same bytes today.
+        alias = short_root / self.bootstrap.relative_to(self.root)
+        with self.assertRaisesRegex(inventory.InventoryError, "Opened input changed location"):
+            inventory.file_record(alias)
+        self.assertEqual(inventory.file_record(self.bootstrap)["sha256"], self.sha(self.bootstrap))
+
+        # Recreate the real runner condition: TemporaryDirectory returns a path
+        # under a short ancestor, then setUp canonicalizes its own fresh root.
+        nested = ManagedRuntimeTests("test_observed_metadata_and_exact_files_do_not_imply_download_provenance")
+        with patch.object(tempfile, "tempdir", str(short_root)):
+            try:
+                nested.setUp()
+                self.assertEqual(nested.root.parent, self.root)
+                self.assertEqual(nested.root, Path(nested.temporary.name).resolve(strict=True))
+                self.assertTrue(nested.report()["integrity_valid"])
+                seeds, frozen = nested.bundled_fixtures()
+                with patch.object(inventory, "FROZEN_MANIFEST_ROOT", frozen):
+                    self.assertTrue(inventory.build_report(nested.workspace, seed_root=seeds)["integrity_valid"])
+            finally:
+                if hasattr(nested, "temporary"):
+                    self.assertEqual(Path(nested.temporary.name).resolve(strict=True).parent, self.root)
+                nested.doCleanups()
 
     def test_missing_metadata_version_is_not_inferred_from_directory(self):
         self.put(self.science / "Lib/site-packages/openmm-wrong-directory-version.dist-info/METADATA", b"Name: OpenMM\n\n")
