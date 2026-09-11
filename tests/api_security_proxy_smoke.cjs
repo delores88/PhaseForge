@@ -78,6 +78,9 @@ async function main() {
 
 main().catch(error => {
   // Do not dump assertion input: it can contain the ephemeral launch secret.
-  process.stderr.write(`Desktop/API integration smoke failed: ${error.name}\n`);
+  // Retain only our source line/column so a failed assertion can be located.
+  const site = /at .*api_security_proxy_smoke\.cjs:(\d+):(\d+)/.exec(String(error.stack));
+  const location = site ? ` at api_security_proxy_smoke.cjs:${site[1]}:${site[2]}` : '';
+  process.stderr.write(`Desktop/API integration smoke failed: ${error.name}${location}\n`);
   process.exitCode = 1;
 });

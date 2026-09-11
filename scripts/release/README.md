@@ -1,6 +1,8 @@
 # ALPHA candidate evidence
 
-The manually dispatched `marketplace-candidates.yml` workflow builds only Windows x64 NSIS and Linux x64 AppImage. It never creates or publishes a GitHub release, signs with an OS certificate, or submits to DeloresAI. Root must freeze and push the final source before dispatch. Both targets must be complete in one draft before the first marketplace submission.
+The manually dispatched `marketplace-candidates.yml` workflow builds Windows x64 NSIS, Apple Silicon macOS ARM64 DMG and Linux x64 AppImage. Its platform input can select one target for a native retry. It never creates or publishes a GitHub release, signs with a purchased OS certificate, or submits to DeloresAI. The Mac app uses ad-hoc code signing. Root must freeze and push the final source before dispatch.
+
+Publish Windows first, then macOS ARM64, then Linux. Build and inspect targets concurrently. Each target uses a separate immutable GitHub prerelease and single-target marketplace manifest under one application. The application version can remain the same while tags identify the platform; each manifest must bind its actual successful source, release and asset identities. Never append artifacts to a submitted release or hold Windows solely for the other targets.
 
 Each job builds from the exact clean dispatched commit and locked dependencies. Pinned cargo-auditable embeds actual compiler dependency metadata in the backend. The staged runtime includes that metadata bound to its binary hash, the complete Cargo lock with its scope disclosed, frontend/desktop input locks, and hashes of the static UI actually packaged. The build-only release tool dependencies are never packaged.
 

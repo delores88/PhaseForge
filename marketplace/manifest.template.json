@@ -12,7 +12,7 @@
     "summary": "An alpha research workbench for curious people: experiments, detailed 3D and AI collaboration.",
     "description": "Explore scientific questions with or without a formal scientific background. Build bounded numerical experiments, retrieve public research, inspect detailed 3D models and collaborate with timed research teams. Optional separately installed Blender, CadQuery and KiCad produce rendered scenes, CAD and circuit-board artifacts. The app is free; AI features need one OpenAI OR Anthropic API key with separate provider charges. More features are coming. Visual representations and numerical evidence have distinct scopes; this alpha does not establish scientific discoveries, treatment efficacy or universal solver coverage. Closing the window can keep research running in the app tray; Quit stops the app.",
     "category": "data-science",
-    "sourceVisibility": "private",
+    "sourceVisibility": "public",
     "license": "MIT",
     "distributionAuthorization": {"freeUse": true, "marketplaceDistribution": true},
     "free": {"price": 0, "trial": false, "paidUnlocks": false, "mandatoryDeveloperCredits": false},
