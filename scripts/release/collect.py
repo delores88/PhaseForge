@@ -49,6 +49,13 @@ def validated_inputs(folder,target,version,commit):
         if index==1:observed=launch
     artifact=acceptance['artifact'];name=artifact['name']
     if not isinstance(name,str) or '/' in name or '\\' in name or pathlib.Path(name).name!=name or not name.endswith(target['installer_suffix']):raise ValueError('Invalid native installer name or format')
+    if target['platform']=='windows':
+        wrapper=load(folder/'installer-wrapper.json')
+        if wrapper.get('completed') is not True or wrapper['source_commit']!=commit or wrapper['installer']!=artifact:raise ValueError('Installer wrapper coverage is incomplete or stale')
+        if review.get('installer_wrapper',{}).get('completed') is not True or review['installer_wrapper']['installer_sha256']!=artifact['sha256']:raise ValueError('Installer wrapper raw scans are missing')
+        for name in ('installer-wrapper','installer-native'):
+            raw=load(folder/f'checks/grype-{name}.stdout')
+            if not isinstance(raw.get('matches'),list) or load(folder/f'checks/grype-{name}.command.json')['exit_code']!=0:raise ValueError('Installer wrapper scan did not complete')
     if target['platform']=='macos':
         backend_signing=load(folder/'backend-signing.json')
         if backend_signing['source_commit']!=commit or backend_signing['staged_signed_sha256']!=installed['backend']['sha256'] or backend_signing['compiler_dependency_section_unchanged'] is not True or backend_signing['verification']['status']!=0:raise ValueError('Signed backend provenance is stale or unverified')
@@ -86,7 +93,9 @@ def main():
     shutil.copyfile(folder/'checks/source.cdx.json',final/f'{prefix}_source.cdx.json')
     # Preserve each inventory's scope. No transitive completeness or CVE waiver is inferred by merging.
     components=[]
-    for scope,file in [('payload',folder/'checks/payload.cdx.json'),('asar',folder/'checks/asar.cdx.json'),('observed-runtime',folder/'runtime-observations.cdx.json')]:
+    inventories=[('payload',folder/'checks/payload.cdx.json'),('asar',folder/'checks/asar.cdx.json'),('observed-runtime',folder/'runtime-observations.cdx.json')]
+    if system=='windows':inventories.extend([('installer-wrapper',folder/'checks/installer-wrapper.cdx.json'),('installer-native',folder/'installer-native.cdx.json')])
+    for scope,file in inventories:
         for index,component in enumerate(load(file).get('components',[])):
             item=dict(component);item['bom-ref']=f'{scope}:{index}:'+item.get('bom-ref',item.get('name','component'))
             item['properties']=[*item.get('properties',[]),{'name':'phaseforge:inventory-scope','value':scope}];components.append(item)
@@ -110,6 +119,7 @@ def main():
     manifest['observed_native_host']=acceptance['host']
     manifest['security']['runtime_identity_gaps']=review.get('runtime_identity_gaps',[])
     manifest['security']['inventory_complete']=False
+    if system=='windows':manifest['installer_wrapper_evidence']=review['installer_wrapper']
     manifest['frontend_module_evidence']={'summary':frontend_modules['summary'],'gaps':frontend_modules['gaps'],'evidence':'frontend-modules.json in the checks archive; identical evidence is packaged in resources/runtime'}
     write(final/f'{prefix}_BUILD_MANIFEST.json',manifest)
     subjects=sorted(file.name for file in final.iterdir() if file.is_file())

@@ -86,6 +86,37 @@ class CandidateCollectionTests(unittest.TestCase):
         with self.assertRaisesRegex(ValueError,'another workflow'):self.validate()
         with self.assertRaisesRegex(ValueError,'full immutable'):collect.validated_inputs(self.folder,self.target,VERSION,'7471ff7')
 
+    def test_windows_requires_outer_wrapper_scan_and_collects_its_plugin_findings(self):
+        self.target=collect.release_target('Windows','AMD64')
+        new_folder=self.root/'.local/marketplace/windows-x64'
+        self.assertEqual(new_folder.parent,self.folder.parent)
+        self.folder.rename(new_folder);self.folder=new_folder
+        old=self.root/'desktop/dist'/self.acceptance['artifact']['name'];new=old.with_name(f'PhaseForge_{VERSION}_x64-setup.exe');old.rename(new)
+        self.acceptance.update(platform='windows',architecture='x64',host={'system':'Windows','machine':'AMD64'})
+        self.acceptance['artifact']['name']=new.name;self.write(self.folder/'NATIVE_ACCEPTANCE.json',self.acceptance)
+        installed=collect.load(self.folder/'installed-payload.json');installed['resources_relative']='resources';installed['backend']['machine'].update(format='pe',architecture='x64');self.write(self.folder/'installed-payload.json',installed)
+        for index in range(1,4):
+            p=self.folder/f'launch-{index}/runtime.json';launch=collect.load(p);launch['build'].update(platform='win32',architecture='x64');launch['runtime'].update(platform='win32',architecture='x64');self.write(p,launch)
+        with self.assertRaises(FileNotFoundError):self.validate()
+        wrapper={'source_commit':COMMIT,'completed':True,'installer':self.acceptance['artifact'],'files':[{'path':'members/$PLUGINSDIR/nsis7z.dll','bytes':4,'sha256':'c'*64}]}
+        self.write(self.folder/'installer-wrapper.json',wrapper)
+        row={'scope':'installer-native','id':'CVE-fixture','severity':'High','artifact':'7-Zip','version':'19.00','locations':[{'path':'members/$PLUGINSDIR/nsis7z.dll'}]}
+        review=collect.load(self.folder/'checks/SCAN_REVIEW.json');review['unreviewed_high_critical']=[row];review['installer_wrapper']={'completed':True,'installer_sha256':self.acceptance['artifact']['sha256'],'members_including_container':2};self.write(self.folder/'checks/SCAN_REVIEW.json',review)
+        for scope in ['installer-wrapper','installer-native']:
+            self.write(self.folder/f'checks/grype-{scope}.stdout',{'matches':[row]})
+            self.write(self.folder/f'checks/grype-{scope}.command.json',{'exit_code':0})
+        component={'type':'library','name':'7-Zip','version':'19.00','properties':[{'name':'phaseforge:installer-member','value':'members/$PLUGINSDIR/nsis7z.dll'}]}
+        self.write(self.folder/'checks/installer-wrapper.cdx.json',{'components':[]})
+        self.write(self.folder/'installer-native.cdx.json',{'components':[component]})
+        with patch.object(collect,'release_target',return_value=self.target),contextlib.redirect_stdout(io.StringIO()):collect.main()
+        final=self.folder/'candidate';prefix=f'PhaseForge_{VERSION}_windows_x64';manifest=collect.load(final/f'{prefix}_BUILD_MANIFEST.json')
+        self.assertEqual(manifest['security']['unreviewed_high_critical_count'],1)
+        bom=collect.load(final/f'{prefix}_payload.cdx.json');actual=next(x for x in bom['components'] if x['name']=='7-Zip')
+        self.assertEqual(actual['version'],'19.00');self.assertIn({'name':'phaseforge:inventory-scope','value':'installer-native'},actual['properties'])
+        with zipfile.ZipFile(final/f'{prefix}_checks.zip') as archive:
+            self.assertIn('evidence/installer-wrapper.json',archive.namelist());self.assertIn('evidence/installer-native.cdx.json',archive.namelist())
+            self.assertEqual(json.loads(archive.read('evidence/checks/grype-installer-native.stdout'))['matches'],[row])
+
     def test_rejects_changed_materials_wrong_observed_architecture_and_traversal(self):
         for rel,change in [('installed-payload.json',lambda r:r.update(resources_relative='resources')),
                            ('launch-1/runtime.json',lambda r:r['runtime'].update(architecture='x64')),

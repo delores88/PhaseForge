@@ -25,6 +25,10 @@
     "appId": "science.phaseforge.desktop",
     "productName": "PhaseForge",
     "asar": true,
+    "toolsets": {
+      "nsis": "1.2.1",
+      "appimage": "1.0.3"
+    },
     "directories": {
       "output": "dist"
     },
@@ -72,6 +76,9 @@
       "artifactName": "PhaseForge_${version}_${arch}-setup.${ext}"
     },
     "nsis": {
+      "include": "build/installer.nsh",
+      "differentialPackage": false,
+      "buildUniversalInstaller": false,
       "oneClick": false,
       "perMachine": false,
       "allowToChangeInstallationDirectory": true,

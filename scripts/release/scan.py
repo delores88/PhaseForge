@@ -1,6 +1,7 @@
 """Retain raw findings and inventory coverage. This is not marketplace admission."""
 import datetime, hashlib, json, os, pathlib, platform, shutil, subprocess
 from collect import release_target
+from installer_wrapper import prepare_windows_installer
 
 ROOT=pathlib.Path(__file__).resolve().parents[2]
 TARGET=release_target();SYSTEM=TARGET['platform'];ARCHITECTURE=TARGET['architecture']
@@ -33,6 +34,8 @@ def main():
         target.parent.mkdir(parents=True,exist_ok=True);shutil.copyfile(original,target)
     syft_env={**os.environ,'SYFT_JAVASCRIPT_INCLUDE_DEV_DEPENDENCIES':'true','SYFT_CHECK_FOR_APP_UPDATE':'false'}
     targets={'source':source,'payload':FOLDER/'payload','asar':FOLDER/'expanded-asar'}
+    if SYSTEM=='windows':
+        targets['installer-wrapper']=prepare_windows_installer(ROOT,FOLDER,os.environ['GITHUB_SHA'])
     for scope,target in targets.items():
         exclusions=[]
         if scope=='payload':
@@ -50,11 +53,14 @@ def main():
     invoke(tool('grype'),['db','update'],'grype-db-update',env=grype_env)
     invoke(tool('grype'),['db','status','-o','json'],'grype-db-status',env=grype_env)
     all_matches=[]
-    for scope,bom in [('source',REPORTS/'source.cdx.json'),('payload',REPORTS/'payload.cdx.json'),('asar',REPORTS/'asar.cdx.json'),('runtime',FOLDER/'runtime-observations.cdx.json'),('runtime-screening-aliases',FOLDER/'runtime-screening-aliases.cdx.json')]:
+    scan_boms=[(scope,REPORTS/f'{scope}.cdx.json') for scope in targets]
+    scan_boms.extend([('runtime',FOLDER/'runtime-observations.cdx.json'),('runtime-screening-aliases',FOLDER/'runtime-screening-aliases.cdx.json')])
+    if SYSTEM=='windows':scan_boms.append(('installer-native',FOLDER/'installer-native.cdx.json'))
+    for scope,bom in scan_boms:
         result=invoke(tool('grype'),[f'sbom:{bom}','-o','json'],'grype-'+scope,env=grype_env)
         data=json.loads(result.stdout);matches=data.get('matches')
         if not isinstance(matches,list):raise RuntimeError('Missing vulnerability matches array')
-        all_matches.extend({'scope':scope,'id':m['vulnerability']['id'],'severity':m['vulnerability']['severity'],'artifact':m.get('artifact',{}).get('name'),'version':m.get('artifact',{}).get('version')} for m in matches)
+        all_matches.extend({'scope':scope,'id':m['vulnerability']['id'],'severity':m['vulnerability']['severity'],'artifact':m.get('artifact',{}).get('name'),'version':m.get('artifact',{}).get('version'),'locations':m.get('artifact',{}).get('locations',[])} for m in matches)
     secrets=[]
     for scope,target in targets.items():
         report=REPORTS/f'gitleaks-{scope}.json'
@@ -75,6 +81,9 @@ def main():
     review=json.loads((REPORTS/'SCAN_REVIEW.json').read_text())
     review['runtime_identity_gaps']=json.loads((FOLDER/'runtime-identity-gaps.json').read_text())['gaps']
     review['inventory_complete']=False
+    if SYSTEM=='windows':
+        wrapper=json.loads((FOLDER/'installer-wrapper.json').read_text())
+        review['installer_wrapper']={'completed':wrapper['completed'],'installer_sha256':wrapper['installer']['sha256'],'members_including_container':len(wrapper['files']),'inventory':'installer-wrapper.json','native_version_bom':'installer-native.cdx.json','scope':wrapper['scope']}
     write('SCAN_REVIEW.json',review)
     print(json.dumps({'tools_completed':True,'security_review_required':True,'high_critical_findings':len(high),'secret_findings':len(secrets)}))
 
