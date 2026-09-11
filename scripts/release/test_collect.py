@@ -55,7 +55,7 @@ class CandidateCollectionTests(unittest.TestCase):
              'checks':{key:True for key in ('openmm','diffusion','lpac','cancel','quit_recovery','backup_restore')},
              'evidence_files':[{'path':'laboratory/fixture.json','bytes':evidence.stat().st_size,'sha256':collect.digest(evidence)}]}
         runtimes={}
-        for kind in ('science-v2','python-numpy-v2'):
+        for kind in ('science-v3','python-numpy-v2'):
             frozen=self.root/'tools/runtime-seeds'/f'{kind}.manifest.json';self.write(frozen,{'synthetic_fixture':kind})
             runtimes[kind]={'seed_pin_verification':{'valid':True},'copy_pin_verification':{'valid':True},'copy_comparison':{'valid':True},'frozen_source_manifest':{'matches_installed_seed_manifest':True,'sha256':collect.digest(frozen)}}
         managed={'source_commit':COMMIT,'delivery':'bundled_immutable_seeds','integrity_valid':True,'runtimes':runtimes}
@@ -142,7 +142,7 @@ class CandidateCollectionTests(unittest.TestCase):
         (self.folder/'laboratory/fixture.json').write_bytes(b'changed')
         with self.assertRaisesRegex(ValueError,'evidence changed'):validate()
         self.laboratory_fixture()
-        file=self.root/'tools/runtime-seeds/science-v2.manifest.json';file.write_bytes(b'other source seed')
+        file=self.root/'tools/runtime-seeds/science-v3.manifest.json';file.write_bytes(b'other source seed')
         with self.assertRaisesRegex(ValueError,'frozen source'):validate()
 
     def test_omitted_native_phase_and_prerelease_versions_block_final_assembly(self):

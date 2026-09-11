@@ -73,6 +73,10 @@
         "to": "tools/third-party/openmm-8.5.2"
       },
       {
+        "from": "../tools/third-party/msvc-runtime",
+        "to": "tools/third-party/msvc-runtime"
+      },
+      {
         "from": "runtime/third-party-sources/openmm",
         "to": "third-party-sources/openmm"
       },
@@ -88,6 +92,7 @@
     },
     "nsis": {
       "include": "build/installer.nsh",
+      "license": "../tools/third-party/msvc-runtime/END-USER-TERMS.txt",
       "differentialPackage": false,
       "buildUniversalInstaller": false,
       "oneClick": false,

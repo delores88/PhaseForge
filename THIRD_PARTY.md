@@ -85,6 +85,20 @@ such modifications. A source rebuild may establish different runtime pins;
 the shipped integrity checks are not a restriction on rights granted by a
 dependency's license.
 
+## Microsoft Visual C++ runtime
+
+The bundled `science-v3` environment retains Microsoft's MSVCP140 runtime
+14.40.33810.0, including a byte-identical `MSVCP140.dll` alias for OpenMM.
+Its bytes come from the pinned NumPy wheel; Microsoft's terms apply separately
+from NumPy's BSD license and PhaseForge's MIT license. The existing Visual
+Studio Community toolchain is used to build this public application. The
+redistribution basis is section 4 of the [Community terms](https://visualstudio.microsoft.com/license-terms/vs2022-ga-community/)
+and Microsoft's [redistribution list](https://learn.microsoft.com/en-us/visualstudio/releases/2022/redistribution),
+subject to their conditions. The [notice](tools/third-party/msvc-runtime/NOTICE.txt),
+[license text](tools/third-party/msvc-runtime/Visual-Studio-2022-Community-License.txt)
+and [provenance](tools/third-party/msvc-runtime/provenance.json) are packaged
+separately as third-party resources. No Microsoft endorsement is implied.
+
 ## Optional native CAD and PCB dependencies
 
 These engines and their Python environments are installed separately; the desktop

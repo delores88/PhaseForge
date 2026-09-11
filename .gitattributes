@@ -7,6 +7,9 @@
 *.py text eol=lf
 # Upstream notice hashes must survive Windows Git checkouts unchanged.
 tools/third-party/openmm-8.5.2/*.txt text eol=lf
+tools/third-party/msvc-runtime/*.txt text eol=lf
+# Preserve the exact converted upstream license, including its original whitespace.
+tools/third-party/msvc-runtime/Visual-Studio-2022-Community-License.txt -text -whitespace
 *.png binary
 *.jpg binary
 *.ico binary

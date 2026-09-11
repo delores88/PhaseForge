@@ -243,7 +243,7 @@ async function main(){
   let executable,macInstallation;
   if(process.platform==='win32'){
     assert.ok(!install.includes(' '),'NSIS /D acceptance path must not require shell quoting');
-    command(artifact,['/S',`/D=${install}`],{timeout:180000});executable=path.join(install,'PhaseForge.exe');
+    command(artifact,['/S','/ACCEPT_MSVC_TERMS=MSVC-2026-09-11',`/D=${install}`],{timeout:180000});executable=path.join(install,'PhaseForge.exe');
   }else if(process.platform==='darwin'){
     macInstallation=await installMacDmg(artifact,install,inside(root,path.join(root,'dmg-mount')),path.join(output,'macos-install.json'),python);
     executable=macInstallation.executable;
@@ -260,6 +260,7 @@ async function main(){
   if(platform==='windows'){
     const observed=readJSON(path.join(output,'installed-payload.json'));
     const args=['-B',path.join(ROOT,'scripts/release/managed_runtime.py'),'--workspace',workspace,'--seed-root',path.join(observed.runtime.resourcesPath,'runtime/runtime-seeds'),'--source-commit',process.env.GITHUB_SHA,'--output',path.join(output,'managed-runtime-materials.json')];
+    args.push('--archive-root',fs.realpathSync.native(path.join(process.env.RUNNER_TEMP,'phaseforge-seed-archives')));
     if(process.env.PHASEFORGE_SCIENCE_BOOTSTRAP_PYTHON)args.push('--bootstrap-python',process.env.PHASEFORGE_SCIENCE_BOOTSTRAP_PYTHON);
     command(python,args,{timeout:180000,maxBuffer:1024*1024});
     assert.equal(readJSON(path.join(output,'managed-runtime-materials.json')).integrity_valid,true);
@@ -292,6 +293,7 @@ async function main(){
   receipt.branding_evidence='launch-*/initial-appearance.json, branding.json, window.png and window-compact.png';
   if(platform==='windows'){
     const laboratory=readJSON(path.join(output,'LABORATORY_ACCEPTANCE.json'));
+    receipt.microsoft_runtime_agreement={method:'Explicit versioned unattended-install argument supplied by the release developer',argument:'/ACCEPT_MSVC_TERMS=MSVC-2026-09-11',terms_sha256:await sha256(path.join(ROOT,'tools/third-party/msvc-runtime/END-USER-TERMS.txt')),interactive_agreement_page_exercised:false};
     assert.equal(laboratory.passed,true);assert.equal(laboratory.source_commit,process.env.GITHUB_SHA);
     receipt.laboratory_evidence={path:'LABORATORY_ACCEPTANCE.json',sha256:await sha256(path.join(output,'LABORATORY_ACCEPTANCE.json'))};
     receipt.managed_runtime_evidence={path:'managed-runtime-materials.json',sha256:await sha256(path.join(output,'managed-runtime-materials.json')),delivery:'bundled_immutable_seeds'};

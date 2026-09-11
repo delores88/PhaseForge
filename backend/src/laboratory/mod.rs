@@ -222,6 +222,7 @@ impl LaboratoryService {
     pub fn start_solver(&self,id:Uuid) -> anyhow::Result<()> {
         let token={let _guard=self.gate.lock();let job=self.get(id)?;
             anyhow::ensure!(job.kind=="solver"&&job.state=="queued"&&job.deadline_at.is_none_or(|at|at>Utc::now()),"Solver is stopped, already started or out of time");
+            self.ensure_science_attempt_identity(id)?;
             self.acquire(id)?};
         self.spawn_solver(id,token)
     }
@@ -256,6 +257,7 @@ impl LaboratoryService {
         result
     }
     async fn execute_solver(&self,id:Uuid,token:&CancellationToken) -> anyhow::Result<()> {
+        self.ensure_science_attempt_identity(id)?;
         if self.get(id)?.input["engine"]=="diffusion_2d" { return self.execute_field(id,token).await; }
         if self.get(id)?.input["engine"]=="newtonian_nbody" { return self.execute_mechanics(id,token).await; }
         let _slot=tokio::select! { _=token.cancelled()=>bail!("Cancelled in queue"), slot=self.solver_slots.acquire()=>slot? };
@@ -306,12 +308,26 @@ impl LaboratoryService {
     }
     async fn ensure_environment(&self,id:Uuid,token:&CancellationToken)->anyhow::Result<PathBuf> {
         let _guard=tokio::select!{_=token.cancelled()=>bail!("Cancelled while waiting for environment"),guard=self.provision.lock()=>guard};
-        self.event(id,"provisioning","Verifying and copying the bundled scientific runtime. No host Python or network installation is used.",json!({"runtime":"science-v2"}))?;
+        self.ensure_science_attempt_identity(id)?;
+        self.event(id,"provisioning","Verifying and copying the bundled scientific runtime. No host Python or network installation is used.",json!({"runtime":"science-v3"}))?;
         let data=self.config.data_directory.clone();let copy_token=token.clone();
         let verified=tokio::task::spawn_blocking(move||runtime::provision(&data,runtime::RuntimeKind::Science,&copy_token)).await??;
         self.event(id,"runtime_verified","The runtime matches the compiled full inventory and upstream source pins.",serde_json::to_value(&verified)?)?;
         anyhow::ensure!(self.environment_smoke(id,&verified.python,token).await?,"Verified bundled engine failed an actual integration smoke test; see environment-smoke-error.log. No host/network fallback is permitted.");
         Ok(verified.python)
+    }
+    fn ensure_science_attempt_identity(&self,id:Uuid)->anyhow::Result<()> {
+        let saved=self.get(id)?;
+        for event in saved.events.iter().filter(|event|event.kind=="runtime_verified") {
+            anyhow::ensure!(event.data["kind"]==runtime::RuntimeKind::Science.name()
+                &&event.data["manifest_sha256"]==runtime::RuntimeKind::Science.manifest_sha256(),
+                "Original scientific runtime differs; new immutable run required. Existing numerical artifacts and runtime receipts are preserved.");
+        }
+        if self.directory(id).join("manifest.json").exists() {
+            anyhow::ensure!(saved.events.iter().any(|event|event.kind=="runtime_verified"),
+                "Original scientific runtime identity is unavailable; new immutable run required. Existing numerical artifacts are preserved.");
+        }
+        Ok(())
     }
     async fn environment_smoke(&self,id:Uuid,python:&Path,token:&CancellationToken)->anyhow::Result<bool>{
         let directory=self.directory(id);

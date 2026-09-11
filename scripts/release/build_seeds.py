@@ -115,7 +115,11 @@ def source_files(payload):
     return result
 
 
-def assemble(embedded, source, wheels):
+MSVC_MEMBER = "numpy.libs/msvcp140-a4c2229bdc2a2a630acdc095b4d86008.dll"
+MSVC_SHA256 = "a4c2229bdc2a2a630acdc095b4d86008e5c3e3bc7773174354f3da4f5beb9cde"
+
+
+def assemble(embedded, source, wheels, add_msvc_alias=False):
     """Pure archive transformation; every departure is represented in receipts."""
     if "python313.zip" not in embedded or "python313._pth" not in embedded:
         raise ValueError("Official embedded standard library/configuration absent")
@@ -155,7 +159,17 @@ def assemble(embedded, source, wheels):
                 raise ValueError("Wheel install scheme requires explicit mapping: " + name)
             occupied.add(name.casefold())
             output[name] = value
-    return output, {"stdlib": "Exact embedded module set replaced with corresponding pinned CPython Lib source; other standard library resources and all interpreter/native members retained", "stdlib_replacements": replacements, "stdlib_resources": resources, "configuration": {"path": "python313._pth", "before_sha256": digest(embedded["python313._pth"]), "after_sha256": digest(PTH), "reason": "Resolve local source Lib and vendored wheel files only; disable site imports"}, "upstream_stdlib_archive_sha256": digest(embedded["python313.zip"])}
+    transformations = {"stdlib": "Exact embedded module set replaced with corresponding pinned CPython Lib source; other standard library resources and all interpreter/native members retained", "stdlib_replacements": replacements, "stdlib_resources": resources, "configuration": {"path": "python313._pth", "before_sha256": digest(embedded["python313._pth"]), "after_sha256": digest(PTH), "reason": "Resolve local source Lib and vendored wheel files only; disable site imports"}, "upstream_stdlib_archive_sha256": digest(embedded["python313.zip"])}
+    if add_msvc_alias:
+        if MSVC_MEMBER not in output or digest(output[MSVC_MEMBER]) != MSVC_SHA256:
+            raise ValueError("Missing or changed pinned MSVCP140 source member")
+        if "msvcp140.dll" in occupied:
+            raise ValueError("MSVCP140 destination already occupied")
+        output["MSVCP140.dll"] = output[MSVC_MEMBER]
+        transformations["native_aliases"] = {"MSVCP140.dll": {
+            "archive_member": MSVC_MEMBER, "sha256": MSVC_SHA256,
+            "reason": "Unmodified app-local alias for OpenMM's plain MSVCP140.dll imports; preserve NumPy's original renamed member for its own imports"}}
+    return output, transformations
 
 
 def build(output, cache, offline=False, source_commit=None, freeze=False, manifest_root=None):
@@ -172,8 +186,8 @@ def build(output, cache, offline=False, source_commit=None, freeze=False, manife
     manifest_root = checked_path(manifest_root or Path(__file__).resolve().parents[2] / "tools/runtime-seeds")
     if freeze:
         manifest_root.mkdir(parents=True, exist_ok=True)
-    for kind, count in (("python-numpy-v2", 3), ("science-v2", 5)):
-        files, transformations = assemble(embedded, source, [zip_files(a) for a in archives[2:count]])
+    for kind, count in (("python-numpy-v2", 3), ("science-v3", 5)):
+        files, transformations = assemble(embedded, source, [zip_files(a) for a in archives[2:count]], add_msvc_alias=kind == "science-v3")
         root = output / kind
         root.mkdir()
         for name, value in sorted(files.items()):
@@ -188,7 +202,7 @@ def build(output, cache, offline=False, source_commit=None, freeze=False, manife
         hashes = {name: digest(value) for name, value in sorted(files.items())}
         sizes = {name: len(value) for name, value in sorted(files.items())}
         manifest = {"schema_version": 1, "schema": "phaseforge.runtime-seed.v1", "kind": kind, "python": "3.13.15", "numpy": "2.4.6", "sources": sources, "files": hashes, "file_bytes": sizes, "native_files": {k: v for k, v in hashes.items() if Path(k).suffix.lower() in NATIVE}, "transformations": transformations, "licenses": [k for k in hashes if "license" in k.lower() or "copying" in k.lower()], "delivery": "Bundled inspectable files; copy bytes into a managed runtime after verifying this manifest", "security": "Pinned dependencies only; generated code still requires the separately verified Windows LPAC boundary"}
-        if kind == "science-v2":
+        if kind == "science-v3":
             manifest.update(openmm="8.5.2", pillow="12.3.0")
         name = "phaseforge-runtime-seed.json"
         raw = (json.dumps(manifest, indent=2, ensure_ascii=True) + "\n").encode()

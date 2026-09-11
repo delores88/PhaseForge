@@ -1,0 +1,56 @@
+{
+  "schema": "phaseforge.msvc-runtime-provenance.v1",
+  "component": {
+    "name": "Microsoft Visual C++ Runtime",
+    "version": "14.40.33810.0",
+    "architecture": "AMD64",
+    "sha256": "a4c2229bdc2a2a630acdc095b4d86008e5c3e3bc7773174354f3da4f5beb9cde",
+    "bytes": 575056,
+    "version_evidence": "Observed PE fixed resource; original Microsoft signature independently reviewed separately"
+  },
+  "origin": {
+    "url": "https://files.pythonhosted.org/packages/b5/cd/9cc4dc876fb065d5c220aae4d5e14826b2715331bb7618ce1fb07a679d99/numpy-2.4.6-cp313-cp313-win_amd64.whl",
+    "sha256": "c4fc99836233ea196540b17ab0983aff60ed07941751930f5f4d05bc3b3b7359",
+    "member": "numpy.libs/msvcp140-a4c2229bdc2a2a630acdc095b4d86008.dll",
+    "destination": "runtime/runtime-seeds/science-v3/MSVCP140.dll",
+    "transformation": "Additional byte-identical app-local alias; retain original renamed NumPy member"
+  },
+  "licensing": {
+    "copyright": "Microsoft Corporation. All rights reserved.",
+    "basis": "Existing Visual Studio Community toolchain used to build this public MIT-licensed application; Community section 4 Distributable Code and official redistribution list, subject to their conditions. This is the concrete development/distribution basis, not certification of individual entitlement.",
+    "not_relicensed_under": "MIT or NumPy BSD",
+    "license_conversion": "Official DOCX document.xml paragraph text, UTF-8; local evidence paragraph-number prefixes removed, wording preserved",
+    "official_documents": [
+      {
+        "url": "https://visualstudio.microsoft.com/wp-content/uploads/2021/11/Visual-Studio-2022-Community-License-EN.docx",
+        "sha256": "41a207b10c8ab91d0d2f10a854715f73dca54509581692d2fe179aa3ffcb8540",
+        "bytes": 62859
+      },
+      {
+        "url": "https://learn.microsoft.com/en-us/visualstudio/releases/2022/redistribution",
+        "sha256": "42f05f60c53ff7312c6d18911b764f0c760683ed5ace5710c40cbdb4890e9162",
+        "bytes": 62969
+      },
+      {
+        "url": "https://learn.microsoft.com/en-us/cpp/windows/redistributing-visual-cpp-files?view=msvc-170",
+        "sha256": "618d6b1e9f12d962aa986abf7030fbc1bdc4bee871591125ee50ed1af8a51cde",
+        "bytes": 60489
+      }
+    ],
+    "end_user_agreement": "END-USER-TERMS.txt applies only to Microsoft runtime files; explicit installer checkbox or versioned unattended agreement, including upgrades. It preserves PhaseForge MIT rights and mandatory consumer protections."
+  },
+  "files": {
+    "NOTICE.txt": {
+      "sha256": "f1be968e43f26d5a8f14546e458cd940dcdc87e74d03a35a181716f47a980045",
+      "bytes": 1427
+    },
+    "Visual-Studio-2022-Community-License.txt": {
+      "sha256": "a38d10afc3ef8fb2e64af972a9c64d998ef964de8101b9f7a59703f72fa3a5ab",
+      "bytes": 19043
+    },
+    "END-USER-TERMS.txt": {
+      "sha256": "ee84514c1e240e9976a811b885ad5bf194f2d4523a0402e9fdef6cf7564d9bc1",
+      "bytes": 4185
+    }
+  }
+}

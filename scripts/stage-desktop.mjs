@@ -8,6 +8,7 @@ import {machine} from './release/common.mjs';
 import {auditableDependencies,auditableSection} from './release/auditable.mjs';
 import {stageSeeds} from './release/stage-seeds.mjs';
 import {stageOpenmmSources} from './release/openmm-sources.mjs';
+import {verifyMsvcNotices} from './release/msvc-notices.mjs';
 const root=path.resolve(path.dirname(fileURLToPath(import.meta.url)),'..');
 const arch=process.arch,os=process.platform==='win32'?'win':process.platform==='darwin'?'mac':process.platform;
 if(!['win','linux','mac'].includes(os)||!['x64','arm64'].includes(arch)||(os==='mac'&&arch!=='arm64'))throw Error('Build natively on Windows/Linux x64 or ARM64, or Apple Silicon macOS. Cross-labelled native binaries are not accepted.');
@@ -24,6 +25,7 @@ if(os==='win'){
   if(!sourceRoot)throw Error('Set PHASEFORGE_RUNTIME_SEED_ROOT to the verified build_seeds.py output before staging Windows. The scientific runtime must be bundled.');
   await stageSeeds({sourceRoot,destination:dest,manifestRoot:path.join(root,'tools/runtime-seeds')});
   await stageOpenmmSources();
+  await verifyMsvcNotices();
 }
 if(os==='mac'){
   // Bind compiler output before signing, then preserve these staged signed bytes

@@ -30,21 +30,31 @@ before=context.getState(getEnergy=True).getPotentialEnergy()._value
 integrator.step(2);state=context.getState(getPositions=True,getEnergy=True)
 x=float(state.getPositions(asNumpy=True)._value[0,0])
 assert before==.5 and 0.999<x<1.0 and state.getPotentialEnergy()._value<before
-print(json.dumps({'python':sys.version,'sys_path':sys.path,'module_origins':modules,'runtime':str(root),'openmm':openmm.__version__,'numpy':numpy.__version__,'pillow':PIL.__version__,'reference_steps':2,'position_x_nm':x,'energy_before_kj_mol':before,'isolated':sys.flags.isolated,'dont_write_bytecode':sys.flags.dont_write_bytecode,'optimize':sys.flags.optimize}))
+import ctypes
+from ctypes import wintypes
+kernel=ctypes.WinDLL('kernel32',use_last_error=True)
+kernel.GetModuleHandleW.argtypes=[wintypes.LPCWSTR];kernel.GetModuleHandleW.restype=wintypes.HMODULE
+kernel.GetModuleFileNameW.argtypes=[wintypes.HMODULE,wintypes.LPWSTR,wintypes.DWORD];kernel.GetModuleFileNameW.restype=wintypes.DWORD
+handle=kernel.GetModuleHandleW('MSVCP140.dll');assert handle,'OpenMM C++ runtime is not loaded'
+buffer=ctypes.create_unicode_buffer(32768);length=kernel.GetModuleFileNameW(handle,buffer,len(buffer));assert 0<length<len(buffer)
+cpp_runtime=local_origin(buffer.value)
+assert str(cpp_runtime).lower()==str(root/'MSVCP140.dll').lower(),str(cpp_runtime)
+print(json.dumps({'python':sys.version,'sys_path':sys.path,'module_origins':modules,'runtime':str(root),'openmm':openmm.__version__,'numpy':numpy.__version__,'pillow':PIL.__version__,'reference_steps':2,'position_x_nm':x,'energy_before_kj_mol':before,'loaded_msvcp140':str(cpp_runtime),'isolated':sys.flags.isolated,'dont_write_bytecode':sys.flags.dont_write_bytecode,'optimize':sys.flags.optimize}))
 "#;
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub(super) enum RuntimeKind { Science, Generated }
 impl RuntimeKind {
-    pub(super) fn name(self) -> &'static str { match self { Self::Science => "science-v2", Self::Generated => "python-numpy-v2" } }
+    pub(super) fn name(self) -> &'static str { match self { Self::Science => "science-v3", Self::Generated => "python-numpy-v2" } }
     fn bytes(self) -> &'static [u8] { match self {
-        Self::Science => include_bytes!("../../../tools/runtime-seeds/science-v2.manifest.json"),
+        Self::Science => include_bytes!("../../../tools/runtime-seeds/science-v3.manifest.json"),
         Self::Generated => include_bytes!("../../../tools/runtime-seeds/python-numpy-v2.manifest.json"),
     } }
     pub(super) fn directory(self, data: &Path) -> PathBuf {
         let root = data.join("environments").join(self.name());
         if self == Self::Generated { root.join("runtime") } else { root }
     }
+    pub(super) fn manifest_sha256(self) -> String { sha(self.bytes()) }
 }
 
 #[derive(Debug, Deserialize)]
@@ -340,14 +350,15 @@ mod tests {
     #[cfg(windows)]
     #[tokio::test]
     #[ignore = "Actual offline copies and LPAC processes; requires explicit acceptance output and seed directories"]
-    async fn copied_v2_runtimes_execute_source_stdlib_science_and_lpac_negative_checks() {
+    async fn copied_current_runtimes_execute_source_stdlib_science_and_lpac_negative_checks() {
         use crate::laboratory::{isolation::{IsolatedProcess, IsolationSpec}, process};
         use std::time::Duration;
         let output = PathBuf::from(std::env::var_os("PHASEFORGE_RUNTIME_ACCEPTANCE_ROOT").expect("explicit acceptance directory required"));
         assert!(output.is_absolute() && !output.exists(), "Use a fresh absolute evidence directory"); fs::create_dir_all(&output).unwrap();
         let seeds = source_root().unwrap(); let token = CancellationToken::new(); let data = output.join("data");
         fs::create_dir_all(data.join("environments/science-v1")).unwrap(); fs::write(data.join("environments/science-v1/prior-evidence"), b"preserve v1").unwrap();
-        let science = provision_from(&seeds.join("science-v2"), &RuntimeKind::Science.directory(&data), RuntimeKind::Science, &token).unwrap();
+        fs::create_dir_all(data.join("environments/science-v2")).unwrap(); fs::write(data.join("environments/science-v2/prior-evidence"), b"preserve v2").unwrap();
+        let science = provision_from(&seeds.join("science-v3"), &RuntimeKind::Science.directory(&data), RuntimeKind::Science, &token).unwrap();
         let generated = provision_from(&seeds.join("python-numpy-v2"), &RuntimeKind::Generated.directory(&data), RuntimeKind::Generated, &token).unwrap();
         let trusted_work = output.join("trusted-work"); fs::create_dir(&trusted_work).unwrap();
         let mut command = process::clean_command(&science.python, &trusted_work);
@@ -383,17 +394,19 @@ pathlib.Path('module-origins.json').write_text(json.dumps({'runtime':str(root),'
         let lpac_origins: Value = serde_json::from_slice(&fs::read(work.join("module-origins.json")).unwrap()).unwrap();
         verify(&science.directory, RuntimeKind::Science, &token).unwrap(); verify(&generated.directory, RuntimeKind::Generated, &token).unwrap();
         assert_eq!(fs::read(data.join("environments/science-v1/prior-evidence")).unwrap(), b"preserve v1");
+        assert_eq!(fs::read(data.join("environments/science-v2/prior-evidence")).unwrap(), b"preserve v2");
+        assert_eq!(fs::read_dir(data.join("environments/science-v2")).unwrap().count(),1);
         let outer = generated.directory.join(OUTER); let saved_outer = fs::read(&outer).unwrap(); fs::write(&outer, b"{}").unwrap();
         assert!(IsolatedProcess::spawn(spec).is_err()); assert_eq!(fs::read(&outer).unwrap(), b"{}");
         fs::write(&outer, saved_outer).unwrap();
         let missing_destination = output.join("missing-runtime"); assert!(provision_from(&output.join("missing-seed"), &missing_destination, RuntimeKind::Science, &token).is_err()); assert!(!missing_destination.exists());
-        let report = json!({"passed":true,"science":science,"generated":generated,"trusted_science":science_receipt,"lpac":negative,"lpac_origins":lpac_origins,"runtime_unchanged_after_execution":true,"changed_outer_launch_refused":true,"missing_seed_no_fallback":true,"v1_preserved":true,"offline_copy":true});
-        fs::write(output.join("report.json"), serde_json::to_vec_pretty(&report).unwrap()).unwrap(); println!("Runtime v2 acceptance: {}", output.join("report.json").display());
+        let report = json!({"passed":true,"science":science,"generated":generated,"trusted_science":science_receipt,"lpac":negative,"lpac_origins":lpac_origins,"runtime_unchanged_after_execution":true,"changed_outer_launch_refused":true,"missing_seed_no_fallback":true,"v1_preserved":true,"v2_preserved":true,"offline_copy":true});
+        fs::write(output.join("report.json"), serde_json::to_vec_pretty(&report).unwrap()).unwrap(); println!("Current runtime acceptance: {}", output.join("report.json").display());
     }
     #[cfg(windows)]
     #[tokio::test]
     #[ignore = "Actual three solver service entries; run after the explicit copied-runtime acceptance"]
-    async fn copied_v2_runtime_runs_all_three_real_solver_service_entries() {
+    async fn copied_current_runtime_runs_all_three_real_solver_service_entries() {
         use crate::{config::AppConfig, persistence::Database, laboratory::LaboratoryService};
         let root=PathBuf::from(std::env::var_os("PHASEFORGE_RUNTIME_ACCEPTANCE_ROOT").expect("explicit completed runtime acceptance required"));
         assert!(root.join("report.json").is_file());
@@ -406,7 +419,7 @@ pathlib.Path('module-origins.json').write_text(json.dumps({'runtime':str(root),'
             ("openmm_argon",json!({"atom_count":32,"temperature_kelvin":120,"density_g_cm3":0.8,"seed":314159,"platform":"CPU","steps":4,"sample_interval":2,"chunk_frames":4})),
             ("diffusion_2d",json!({"nx":16,"ny":16,"steps":4,"record_interval":2,"dt_s":0.005,"diffusivity_um2_s":0.2})),
             ("newtonian_nbody",json!({"body_ids":["left","right"],"masses":[0.5,0.5],"positions":[[-0.5,0.,0.],[0.5,0.,0.]],"velocities":[[0.,-0.5,0.],[0.,0.5,0.]],"timestep":0.001,"steps":4,"sample_interval":2,"chunk_frames":50,"min_separation":0.05,"boundary":"isolated","unit_system":"scaled_G1"}))] {
-            let job=service.create(Uuid::new_v4(),project.id,None,"solver","Bundled v2 service smoke",json!({"engine":engine,"parameters":parameters}),None).unwrap();
+            let job=service.create(Uuid::new_v4(),project.id,None,"solver","Current bundled service smoke",json!({"engine":engine,"parameters":parameters}),None).unwrap();
             service.execute_solver(job.id,&CancellationToken::new()).await.unwrap_or_else(|error|panic!("{engine}: {error:#}; saved {}",service.directory(job.id).display()));
             let saved=service.get(job.id).unwrap(); assert_eq!(saved.state,"completed");
             let manifest=service.read_json(job.id,"manifest.json").unwrap();
@@ -416,6 +429,6 @@ pathlib.Path('module-origins.json').write_text(json.dumps({'runtime':str(root),'
         }
         verify(&RuntimeKind::Science.directory(&root.join("data")),RuntimeKind::Science,&CancellationToken::new()).unwrap();
         fs::write(root.join("service-entry-report.json"),serde_json::to_vec_pretty(&json!({"passed":true,"solvers":reports})).unwrap()).unwrap();
-        println!("Runtime v2 solver service entries: {}",root.join("service-entry-report.json").display());
+        println!("Current solver service entries: {}",root.join("service-entry-report.json").display());
     }
 }

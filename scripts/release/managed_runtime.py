@@ -17,6 +17,7 @@ import os
 from pathlib import Path, PurePosixPath
 import re
 import stat
+import native_identity
 
 
 MAX_FILES = 100_000
@@ -27,7 +28,7 @@ NATIVE_SUFFIXES = {".exe", ".dll", ".pyd", ".so", ".dylib"}
 SHA256 = re.compile(r"[0-9a-f]{64}\Z")
 FROZEN_MANIFEST_ROOT = Path(__file__).absolute().parents[2] / "tools/runtime-seeds"
 SEED_MANIFEST = "phaseforge-runtime-seed.json"
-SEED_LAYOUT = {"science-v2": "environments/science-v2",
+SEED_LAYOUT = {"science-v3": "environments/science-v3",
                "python-numpy-v2": "environments/python-numpy-v2/runtime"}
 
 
@@ -406,17 +407,23 @@ def verify_seed_manifest(runtime, expected_kind):
             "changed_files": changed, "isolation_manifest_verification": inner_check}
 
 
-def bundled_report(workspace, seed_root, bootstrap_python, source_commit):
+def bundled_report(workspace, seed_root, bootstrap_python, source_commit, archive_root=None):
     workspace, seed_root = guard(workspace), guard(seed_root)
     if not workspace.is_dir() or not seed_root.is_dir():
         raise InventoryError("Workspace and seed root must be existing directories")
-    missing = ["Package/Syft completeness and native dependency closure are unknown; this file inventory is not a complete SBOM",
-               "Archive source hashes and upstream metadata are retained manifest claims. Source archive bytes and build transformations were not independently replayed by this read-only inventory; separate build material receipts remain necessary"]
+    missing = ["Package/Syft completeness, static-link identities and loaded native dependency closure are unknown; this file inventory is not a complete SBOM",
+               "PE version resources may be missing. Upstream wheel ownership and metadata are not the version of every transitive DLL; native_identity retains the explicit gaps and review witnesses",
+               "Full standard-library/configuration transformations require separate build material receipts; native_identity verifies original native archive members only when an archive root is supplied"]
     runtimes = {}
     valid = True
     for name, destination_relative in SEED_LAYOUT.items():
         source, destination = inventory(seed_root / name), inventory(workspace / destination_relative)
         source_check, destination_check = verify_seed_manifest(source, name), verify_seed_manifest(destination, name)
+        identity = native_identity.evidence(Path(source["root"]), source["native_files"],
+                                            source_check.get("manifest", {}).get("content", {}).get("sources", []) if source_check.get("manifest") else [],
+                                            guard(archive_root) if archive_root is not None else None,
+                                            record=file_record, opened=opened, version=pe_version,
+                                            aliases=source_check.get("manifest", {}).get("content", {}).get("transformations", {}).get("native_aliases", {}) if source_check.get("manifest") else {})
         source_rows = {row["path"]: row for row in source["files"]}
         destination_rows = {row["path"]: row for row in destination["files"]}
         changed = [path for path in sorted(set(source_rows) & set(destination_rows)) if source_rows[path] != destination_rows[path]]
@@ -444,16 +451,17 @@ def bundled_report(workspace, seed_root, bootstrap_python, source_commit):
                           "mapping": {"seed_relative": name, "workspace_relative": destination_relative,
                                       "file_mapping": "Identical relative paths under these explicitly mapped roots, including the exact outer manifest bytes"},
                           "installed_seed": source, "managed_copy": destination,
+                          "native_identity": identity,
                           "seed_pin_verification": source_check, "copy_pin_verification": destination_check,
                           "frozen_source_manifest": frozen,
                           "copy_comparison": {"valid": bool(comparison_valid), "changed_files": changed,
                                               "missing_files": absent, "unexpected_files": unexpected,
                                               "outer_manifest_identical": bool(source_rows.get(SEED_MANIFEST) and source_rows.get(SEED_MANIFEST) == destination_rows.get(SEED_MANIFEST))},
-                          "archive_provenance": {"status": "declared_hash_and_size_pins_in_seed_manifest",
+                          "archive_provenance": {"status": "verified_archive_bytes_and_original_native_members" if archive_root is not None else "declared_hash_and_size_pins_in_seed_manifest",
                                                  "manifest_matches_frozen_source": frozen["matches_installed_seed_manifest"],
                                                  "sources": source_check.get("manifest", {}).get("content", {}).get("sources", []) if source_check.get("manifest") else [],
-                                                 "archive_bytes_inspected": False,
-                                                 "scope": "Runtime delivery is from installed bundled seeds, not post-install executable downloads. No cache or upstream endpoint was queried."}}
+                                                 "archive_bytes_inspected": archive_root is not None,
+                                                 "scope": "Runtime delivery is from installed bundled seeds, not post-install executable downloads. When explicitly supplied, pinned cache archives are read locally and native_identity binds original native members. No upstream endpoint was queried."}}
     bootstrap = None
     if bootstrap_python is not None:
         path = guard(bootstrap_python)
@@ -470,9 +478,9 @@ def bundled_report(workspace, seed_root, bootstrap_python, source_commit):
             "missing_provenance": missing}
 
 
-def build_report(workspace, bootstrap_python=None, source_commit=None, seed_root=None):
+def build_report(workspace, bootstrap_python=None, source_commit=None, seed_root=None, archive_root=None):
     if seed_root is not None:
-        return bundled_report(workspace, seed_root, bootstrap_python, source_commit)
+        return bundled_report(workspace, seed_root, bootstrap_python, source_commit, archive_root)
     if bootstrap_python is None:
         raise InventoryError("Historical venv inventory requires --bootstrap-python; bundled inventory requires --seed-root")
     workspace, bootstrap = guard(workspace), guard(bootstrap_python)
@@ -532,17 +540,20 @@ def main(argv=None):
     parser.add_argument("--workspace", required=True, type=Path)
     parser.add_argument("--bootstrap-python", type=Path)
     parser.add_argument("--seed-root", type=Path,
-                        help="Installed resources/runtime/runtime-seeds directory; selects the fixed bundled v2 source/destination mapping")
+                        help="Installed resources/runtime/runtime-seeds directory; selects the fixed science-v3 / python-numpy-v2 source/destination mapping")
     parser.add_argument("--output", required=True, type=Path)
     parser.add_argument("--source-commit")
+    parser.add_argument("--archive-root", type=Path, help="Existing pinned seed archive cache; verify original native members without executing them")
     args = parser.parse_args(argv)
-    report = build_report(args.workspace, args.bootstrap_python, args.source_commit, args.seed_root)
+    report = build_report(args.workspace, args.bootstrap_python, args.source_commit, args.seed_root, args.archive_root)
     output = guard(args.output, missing=True)
     protected = [absolute(args.workspace)]
     if args.bootstrap_python is not None:
         protected.append(absolute(args.bootstrap_python).parent)
     if args.seed_root is not None:
         protected.extend([absolute(args.seed_root), absolute(FROZEN_MANIFEST_ROOT)])
+    if args.archive_root is not None:
+        protected.append(absolute(args.archive_root))
     base = report["runtimes"].get("science", {}).get("external_base_runtime", {}).get("root")
     if base:
         protected.append(absolute(base))

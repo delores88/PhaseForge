@@ -4,6 +4,7 @@ import {ROOT,inventory,machine,readJSON,releaseTarget,sha256,sourceIdentity,writ
 import {auditableDependencies} from './auditable.mjs';
 import {frontendModuleEvidence} from './frontend-map.mjs';
 import {stagedOpenmmSources,verifyOpenmmSourceDelivery} from './openmm-sources.mjs';
+import {verifyMsvcNotices} from './msvc-notices.mjs';
 
 const source=sourceIdentity(),platform=process.platform==='win32'?'win':process.platform==='darwin'?'mac':'linux';
 releaseTarget();
@@ -14,10 +15,11 @@ if(metadata.platform!==process.platform||metadata.architecture!==process.arch||m
 const backendHash=await sha256(backend),dependencies=auditableDependencies(fs.readFileSync(backend));
 if(process.platform==='win32'){
   writeJSON(path.join(runtime,'third-party-source-materials.json'),{source_commit:source.commit,backend_sha256:backendHash,...await verifyOpenmmSourceDelivery(stagedOpenmmSources)});
+  writeJSON(path.join(runtime,'msvc-runtime-materials.json'),{source_commit:source.commit,backend_sha256:backendHash,...await verifyMsvcNotices()});
   const seeds={},rebuiltPath=path.join(process.env.PHASEFORGE_RUNTIME_SEED_ROOT||path.join(ROOT,'.local/release-seeds/ci'),'seed-build.json');
   const rebuilt=readJSON(rebuiltPath);
   if(rebuilt.source_commit!==source.commit||rebuilt.schema!=='phaseforge.runtime-seed-build.v1'||rebuilt.managed_executables_run!==false)throw Error('Missing exact-commit archive rebuild receipt');
-  for(const kind of ['science-v2','python-numpy-v2']){
+  for(const kind of ['science-v3','python-numpy-v2']){
     const seed=path.join(runtime,'runtime-seeds',kind),manifestPath=path.join(seed,'phaseforge-runtime-seed.json');
     const frozen=path.join(ROOT,'tools/runtime-seeds',`${kind}.manifest.json`);
     if(await sha256(manifestPath)!==await sha256(frozen))throw Error(`Staged ${kind} differs from the frozen source manifest`);

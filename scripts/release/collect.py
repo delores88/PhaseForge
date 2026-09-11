@@ -41,7 +41,7 @@ def validate_laboratory_inputs(folder,version,commit,backend_hash,acceptance):
         if file.is_symlink() or not file.is_file() or not file.resolve().is_relative_to(folder.resolve()):raise ValueError('Missing or linked laboratory evidence')
         if type(row.get('bytes')) is not int or file.stat().st_size!=row['bytes'] or row['bytes']>64*1024*1024 or digest(file)!=row.get('sha256'):raise ValueError('Retained laboratory evidence changed')
     if managed.get('source_commit')!=commit or managed.get('delivery')!='bundled_immutable_seeds' or managed.get('integrity_valid') is not True:raise ValueError('Bundled runtime copy provenance is incomplete or stale')
-    for kind in ('science-v2','python-numpy-v2'):
+    for kind in ('science-v3','python-numpy-v2'):
         runtime=managed.get('runtimes',{}).get(kind,{})
         if any(runtime.get(key,{}).get('valid') is not True for key in ('seed_pin_verification','copy_pin_verification','copy_comparison')):raise ValueError('A managed runtime differs from bundled source bytes')
         frozen=runtime.get('frozen_source_manifest',{})

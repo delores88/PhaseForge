@@ -9,6 +9,7 @@ import {auditableDependencies,auditableSection} from './auditable.mjs';
 import {cryptoRuntimeIdentity} from './runtime-identity.mjs';
 import {frontendModuleEvidence} from './frontend-map.mjs';
 import {OPENMM_RESOURCE,verifyOpenmmSourceDelivery} from './openmm-sources.mjs';
+import {MSVC_RESOURCE,verifyMsvcNotices} from './msvc-notices.mjs';
 
 const {platform,architecture,folder:targetFolder}=releaseTarget();
 const folder=path.join(ROOT,'.local/marketplace',targetFolder),payload=path.join(folder,'payload');
@@ -74,6 +75,9 @@ if(platform==='windows'){
   const observedSources=await verifyOpenmmSourceDelivery(path.join(resources,OPENMM_RESOURCE));
   assert.deepEqual(sourceMaterials,{source_commit:installed.source_commit,backend_sha256:installed.backend.sha256,...observedSources});
   writeJSON(path.join(folder,'third-party-source-materials.json'),sourceMaterials);
+  const msvcMaterials=readJSON(path.join(resources,'runtime/msvc-runtime-materials.json'));
+  assert.deepEqual(msvcMaterials,{source_commit:installed.source_commit,backend_sha256:installed.backend.sha256,...await verifyMsvcNotices(path.join(resources,MSVC_RESOURCE))});
+  writeJSON(path.join(folder,'msvc-runtime-materials.json'),msvcMaterials);
   const seedMaterials=readJSON(path.join(resources,'runtime/runtime-seed-materials.json'));
   assert.equal(seedMaterials.source_commit,installed.source_commit);assert.equal(seedMaterials.backend_sha256,installed.backend.sha256);
   const rebuiltPath=path.join(resources,'runtime/runtime-seed-build.json'),rebuilt=readJSON(rebuiltPath);
@@ -81,7 +85,7 @@ if(platform==='windows'){
   writeJSON(path.join(folder,'runtime-seed-build.json'),rebuilt);
   const managed=readJSON(path.join(folder,'managed-runtime-materials.json'));
   assert.equal(managed.source_commit,installed.source_commit);assert.equal(managed.delivery,'bundled_immutable_seeds');assert.equal(managed.integrity_valid,true);
-  for(const kind of ['science-v2','python-numpy-v2']){
+  for(const kind of ['science-v3','python-numpy-v2']){
     const seed=path.join(resources,'runtime/runtime-seeds',kind),manifestPath=path.join(seed,'phaseforge-runtime-seed.json');
     const manifest=readJSON(manifestPath),hash=await sha256(manifestPath);
     assert.equal(hash,await sha256(path.join(ROOT,'tools/runtime-seeds',`${kind}.manifest.json`)));
@@ -92,7 +96,7 @@ if(platform==='windows'){
     const rows=(await inventory(seed)).files.filter(row=>row.path!=='phaseforge-runtime-seed.json');
     assert.equal(rows.length,Object.keys(manifest.files).length);
     for(const row of rows){assert.equal(row.sha256,manifest.files[row.path]);assert.equal(row.bytes,manifest.file_bytes[row.path]);}
-    const versions={python:manifest.python,numpy:manifest.numpy,...(kind==='science-v2'?{openmm:manifest.openmm,pillow:manifest.pillow}:{})};
+    const versions={python:manifest.python,numpy:manifest.numpy,...(kind==='science-v3'?{openmm:manifest.openmm,pillow:manifest.pillow}:{})};
     for(const [name,version] of Object.entries(versions)){
       assert.match(version,/^\d+\.\d+\.\d+$/);
       const purl=name==='python'?`pkg:generic/cpython@${version}?consumer=${kind}`:`pkg:pypi/${name}@${version}?consumer=${kind}`;

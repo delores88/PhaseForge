@@ -42,6 +42,18 @@ class SeedRecipeTests(unittest.TestCase):
         with self.assertRaisesRegex(ValueError, "No exact matching"):
             seeds.assemble(embedded, source, [])
 
+    def test_science_alias_preserves_original_bytes_and_rejects_wrong_member(self):
+        embedded, source = self.inputs()
+        member = {seeds.MSVC_MEMBER: b"fixture MSVC"}
+        with self.assertRaisesRegex(ValueError, "pinned MSVCP"):
+            seeds.assemble(embedded, source, [member], add_msvc_alias=True)
+        with patch.object(seeds, "MSVC_SHA256", seeds.digest(b"fixture MSVC")):
+            files, receipt = seeds.assemble(embedded, source, [member], add_msvc_alias=True)
+            self.assertEqual(files['MSVCP140.dll'], files[seeds.MSVC_MEMBER])
+            self.assertEqual(receipt['native_aliases']['MSVCP140.dll']['archive_member'], seeds.MSVC_MEMBER)
+            with self.assertRaisesRegex(ValueError, "pinned MSVCP"):
+                seeds.assemble(embedded, source, [], add_msvc_alias=True)
+
     def test_wheel_cannot_replace_native_or_smuggle_bytecode(self):
         for wheel in ({"PYTHON.EXE": b"replacement"}, {"pkg/x.pyc": b"opaque"}, {"pkg.data/scripts/run.exe": b"needs mapping"}):
             with self.subTest(wheel=wheel), self.assertRaises(ValueError):
@@ -65,14 +77,14 @@ class SeedRecipeTests(unittest.TestCase):
 
     def test_freeze_is_explicit_one_time_and_default_rebuild_never_rewrites_changed_pins(self):
         embedded, source = self.inputs()
-        archives = [bundle(embedded), b"fixture source", bundle({"numpy/native.pyd": b"numpy"}), bundle({"openmm/native.dll": b"openmm"}), bundle({"PIL/native.pyd": b"pillow"})]
+        archives = [bundle(embedded), b"fixture source", bundle({"numpy/native.pyd": b"numpy", seeds.MSVC_MEMBER: b"fixture MSVC"}), bundle({"openmm/native.dll": b"openmm"}), bundle({"PIL/native.pyd": b"pillow"})]
         with tempfile.TemporaryDirectory() as temporary:
             root = Path(temporary)
             def build(name, freeze=False):
-                with patch.object(seeds, "cached", side_effect=archives), patch.object(seeds, "source_files", return_value=source):
+                with patch.object(seeds, "cached", side_effect=archives), patch.object(seeds, "source_files", return_value=source), patch.object(seeds, "MSVC_SHA256", seeds.digest(b"fixture MSVC")):
                     return seeds.build(root/name, root/"cache", offline=True, freeze=freeze, manifest_root=root/"frozen")
             build("initial", True)
-            frozen = root/"frozen/science-v2.manifest.json"
+            frozen = root/"frozen/science-v3.manifest.json"
             initial = frozen.read_bytes()
             build("replayed")
             self.assertEqual(frozen.read_bytes(), initial)

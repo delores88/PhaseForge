@@ -1,0 +1,76 @@
+PhaseForge - Microsoft runtime terms (MSVC-2026-09-11)
+
+PhaseForge remains licensed under the MIT License. These terms apply only
+to the Microsoft Visual C++ runtime files bundled with PhaseForge,
+including MSVCP140.dll, VCRUNTIME140.dll, VCRUNTIME140_1.dll and their
+byte-identical renamed copies. Other components retain their own licenses.
+These terms do not limit your MIT rights in PhaseForge or require you to
+install or qualify for Visual Studio.
+
+By checking the acceptance box and continuing, you agree to these terms
+for those Microsoft files. For an unattended installation, supplying
+/ACCEPT_MSVC_TERMS=MSVC-2026-09-11 expressly records that same agreement.
+If you do not agree, cancel installation of this bundled package.
+
+Use and redistribution
+
+The Microsoft files are licensed object code, not sold. Microsoft and its
+suppliers retain their rights. You may install and use these files with
+PhaseForge. You may copy and distribute the unmodified files as part of
+PhaseForge, preserving their notices and requiring distributors and end
+users to agree to terms providing these same protections. No right is
+granted to offer the Microsoft files separately, rent or lease them, or
+use Microsoft's trademarks to imply endorsement.
+
+Except where applicable law or an applicable open-source component
+license gives you additional rights, you must not modify the Microsoft
+files, bypass their technical restrictions, remove or alter their notices,
+reverse engineer, decompile or disassemble them, or attempt to derive their
+source code. Do not subject Microsoft's code to terms that require its
+source disclosure or grant others rights to modify it. Comply with
+applicable laws and export restrictions.
+
+Warranty, support and liability
+
+The Microsoft files are provided as is, at your risk. Microsoft gives no
+express warranties, guarantees or conditions and has no obligation under
+these terms to provide support. Where local law permits, Microsoft excludes
+implied warranties of merchantability, fitness for a particular purpose
+and non-infringement.
+
+Subject to the mandatory rights and regional protections below, recovery
+from Microsoft and its suppliers is limited to direct damages of US$5;
+consequential damages, lost profits, and special, indirect or incidental
+damages are excluded. These limits apply to claims related to the Microsoft
+files, including contract, warranty, strict-liability, negligence and other
+claims, to the extent permitted by law, even if the possibility of the
+damages was known. These limits do not restrict claims that applicable law
+does not allow to be limited.
+
+Applicable law and mandatory rights
+
+If you acquired the Microsoft files in the United States, Washington state
+law applies to interpretation of, and claims for breach of, these runtime
+terms; the laws of the state where you live apply to other claims. If you
+acquired them in another country, that country's laws apply.
+
+You may have additional statutory or consumer rights under the laws of
+your state or country, including rights against the distributor. These
+terms do not change those rights where the law does not permit doing so.
+In Australia, nothing here affects your statutory guarantees under the
+Australian Consumer Law.
+
+For Germany and Austria, the properly licensed Microsoft files will perform
+substantially as described in Microsoft's materials, without an additional
+contractual guarantee from Microsoft. Microsoft remains liable under
+statutory law for intentional conduct, gross negligence, Product Liability
+Act claims, death and personal or physical injury. For slight negligence,
+Microsoft is liable for breach of material contractual obligations whose
+fulfilment enables performance of the agreement, whose breach endangers
+its purpose, and on whose compliance a party may regularly rely (cardinal
+obligations). In other cases of slight negligence, Microsoft is not liable.
+These regional protections control over the limitations above.
+
+Microsoft copyright and license notices and the original redistribution
+basis are installed under resources/tools/third-party/msvc-runtime.
+They identify Microsoft's rights separately from PhaseForge's MIT License.

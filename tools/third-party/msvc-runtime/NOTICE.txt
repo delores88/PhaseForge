@@ -1,0 +1,25 @@
+Microsoft Visual C++ Runtime
+Copyright Microsoft Corporation. All rights reserved.
+
+The science-v3 runtime includes an unmodified MSVCP140.dll (AMD64,
+file/product version 14.40.33810.0, 575056 bytes). Its SHA256 is:
+a4c2229bdc2a2a630acdc095b4d86008e5c3e3bc7773174354f3da4f5beb9cde
+
+The original bytes are retained from the SHA256-pinned official NumPy 2.4.6
+wheel member numpy.libs/msvcp140-a4c2229bdc2a2a630acdc095b4d86008.dll.
+The additional science-v3/MSVCP140.dll file is a byte-identical app-local
+alias for OpenMM's imports. The original NumPy member is also retained.
+
+Microsoft's license terms apply to the Microsoft runtime. It is not
+relicensed under PhaseForge's MIT license or NumPy's BSD license.
+The redistribution basis is Visual Studio Community 2022 section 4
+(Distributable Code), the Microsoft redistribution list, and Microsoft's
+documented app-local deployment method. PhaseForge supplies substantial
+primary application functionality. No Microsoft endorsement is implied.
+
+The runtime is distributed as object code for use with this application.
+Preserve Microsoft's copyright and license notices. Microsoft retains
+ownership of its software; no source-code or trademark rights are granted
+by PhaseForge. Redistribution remains subject to the Microsoft terms.
+See Visual-Studio-2022-Community-License.txt and provenance.json for the
+official license, redistribution references and exact byte provenance.

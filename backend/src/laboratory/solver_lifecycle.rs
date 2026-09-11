@@ -9,6 +9,7 @@ impl LaboratoryService{
     fn prepare_solver_resume(&self,id:Uuid,deadline:Option<DateTime<Utc>>,independent:bool)->anyhow::Result<CancellationToken>{
         let _guard=self.gate.lock();let mut job=self.get(id)?;
         anyhow::ensure!(job.kind=="solver"&&matches!(job.state.as_str(),"paused"|"failed"|"timed_out"),"Solver is not resumable");
+        self.ensure_science_attempt_identity(id)?;
         let original_parent=job.parent_id;let original_deadline=job.deadline_at;
         if let Some(parent_id)=job.parent_id{
             let parent=self.get(parent_id)?;
@@ -48,6 +49,24 @@ impl LaboratoryService{
         let service=LaboratoryService::new(db,config).unwrap();let parent=service.create(Uuid::new_v4(),project.id,None,"session","parent",json!({}),Some(Utc::now()+chrono::Duration::seconds(60))).unwrap();
         let child=service.create(Uuid::new_v4(),project.id,Some(parent.id),"solver","solver",json!({"engine":"openmm_argon","source_session_id":parent.id,"parameters":{"seed":1234}}),parent.deadline_at).unwrap();service.update(child.id,|job|job.state="paused".into()).unwrap();
         (dir,service,parent,child)
+    }
+    #[test]fn science_v3_refuses_old_runtime_resume_before_any_mutation_and_keeps_artifacts_readable(){
+        let (_dir,service,parent,child)=fixture();
+        service.event(child.id,"runtime_verified","Prior runtime",json!({"kind":"science-v2","manifest_sha256":"fcc53f3bc276e6c0101bdcc1f2d256b9f89942c9a6426b241d2a0aa4bb478aba"})).unwrap();
+        let root=service.directory(child.id);write_json(&root.join("manifest.json"),&json!({"runtime":"original science-v2","steps":42})).unwrap();std::fs::write(root.join("cancel.request"),b"original pause").unwrap();
+        let before=serde_json::to_vec(&service.get(child.id).unwrap()).unwrap();let artifact=std::fs::read(root.join("manifest.json")).unwrap();
+        let error=service.prepare_solver_resume(child.id,parent.deadline_at,false).unwrap_err();assert!(error.to_string().contains("Original scientific runtime differs"));
+        assert_eq!(serde_json::to_vec(&service.get(child.id).unwrap()).unwrap(),before);assert_eq!(std::fs::read(root.join("manifest.json")).unwrap(),artifact);assert_eq!(std::fs::read(root.join("cancel.request")).unwrap(),b"original pause");
+        assert!(!service.executing(child.id));assert!(!service.config.data_directory.join("environments/science-v3").exists());
+        assert_eq!(service.read_json(child.id,"manifest.json").unwrap()["steps"],42);
+        assert!(service.list(Some(child.project_id)).unwrap().iter().any(|job|job.id==child.id));
+    }
+    #[test]fn science_v3_matching_receipt_resumes_and_generated_runtime_path_stays_v2(){
+        let (_dir,service,parent,child)=fixture();
+        service.event(child.id,"runtime_verified","Current runtime",json!({"kind":runtime::RuntimeKind::Science.name(),"manifest_sha256":runtime::RuntimeKind::Science.manifest_sha256()})).unwrap();
+        assert_eq!(service.environment_python(),service.config.data_directory.join("environments/science-v3/python.exe"));
+        assert_eq!(runtime::RuntimeKind::Generated.directory(&service.config.data_directory),service.config.data_directory.join("environments/python-numpy-v2/runtime"));
+        let token=service.prepare_solver_resume(child.id,parent.deadline_at,false).unwrap();assert!(!token.is_cancelled());service.release(child.id);
     }
     #[test]fn solver_parent_deadline_cannot_be_overridden_or_detached_while_active(){
         let (_dir,service,parent,child)=fixture();let before=service.get(child.id).unwrap();

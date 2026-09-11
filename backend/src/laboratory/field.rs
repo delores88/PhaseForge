@@ -14,7 +14,7 @@ use uuid::Uuid;
 
 pub fn capability() -> Value {
     json!({
-        "id":"diffusion_2d","adapter_version":"1.0.0","runtime":"NumPy 2.4.6; Pillow 12.3.0 in the bundled science-v2 environment",
+        "id":"diffusion_2d","adapter_version":"1.0.0","runtime":"NumPy 2.4.6; Pillow 12.3.0 in the bundled science-v3 environment",
         "scope":"Two-dimensional constant-isotropic-diffusivity passive scalar on a uniform periodic rectangle; synthetic normalized concentration. No reactions, advection, variable diffusion, biological binding, or nonperiodic boundaries.",
         "equations":"dc/dt = D*(d2c/dx2 + d2c/dy2)","method":"float64 conservative five-point FTCS; explicit CFL rejection",
         "parameters":{
@@ -293,6 +293,7 @@ impl LaboratoryService {
         id: Uuid,
         token: &CancellationToken,
     ) -> anyhow::Result<()> {
+        self.ensure_science_attempt_identity(id)?;
         let _slot = tokio::select! {_=token.cancelled()=>bail!("Cancelled in field queue"),slot=self.solver_slots.acquire()=>slot?};
         let job = self.get(id)?;
         validate(&job.input["parameters"])?;
