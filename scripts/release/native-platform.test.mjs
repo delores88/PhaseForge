@@ -50,7 +50,7 @@ test('DMG receipt rejects another mountpoint, multiple mounted volumes and forge
   assert.throws(()=>mountedVolume([{'mount-point':mount,'dev-entry':'/dev/disk4s1'},{'mount-point':'/Volumes/other','dev-entry':'/dev/disk5'}],mount),/exactly one/);
   assert.throws(()=>mountedVolume([{'mount-point':mount,'dev-entry':'/dev/disk4; touch unsafe'}],mount));
 });
-test('DMG root admits the sole app and expected Applications shortcut only',context=>{
+test('DMG root admits the sole app and expected Applications shortcut only',{skip:process.platform==='win32'?'Windows converts POSIX /Applications symlinks to a drive path; native Linux/macOS jobs validate the exact DMG shortcut':false},context=>{
   const root=fixture(context),bundle=app(root);
   if(!symlink(context,'/Applications',path.join(root,'Applications')))return;
   assert.equal(validateDmgRoot(root),bundle);

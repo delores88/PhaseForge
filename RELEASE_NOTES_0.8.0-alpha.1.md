@@ -38,12 +38,14 @@ API admission validates loopback hosts and configured browser origins. Provider
 clients reject redirects, protect credential headers and redact credential-bearing
 diagnostics. SQLite is updated to 3.53.2 with runtime identity and preservation checks.
 
-The pinned Electron 43.7.0 candidate includes verified upstream security backports.
-Runtime inventory, remaining vulnerability applicability review and native package
-acceptance are still required; this note is not a security clearance or publication
-receipt. The initial release targets Windows x64 and Linux x64 AppImage. ARM64
-engineering builds are outside the initial alpha listing. Platform code signing
-is not purchased; marketplace provenance and security review are separate checks.
+The desktop pins Electron 45.0.0-alpha.6. Its exact upstream source includes the
+reviewed ANGLE and V8 fixes that blocked the previous runtime. This is an alpha
+runtime; its source review does not replace package security review or native
+acceptance. Publication proceeds in order: Windows x64, Apple Silicon macOS ARM64
+DMG, then Linux x64 AppImage. Intel and universal Mac packages are excluded.
+Platform signing accounts are not required by this project; the Mac app uses
+ad-hoc signing without Developer ID or notarization. Marketplace provenance and
+security review remain separate checks.
 
 ## Scientific scope
 

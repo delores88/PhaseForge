@@ -70,6 +70,23 @@ test('copied payload preserves relative links and still rejects escaping links',
     await assert.rejects(()=>inventory(target),/escapes root/);
   }finally{fs.rmSync(inside(os.tmpdir(),folder,{existing:true}),{recursive:true});}
 });
+test('payload inventory resolves a symlinked ancestor without admitting links outside the real payload',async context=>{
+  const folder=fs.mkdtempSync(path.join(os.tmpdir(),'phaseforge-release-alias-'));
+  try{
+    const physical=path.join(folder,'physical'),payload=path.join(physical,'payload'),alias=path.join(folder,'alias');
+    fs.mkdirSync(path.join(payload,'assets'),{recursive:true});fs.writeFileSync(path.join(payload,'assets/icon'),'original bytes');
+    fs.mkdirSync(path.join(physical,'outside'));fs.writeFileSync(path.join(physical,'outside/file'),'outside payload');
+    try{fs.symlinkSync('physical',alias,'dir');}
+    catch(error){if(process.platform==='win32'&&['EPERM','EACCES'].includes(error.code)){context.skip('Windows host does not permit symlink creation; native Linux/macOS jobs exercise this regression');return;}throw error;}
+    fs.symlinkSync('assets',path.join(payload,'icons'),'dir');
+    const canonical=await inventory(payload),aliased=await inventory(path.join(alias,'payload'));
+    assert.deepEqual(aliased,canonical);
+    assert.ok(aliased.files.some(file=>file.path==='icons'&&file.link==='assets'));
+    fs.symlinkSync('../outside',path.join(payload,'escape'),'dir');
+    await assert.rejects(()=>inventory(path.join(alias,'payload')),/Payload link escapes root: escape/);
+  }finally{fs.rmSync(inside(os.tmpdir(),folder,{existing:true}),{recursive:true});}
+});
+
 test('occupied-port fixtures detect even TCP-only probes and close their owned listener',async()=>{
   const listeners=await startInertListeners([{address:'127.0.0.1',port:0}]);
   const port=listeners.receipts()[0].port;

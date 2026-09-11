@@ -72,7 +72,9 @@ export function machine(file){
   }finally{fs.closeSync(descriptor);}
 }
 export async function inventory(directory){
-  const root=path.resolve(directory),records=[],pending=[root];let total=0;
+  // The containing path can itself be an OS alias (macOS /var -> /private/var).
+  // Compare link destinations with the same canonical boundary we traverse.
+  const root=fs.realpathSync(directory),records=[],pending=[root];let total=0;
   while(pending.length){for(const entry of fs.readdirSync(pending.pop(),{withFileTypes:true})){
     const file=path.join(entry.parentPath||entry.path,entry.name),relative=path.relative(root,file).replaceAll(path.sep,'/');
     if(entry.isSymbolicLink()){const target=fs.readlinkSync(file);if(!fs.realpathSync(file).startsWith(root+path.sep))throw Error(`Payload link escapes root: ${relative}`);records.push({path:relative,link:target});}

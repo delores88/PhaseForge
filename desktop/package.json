@@ -18,7 +18,7 @@
     "package:mac:arm64": "electron-builder --mac dmg --arm64 --publish never"
   },
   "devDependencies": {
-    "electron": "43.7.0",
+    "electron": "45.0.0-alpha.6",
     "electron-builder": "26.15.3"
   },
   "build": {
@@ -92,12 +92,21 @@
       "syncDesktopName": true
     },
     "mac": {
-      "target": [{"target": "dmg", "arch": ["arm64"]}],
+      "target": [
+        {
+          "target": "dmg",
+          "arch": [
+            "arm64"
+          ]
+        }
+      ],
       "icon": "../frontend/public/icon.png",
       "category": "public.app-category.education",
       "artifactName": "PhaseForge_${version}_macos_${arch}.${ext}",
       "identity": "-",
-      "signIgnore": ["/Contents/Resources/runtime/phaseforge-backend$"],
+      "signIgnore": [
+        "/Contents/Resources/runtime/phaseforge-backend$"
+      ],
       "hardenedRuntime": false,
       "notarize": false
     },

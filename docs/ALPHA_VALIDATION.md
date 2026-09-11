@@ -190,16 +190,29 @@ relabelled as artifacts of this new packaging source.
 
 ## Security review status
 
-Each candidate retains 413 High/Critical scanner candidates and eight source
+The historical Electron 43.7.0 candidates retain 413 High/Critical scanner candidates and eight source
 secret findings. Counts alone do not establish exploitability. The source secret
 findings are six public WebSocket handshake fixtures and two documented native-job
 UUIDs; their individual dispositions leave the raw reports intact. Payload and
 expanded application-archive secret scans reported no findings. Runtime
 applicability review remains separate from these secret dispositions.
 
-Electron 43.7.0 is an engineering candidate with verified upstream backports, but
-the reviewed ANGLE CVE-2026-87500 remains an unresolved release blocker. The GLB
-guards address two demonstrated application input paths; they do not constitute
-a vendor patch or complete shader reachability proof. Marketplace profile
-activation and admission remain held. No security exception, published release
-or completed marketplace validation is claimed by this document.
+Those Electron 43.7.0 packages remain superseded: ANGLE CVE-2026-87500 was not
+patched in that runtime. The GLB guards address application input paths and are
+not a vendor patch or a complete shader reachability proof.
+
+The current source pins Electron 45.0.0-alpha.6. The exact vendor source contains
+both the reviewed ANGLE CVE-2026-87500 and V8 CVE-2026-87491 fixes; the official
+dependency pins, fix ancestry and applied patch checks are recorded in
+`release-coordination/ALTERNATE_RUNTIME_FEASIBILITY.md`. The local Windows runtime
+probe observed Electron 45.0.0-alpha.6, Chromium 155.0.8038.2, Node 24.21.0,
+V8 15.4.80-electron.0 and Node SQLite 3.53.4. The separate backend retains SQLite
+3.53.2. These observations do not waive other vulnerability findings or certify
+the stability of an alpha runtime. New packages require their own native
+acceptance, exact materials and marketplace admission; historical receipts and
+dispositions cannot be relabelled as evidence for this source.
+
+Native builds may run concurrently. Marketplace publication must proceed Windows
+x64 first, then macOS ARM64, then Linux x64, without waiting for all three before
+the first eligible platform can be submitted. No security exception, published
+release or completed marketplace validation is claimed by this document.
