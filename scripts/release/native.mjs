@@ -5,12 +5,13 @@ import net from 'node:net';
 import assert from 'node:assert/strict';
 import crypto from 'node:crypto';
 import {_electron} from 'playwright-core';
-import {ROOT,command,copyEvidenceTree,hostedWorkspace,inside,inventory,machine,readJSON,sha256,sleep,writeJSON} from './common.mjs';
+import {ROOT,command,copyEvidenceTree,hostedWorkspace,inside,inventory,machine,readJSON,releaseTarget,sha256,sleep,writeJSON} from './common.mjs';
 import {startInertListeners} from './legacy-listeners.mjs';
+import {installMacDmg,payloadLayout,removeMacApp} from './native-platform.mjs';
 
 const version=readJSON(path.join(ROOT,'desktop/package.json')).version;
-const platform=process.platform==='win32'?'windows':'linux';
-const output=path.join(ROOT,'.local/marketplace',`${platform}-x64`);
+const {platform,architecture,folder:targetFolder}=releaseTarget();
+const output=path.join(ROOT,'.local/marketplace',targetFolder);
 const python=process.env.PHASEFORGE_ACCEPTANCE_PYTHON||'python';
 const probe=(mode,args=[])=>JSON.parse(command(python,[path.join(ROOT,'scripts/release/process_probe.py'),mode,...args]));
 const uiPort=7332;
@@ -90,13 +91,13 @@ async function brandingScreenshots(electronApp,page,folder){
   const expanded=await observeBrand(page,'/brand/phaseforge-horizontal-dark.svg');
   assert.equal(expanded.viewport.width,1008);assert.equal(expanded.sidebar.width,190);
   assert.ok(expanded.image.bounds.width>=160,'Expanded navigation must retain the full readable wordmark');
-  await page.screenshot({path:path.join(folder,'window.png')});
+  await page.screenshot({path:path.join(folder,'window.png'),scale:'css'});
   await page.getByRole('button',{name:'Collapse navigation',exact:true}).click();
   await page.waitForFunction(()=>document.querySelector('.appFrame')?.classList.contains('appFrame--compact')&&document.querySelector('.primarySidebar')?.getBoundingClientRect().width===64);
   await page.locator('.primaryBrandSymbol.brandDark').waitFor({state:'visible'});
   const compact=await observeBrand(page,'/brand/phaseforge-symbol-dark.svg');
   assert.equal(compact.sidebar.width,64);assert.ok(compact.image.bounds.width>=48&&compact.image.bounds.height>=38,'Compact navigation must show the readable original color symbol');
-  await page.screenshot({path:path.join(folder,'window-compact.png')});
+  await page.screenshot({path:path.join(folder,'window-compact.png'),scale:'css'});
   await page.getByRole('button',{name:'Expand navigation',exact:true}).click();
   await page.waitForFunction(()=>!document.querySelector('.appFrame')?.classList.contains('appFrame--compact')&&document.querySelector('.primarySidebar')?.getBoundingClientRect().width===190);
   await nativeWindow.dispose();
@@ -131,8 +132,9 @@ async function session(executable,workspace,index,fixture){
   try{
     electronApp=await _electron.launch({executablePath:executable,args:[`--user-data-dir=${path.join(workspace,'electron-profile')}`],env:environment,cwd:path.dirname(executable),chromiumSandbox:true,timeout:90000});
     if(electronApp.process().exitCode===null)trackOwner(electronApp.process().pid);
-    const runtime=await electronApp.evaluate(({app})=>({pid:process.pid,execPath:process.execPath,resourcesPath:process.resourcesPath,versions:process.versions,appVersion:app.getVersion(),packaged:app.isPackaged,appPath:app.getAppPath(),userData:app.getPath('userData')}));
+    const runtime=await electronApp.evaluate(({app})=>({pid:process.pid,architecture:process.arch,platform:process.platform,execPath:process.execPath,resourcesPath:process.resourcesPath,versions:process.versions,appVersion:app.getVersion(),packaged:app.isPackaged,appPath:app.getAppPath(),userData:app.getPath('userData')}));
     appPID=runtime.pid;trackOwner(appPID);remember();assert.equal(runtime.packaged,true);assert.equal(runtime.appVersion,version);
+    assert.equal(runtime.architecture,architecture);assert.equal(runtime.platform,process.platform);
     const page=await electronApp.firstWindow({timeout:90000});
     page.on('pageerror',error=>errors.push(error.message));
     page.on('request',request=>{const url=new URL(request.url());if(['http:','https:'].includes(url.protocol)&&url.hostname!=='127.0.0.1')requests.push(url.origin);});
@@ -165,17 +167,18 @@ async function session(executable,workspace,index,fixture){
     const metadata=readJSON(path.join(runtime.resourcesPath,'runtime/build.json'));
     assert.equal(metadata.sourceCommit,process.env.GITHUB_SHA);assert.equal(metadata.sourceDirty,false);
     const backend=path.join(runtime.resourcesPath,'runtime',process.platform==='win32'?'phaseforge-backend.exe':'phaseforge-backend');
-    assert.equal(machine(runtime.execPath).architecture,'x64');assert.equal(machine(backend).architecture,'x64');
+    assert.equal(machine(runtime.execPath).architecture,architecture);assert.equal(machine(backend).architecture,architecture);
     const samePath=(a,b)=>process.platform==='win32'?path.resolve(a).toLowerCase()===path.resolve(b).toLowerCase():path.resolve(a)===path.resolve(b);
     const children=remember();assert.ok(children.some(item=>samePath(item.exe,backend)),'Packaged backend must belong to the launched application');
     const readySeconds=(Date.now()-began)/1000;
     if(index===1){
       fixture=await offlineExperiment(page);
       const payload=path.join(output,'payload');assert.ok(!fs.existsSync(payload),'Payload copy must be new');
-      copyEvidenceTree(path.dirname(runtime.resourcesPath),payload);
-      const copiedBackend=path.join(payload,'resources/runtime',path.basename(backend));
+      const layout=payloadLayout(runtime.resourcesPath);
+      copyEvidenceTree(layout.root,payload);
+      const copiedBackend=path.join(payload,layout.resourcesRelative,'runtime',path.basename(backend));
       assert.equal(await sha256(copiedBackend),await sha256(backend));
-      writeJSON(path.join(output,'installed-payload.json'),{source_commit:process.env.GITHUB_SHA,version,runtime,backend:{sha256:await sha256(backend),machine:machine(backend)},...await inventory(payload)});
+      writeJSON(path.join(output,'installed-payload.json'),{source_commit:process.env.GITHUB_SHA,version,runtime,resources_relative:layout.resourcesRelative.replaceAll(path.sep,'/'),backend:{sha256:await sha256(backend),machine:machine(backend)},...await inventory(payload)});
     }else{
       const projects=await call(page,'/api/projects');const rows=Array.isArray(projects)?projects:projects.projects;
       assert.ok(rows.some(row=>row.id===fixture.project.id),'Reopened installed app lost its fixture project');
@@ -223,7 +226,7 @@ async function main(){
   const temporary=hostedWorkspace();await requireClosed();
   if(fs.existsSync(output)&&fs.readdirSync(output).some(name=>name.startsWith('launch-')||name==='payload'))throw Error('Native acceptance evidence must not overwrite a prior run');
   fs.mkdirSync(output,{recursive:true});
-  const suffix=process.platform==='win32'?'-setup.exe':'.AppImage';
+  const suffix=process.platform==='win32'?'-setup.exe':process.platform==='darwin'?'.dmg':'.AppImage';
   const artifacts=fs.readdirSync(path.join(ROOT,'desktop/dist')).filter(name=>name.endsWith(suffix));
   assert.equal(artifacts.length,1,'Exactly one admitted installer must be produced per native job');
   const artifact=path.join(ROOT,'desktop/dist',artifacts[0]);
@@ -232,16 +235,23 @@ async function main(){
   const install=inside(root,path.join(root,'install')),workspace=inside(root,path.join(root,'fixture-data'));
   fs.mkdirSync(workspace);fs.writeFileSync(path.join(workspace,'preserve.txt'),'PhaseForge disposable installation fixture\n');
   legacyListeners=await startInertListeners([3000,7331].flatMap(port=>['127.0.0.1','::1'].map(address=>({address,port}))));
-  let executable;
+  let executable,macInstallation;
   if(process.platform==='win32'){
     assert.ok(!install.includes(' '),'NSIS /D acceptance path must not require shell quoting');
     command(artifact,['/S',`/D=${install}`],{timeout:180000});executable=path.join(install,'PhaseForge.exe');
+  }else if(process.platform==='darwin'){
+    macInstallation=await installMacDmg(artifact,install,inside(root,path.join(root,'dmg-mount')),path.join(output,'macos-install.json'),python);
+    executable=macInstallation.executable;
   }else{
     fs.mkdirSync(install);executable=path.join(install,path.basename(artifact));fs.copyFileSync(artifact,executable);fs.chmodSync(executable,0o755);
     assert.equal(machine(executable).architecture,'x64');
   }
   assert.ok(fs.statSync(executable).isFile(),'The actual installer did not create the application');
-  const host=probe('host'),fixture=await session(executable,workspace,1,null);await session(executable,workspace,2,fixture);
+  const host=probe('host');
+  if(process.platform==='darwin'){
+    assert.equal(host.machine,'arm64');host.macos_version=command('/usr/bin/sw_vers',['-productVersion']);host.macos_build=command('/usr/bin/sw_vers',['-buildVersion']);
+  }
+  const fixture=await session(executable,workspace,1,null);await session(executable,workspace,2,fixture);
   const backup=inside(root,path.join(root,'closed-data-backup')),restored=inside(root,path.join(root,'restored-data'));
   // All SQLite connections are closed before this file-level backup. Include any WAL/SHM files.
   copyEvidenceTree(workspace,backup,{filter:source=>path.relative(workspace,source).split(path.sep)[0]!=='electron-profile'});
@@ -256,12 +266,14 @@ async function main(){
     command(uninstaller,['/S'],{timeout:180000});
     for(let i=0;i<60&&fs.existsSync(executable);i++)await sleep(500);
     assert.equal(fs.existsSync(executable),false,'NSIS uninstall left the application executable');
-  }else fs.unlinkSync(executable);
+  }else if(process.platform==='darwin')removeMacApp(install,macInstallation.bundle);
+  else fs.unlinkSync(executable);
   assert.equal(await sha256(database),before.database_sha256);assert.equal(await sha256(path.join(workspace,'preserve.txt')),before.sentinel_sha256);await requireClosed();
   const legacyPorts=legacyListeners.receipts();
   writeJSON(path.join(output,'occupied-legacy-ports.json'),legacyPorts);
   assert.ok(legacyPorts.every(row=>row.connections===0&&row.received_bytes===0),'The packaged application probed an occupied legacy port');
-  const receipt={schema:'phaseforge.native-acceptance.v1',passed:true,source_commit:process.env.GITHUB_SHA,version,platform,architecture:'x64',host,artifact:{name:path.basename(artifact),bytes:fs.statSync(artifact).size,sha256:await sha256(artifact)},fresh_install:true,same_workspace_restart:true,offline_numerical_engine:true,normal_quit:true,uninstall:true,fixture_data_preserved:true,closed_database_backup_restore:true,fixture,retained_fixture:before,observed_at:new Date().toISOString(),limits:['No bundled local LLM or optional Blender/CAD engine was exercised.','Runner RAM and sampled RSS are recorded; they do not establish a minimum-RAM certification.','No prior-version upgrade/downgrade test.','AppImage installation means copying the distributed portable executable to a new application directory; removal deletes that executable.']};
+  const receipt={schema:'phaseforge.native-acceptance.v1',passed:true,source_commit:process.env.GITHUB_SHA,version,platform,architecture,host,artifact:{name:path.basename(artifact),bytes:fs.statSync(artifact).size,sha256:await sha256(artifact)},fresh_install:true,same_workspace_restart:true,offline_numerical_engine:true,normal_quit:true,uninstall:true,fixture_data_preserved:true,closed_database_backup_restore:true,fixture,retained_fixture:before,observed_at:new Date().toISOString(),limits:['No bundled local LLM or optional Blender/CAD engine was exercised.','Runner RAM and sampled RSS are recorded; they do not establish a minimum-RAM certification.','No prior-version upgrade/downgrade test.',process.platform==='darwin'?'macOS installation means copying PhaseForge.app from the read-only DMG into an isolated application directory; removal deletes only that app bundle. Direct instrumented launch does not certify quarantined Finder/Gatekeeper download handling.':'AppImage installation means copying the distributed portable executable to a new application directory; removal deletes that executable.']};
+  if(macInstallation)receipt.macos_installation=macInstallation.receipt;
   receipt.occupied_legacy_ports=legacyPorts;
   receipt.dark_mode_original_color_branding=true;
   receipt.explicit_light_preference_survives_restart=true;

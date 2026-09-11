@@ -68,7 +68,7 @@ else{
   // Stable origin preserves the researcher's model, theme and workspace preferences.
   app.whenReady().then(async()=>{
     if(quitting)return;
-    Menu.setApplicationMenu(null);
+    Menu.setApplicationMenu(process.platform==='darwin'?Menu.buildFromTemplate([{role:'appMenu'},{role:'editMenu'},{role:'viewMenu'},{role:'windowMenu'}]):null);
     if(!await launchBackend()||quitting)return;
     const started=await startServer(app.isPackaged?path.join(process.resourcesPath,'ui'):path.resolve(__dirname,'../frontend/out'),engineTarget,7332,{isBackendReady:engineReady});
     if(quitting){started.server.closeAllConnections?.();started.server.close();return;}

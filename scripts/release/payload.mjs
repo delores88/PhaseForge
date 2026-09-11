@@ -2,33 +2,44 @@
 import fs from 'node:fs';
 import path from 'node:path';
 import assert from 'node:assert/strict';
+import crypto from 'node:crypto';
 import {createRequire} from 'node:module';
-import {ROOT,inside,inventory,readJSON,sha256,writeJSON} from './common.mjs';
-import {auditableDependencies} from './auditable.mjs';
+import {ROOT,inside,inventory,readJSON,releaseTarget,sha256,writeJSON} from './common.mjs';
+import {auditableDependencies,auditableSection} from './auditable.mjs';
 import {cryptoRuntimeIdentity} from './runtime-identity.mjs';
 import {frontendModuleEvidence} from './frontend-map.mjs';
 
-const platform=process.platform==='win32'?'windows':'linux';
-const folder=path.join(ROOT,'.local/marketplace',`${platform}-x64`),payload=path.join(folder,'payload');
+const {platform,architecture,folder:targetFolder}=releaseTarget();
+const folder=path.join(ROOT,'.local/marketplace',targetFolder),payload=path.join(folder,'payload');
+const resourcesRelative=process.platform==='darwin'?'Contents/Resources':'resources',resources=path.join(payload,resourcesRelative);
 const installed=readJSON(path.join(folder,'installed-payload.json'));
 const observed=readJSON(path.join(folder,'launch-1/runtime.json'));
 assert.equal(installed.source_commit,process.env.GITHUB_SHA);
-const backend=path.join(payload,'resources/runtime',process.platform==='win32'?'phaseforge-backend.exe':'phaseforge-backend');
+assert.equal(installed.resources_relative,resourcesRelative);assert.equal(installed.backend.machine.architecture,architecture);
+const backend=path.join(resources,'runtime',process.platform==='win32'?'phaseforge-backend.exe':'phaseforge-backend');
 assert.equal(await sha256(backend),installed.backend.sha256);
 const dependencies=auditableDependencies(fs.readFileSync(backend));
-const bound=readJSON(path.join(payload,'resources/runtime/backend.dependencies.json'));
+const bound=readJSON(path.join(resources,'runtime/backend.dependencies.json'));
+assert.equal(bound.source_commit,installed.source_commit);
 assert.equal(bound.binary_sha256,installed.backend.sha256);assert.deepEqual(bound.dependencies,dependencies);
-const bundles=readJSON(path.join(payload,'resources/runtime/frontend-bundles.json'));
+if(platform==='macos'){
+  const signing=readJSON(path.join(resources,'runtime/backend-signing.json'));
+  assert.equal(signing.source_commit,installed.source_commit);assert.equal(signing.platform,'darwin');assert.equal(signing.architecture,architecture);
+  assert.equal(signing.staged_signed_sha256,installed.backend.sha256);assert.equal(signing.verification.status,0);assert.equal(signing.compiler_dependency_section_unchanged,true);
+  assert.equal(signing.compiler_dependency_section_sha256,crypto.createHash('sha256').update(auditableSection(fs.readFileSync(backend))).digest('hex'));
+  writeJSON(path.join(folder,'backend-signing.json'),signing);
+}
+const bundles=readJSON(path.join(resources,'runtime/frontend-bundles.json'));
 assert.equal(bundles.source_commit,installed.source_commit);
-assert.deepEqual(bundles.files,(await inventory(path.join(payload,'resources/ui'))).files);
-const frontendModules=readJSON(path.join(payload,'resources/runtime/frontend-modules.json'));
+assert.deepEqual(bundles.files,(await inventory(path.join(resources,'ui'))).files);
+const frontendModules=readJSON(path.join(resources,'runtime/frontend-modules.json'));
 assert.equal(frontendModules.source_commit,installed.source_commit);
-assert.deepEqual(frontendModules,{source_commit:installed.source_commit,...await frontendModuleEvidence(path.join(payload,'resources/ui'))},'Installed frontend module mapping differs from its staged evidence');
+assert.deepEqual(frontendModules,{source_commit:installed.source_commit,...await frontendModuleEvidence(path.join(resources,'ui'))},'Installed frontend module mapping differs from its staged evidence');
 writeJSON(path.join(folder,'frontend-modules.json'),frontendModules);
 
 const require=createRequire(path.join(ROOT,'desktop/package.json'));
 const asar=require('@electron/asar');
-const archive=path.join(payload,'resources/app.asar'),expanded=path.join(folder,'expanded-asar');
+const archive=path.join(resources,'app.asar'),expanded=path.join(folder,'expanded-asar');
 assert.ok(!fs.existsSync(expanded),'ASAR evidence must be new');fs.mkdirSync(expanded);
 let total=0,count=0;
 for(const name of asar.listPackage(archive)){

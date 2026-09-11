@@ -1,8 +1,10 @@
 # 0.8.0-alpha.1 engineering validation
 
-Recorded on 2026-09-10 for the source snapshot containing this document.
-This supplements the historical [0.8.0 baseline](RELEASE_VALIDATION.md); it does
-not replace that record or certify an installer that has not yet been built.
+Development checks were recorded on 2026-09-10. Package and local-upgrade
+evidence was updated on 2026-09-11 for application source
+`7471ff72ac2cba9a89e96e88235cda810ebf1c1d`. This supplements the historical
+[0.8.0 baseline](RELEASE_VALIDATION.md); later documentation changes do not alter
+the identity of those tested installer bytes.
 
 ## Completed locally
 
@@ -67,7 +69,55 @@ The native candidate harness additionally checks an untouched fresh profile,
 reload under renderer light-preference emulation, and an explicit light preference
 across normal Quit and reopen. Its 1008px native-window screenshots must show dark
 mode and the exact original color assets in both navigation states. These added
-native assertions remain pending execution in a replacement candidate.
+assertions passed in both native jobs for the corrected candidate below. All 12
+original hosted screenshots were visually reviewed: the shaded blue wordmark
+and the 48-by-38.765625-pixel compact symbol were visible without clipping, and
+all captures were dark.
+
+## Corrected candidate and local Windows upgrade
+
+Both jobs in [candidate run 34545849872](https://github.com/delores88/PhaseForge/actions/runs/34545849872)
+passed at exact clean source `7471ff72ac2cba9a89e96e88235cda810ebf1c1d`.
+[Standard CI 34545836683](https://github.com/delores88/PhaseForge/actions/runs/34545836683)
+also passed its browser, Windows backend and Ubuntu backend jobs.
+
+| Current distributed package | Bytes | SHA-256 |
+| --- | ---: | --- |
+| `PhaseForge_0.8.0-alpha.1_x64-setup.exe` | 112,934,603 | `c919b026929256b74ad27cb8a29c3f5c44e492153aadc022fb1d3dfba42f0b06` |
+| `PhaseForge_0.8.0-alpha.1_x86_64.AppImage` | 142,969,129 | `511c04d1ce37c146bf4d5575ceabe2849b726d00af4aaf7aedd2a2f5807f580f` |
+
+Hosted acceptance on Windows Server 2025 x64 and Ubuntu 24.04.5 x64 with glibc
+2.39 covered three installed-app launches, offline numerical results, preserved
+data, normal Quit, backup restoration and removal. Both deterministic runs
+produced final `x = 1`, retained 101 frames and used zero provider tokens. Fresh
+profiles remained dark under a light color-scheme preference; an explicit saved
+light preference survived reopening. These runs used debugger instrumentation
+and disabled GPU acceleration. Ubuntu's restriction on unprivileged user
+namespaces was relaxed to permit Chromium's sandbox, which remained enabled;
+this does not certify stock AppArmor compatibility or local GPU operation.
+
+The corrected Windows installer was subsequently installed locally through its
+visible per-user installer. The user explicitly authorized closing the old app.
+After verifying no active research objects or native jobs, the exact idle
+PhaseForge process tree was terminated with `Stop-Process`; this was not the
+normal application Quit lifecycle. A closed-app backup of 308 files totaling
+339,515,320 bytes was verified before installation. OS-managed provider
+credentials stayed in their existing credential store and were not exported.
+
+All 218 installed payload files matched the hosted inventory, with no missing,
+additional or changed entries. The actual uninstrumented local app displayed
+the corrected dark interface, seven existing projects, the saved OpenAI
+configuration and original color branding. A saved model with 1,091,365 expanded
+triangles was observed in the workbench, and the blue application icon was seen
+on the taskbar. Existing database counts and the SQLite integrity check remained
+unchanged, and no new provider-usage records were created. The user later
+confirmed that the corrected installation worked.
+
+Local compact-navigation inspection and a local normal-Quit/reopen cycle were
+not completed while the user was active and the app was minimized. The hosted
+three-launch results are separate coverage and do not substitute for those
+unperformed local checks. This local upgrade acceptance does not resolve the
+security admission hold below.
 
 ## Superseded candidate packages
 
@@ -81,10 +131,9 @@ marketplace screenshots. Those requirements replace the earlier monochrome
 compact treatment and operating-system theme fallback.
 The subsequent `0f3d43c` native candidate run `34544797712` was cancelled before
 artifact intake when the owner supplied corrected v1.1 artwork. Its v1.0 assets
-and earlier visual approvals are historical; v1.1 requires fresh visual and native
-evidence from the replacement source.
-Replacement packages must bind the corrected source before installation or
-release; the hashes below do not identify that correction.
+and earlier visual approvals are historical. The corrected source and fresh v1.1
+visual/native evidence are identified above; the hashes below identify only the
+superseded packages.
 
 Both native jobs in [candidate run 34540332559](https://github.com/delores88/PhaseForge/actions/runs/34540332559)
 passed at clean source `b868e93b4a5ae4c356263684a515a8787ef5b4b7`.
@@ -122,8 +171,22 @@ The workflow verified all six attested subjects against a freshly obtained trust
 root. Subsequent local checksum/receipt consistency checks are not a separate
 cryptographic replay. Neither package has been published by the candidate workflow.
 
-Local installation and visual inspection on the developer's Windows 11 machine
-remain pending a replacement package from the corrected source.
+## Apple Silicon packaging preparation
+
+The requested release also includes macOS ARM64 DMG; Intel and universal Mac
+packages are excluded. The native workflow now builds all three selected targets
+from one source commit. Its Mac path checks the real host and every Mach-O member,
+copies the app from a read-only DMG, and exercises the same offline, restart and
+data-preservation fixture. Native Mac execution remains pending for this source.
+
+The Mac backend is ad-hoc signed before its materials are bound; the packaging
+step preserves those exact backend bytes while sealing the app. Evidence retains
+the compiler output and signed hashes, unchanged dependency section, raw signature
+verification and Gatekeeper/quarantine observations. No Apple Developer ID or
+notarization is configured. Direct hosted launch does not certify Finder approval
+of an internet download. The previous `7471ff7` Windows/Linux receipts and local
+Windows upgrade above remain their own historical source bindings; they cannot be
+relabelled as artifacts of this new packaging source.
 
 ## Security review status
 

@@ -13,8 +13,8 @@ function deferred(){let resolve;const promise=new Promise(done=>{resolve=done;})
 
 // Exercise the actual desktop entrypoint with controlled OS/process boundaries.
 // No executable is launched and no researcher files or credentials are touched.
-function desktop({announce=true,proof=async()=>true,uiStart,appReady=Promise.resolve()}={}){
-  const children=[],windows=[],errors=[],timers=[],servers=[],proofPorts=[];
+function desktop({announce=true,proof=async()=>true,uiStart,appReady=Promise.resolve(),platform=process.platform}={}){
+  const children=[],windows=[],errors=[],timers=[],servers=[],proofPorts=[],builtMenus=[],applicationMenus=[];
   let gate,targetGetter,proxyStarts=0;
   const app=new EventEmitter();
   Object.assign(app,{isPackaged:false,getPath:()=>'/phaseforge-fixture',setAppUserModelId(){},setAboutPanelOptions(){},requestSingleInstanceLock:()=>true,whenReady:()=>appReady,quit(){this.emit('before-quit');},showAboutPanel(){}});
@@ -23,7 +23,10 @@ function desktop({announce=true,proof=async()=>true,uiStart,appReady=Promise.res
     show(){} focus(){} loadURL(){} setAppDetails(){} setThumbnailToolTip(){}
   }
   const modules={
-    electron:{app,BrowserWindow:Window,Menu:{setApplicationMenu(){}},nativeImage:{createFromPath:()=>({isEmpty:()=>true})},dialog:{showErrorBox:(...args)=>errors.push(args)},shell:{}},
+    electron:{app,BrowserWindow:Window,Menu:{
+      buildFromTemplate(template){const menu={template:Array.from(template,item=>({...item}))};builtMenus.push(menu);return menu;},
+      setApplicationMenu(menu){applicationMenus.push(menu);},
+    },nativeImage:{createFromPath:()=>({isEmpty:()=>true})},dialog:{showErrorBox:(...args)=>errors.push(args)},shell:{}},
     'node:child_process':{spawn(_binary,_args,options){
       const child=new EventEmitter();
       Object.assign(child,{options,stdout:new PassThrough(),port:48000+children.length,exitCode:null,killed:false,
@@ -47,11 +50,27 @@ function desktop({announce=true,proof=async()=>true,uiStart,appReady=Promise.res
   vm.runInNewContext(source,{
     require:name=>{assert.ok(modules[name],`Unexpected dependency ${name}`);return modules[name];},
     __dirname:path.resolve(__dirname,'..'),
-    process:{platform:process.platform,env:{},execPath:'/phaseforge-fixture/electron'},
+    process:{platform,env:{},execPath:'/phaseforge-fixture/electron'},
     setTimeout:(callback,ms)=>{timers.push({callback,ms});},Date,
   },{filename:'desktop/main.cjs'});
-  return {app,children,windows,errors,timers,servers,proofPorts,get ready(){return gate?.()??false;},get target(){return targetGetter?.()??null;},get proxyStarts(){return proxyStarts;}};
+  return {app,children,windows,errors,timers,servers,proofPorts,builtMenus,applicationMenus,get ready(){return gate?.()??false;},get target(){return targetGetter?.()??null;},get proxyStarts(){return proxyStarts;}};
 }
+
+test('macOS installs the standard application, editing, viewing and window menus before opening the workbench',async()=>{
+  const d=desktop({platform:'darwin'});await flush();
+  assert.equal(d.builtMenus.length,1);
+  assert.deepEqual(d.builtMenus[0].template,[{role:'appMenu'},{role:'editMenu'},{role:'viewMenu'},{role:'windowMenu'}]);
+  assert.equal(d.applicationMenus.length,1);assert.equal(d.applicationMenus[0],d.builtMenus[0]);
+  assert.equal(d.windows.length,1);assert.equal(d.ready,true);assert.deepEqual(d.errors,[]);d.app.quit();
+});
+
+test('Windows and Linux retain the menu-free workbench without building macOS menus',async()=>{
+  for(const platform of ['win32','linux']){
+    const d=desktop({platform});await flush();
+    assert.deepEqual(d.builtMenus,[]);assert.deepEqual(d.applicationMenus,[null]);
+    assert.equal(d.windows.length,1);assert.equal(d.ready,true);assert.deepEqual(d.errors,[]);d.app.quit();
+  }
+});
 
 test('desktop delegates backend port allocation to the OS and proves only the child-announced endpoint',async()=>{
   const d=desktop();await flush();

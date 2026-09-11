@@ -14,7 +14,8 @@
     "package:win:x64": "electron-builder --win nsis --x64 --publish never",
     "package:win:arm64": "electron-builder --win nsis --arm64 --publish never",
     "package:linux:x64": "electron-builder --linux AppImage deb --x64 --publish never",
-    "package:linux:arm64": "electron-builder --linux AppImage deb --arm64 --publish never"
+    "package:linux:arm64": "electron-builder --linux AppImage deb --arm64 --publish never",
+    "package:mac:arm64": "electron-builder --mac dmg --arm64 --publish never"
   },
   "devDependencies": {
     "electron": "43.7.0",
@@ -89,6 +90,16 @@
       "artifactName": "PhaseForge_${version}_${arch}.${ext}",
       "maintainer": "Ben Van Dorn",
       "syncDesktopName": true
+    },
+    "mac": {
+      "target": [{"target": "dmg", "arch": ["arm64"]}],
+      "icon": "../frontend/public/icon.png",
+      "category": "public.app-category.education",
+      "artifactName": "PhaseForge_${version}_macos_${arch}.${ext}",
+      "identity": "-",
+      "signIgnore": ["/Contents/Resources/runtime/phaseforge-backend$"],
+      "hardenedRuntime": false,
+      "notarize": false
     },
     "publish": null
   }

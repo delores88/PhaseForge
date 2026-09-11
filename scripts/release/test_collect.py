@@ -1,0 +1,118 @@
+"""Synthetic evidence only: no native installer, signer, scanner or provider executes."""
+import copy, contextlib, io, json, os, pathlib, tempfile, unittest, zipfile
+from unittest.mock import patch
+import collect
+
+COMMIT='1234567890abcdef1234567890abcdef12345678'
+VERSION='0.8.0-alpha.1'
+
+class CandidateCollectionTests(unittest.TestCase):
+    def setUp(self):
+        self.temporary=tempfile.TemporaryDirectory(prefix='phaseforge-collect-test-')
+        self.root=pathlib.Path(self.temporary.name)
+        self.target=collect.release_target('Darwin','arm64')
+        self.folder=self.root/'.local/marketplace/macos-arm64'
+        self.env=patch.dict(os.environ,{'GITHUB_SHA':COMMIT,'GITHUB_RUN_ID':'100','GITHUB_RUN_ATTEMPT':'1'})
+        self.root_patch=patch.object(collect,'ROOT',self.root)
+        self.env.start();self.root_patch.start()
+        self.addCleanup(self.env.stop);self.addCleanup(self.root_patch.stop);self.addCleanup(self.temporary.cleanup)
+        self.write(self.root/'desktop/package.json',{'version':VERSION})
+        self.write(self.root/'scripts/release/tool-pins.json',{'fixture':True})
+        installer=self.root/'desktop/dist'/f'PhaseForge_{VERSION}_macos_arm64.dmg'
+        installer.parent.mkdir(parents=True);installer.write_bytes(b'Synthetic immutable artifact; never mounted or executed.')
+        command={'status':0,'signal':None,'stdout':'','stderr':''}
+        signature={'signature_observation':'ad-hoc','display':command,'verify':command,'gatekeeper_assessment':{**command,'status':3},'quarantine_attribute':{**command,'status':1}}
+        self.acceptance={'passed':True,'source_commit':COMMIT,'version':VERSION,'platform':'macos','architecture':'arm64',
+                         'host':{'system':'Darwin','machine':'arm64','macos_version':'fixture-observed-version','macos_build':'fixture-observed-build'},
+                         'artifact':{'name':installer.name,'bytes':installer.stat().st_size,'sha256':collect.digest(installer)},
+                         'macos_installation':{'copy_exact':True,'detached':True,'signature':signature}}
+        self.write(self.folder/'NATIVE_ACCEPTANCE.json',self.acceptance)
+        self.write(self.folder/'checks/SCAN_REVIEW.json',{'source_commit':COMMIT,'tools_completed':True,'unreviewed_high_critical':[],'secret_findings':[]})
+        source={'source':{'commit':COMMIT,'dirty':False},'workflow':{'run_id':'100','run_attempt':'1'},'materials':[{'path':'source.rs','bytes':1,'sha256':'a'*64}]}
+        for phase in ['before','after']:self.write(self.root/f'.local/marketplace/source/{phase}.json',source)
+        self.write(self.folder/'installed-payload.json',{'source_commit':COMMIT,'version':VERSION,'resources_relative':'Contents/Resources','bytes':100,'backend':{'sha256':'b'*64,'machine':{'format':'macho','architecture':'arm64'}}})
+        self.write(self.folder/'compiled-dependencies.json',{'source_commit':COMMIT,'binary_sha256':'b'*64})
+        self.write(self.folder/'frontend-modules.json',{'source_commit':COMMIT,'summary':{'bundles':1},'gaps':['Fixture mapping scope remains explicit']})
+        self.write(self.folder/'backend-signing.json',{'source_commit':COMMIT,'staged_signed_sha256':'b'*64,'compiler_dependency_section_unchanged':True,'verification':{'status':0}})
+        observed={'build':{'sourceCommit':COMMIT,'sourceDirty':False,'version':VERSION,'platform':'darwin','architecture':'arm64'},
+                  'runtime':{'appVersion':VERSION,'platform':'darwin','architecture':'arm64','versions':{'electron':'43.7.0'}},
+                  'health':{'version':VERSION,'sqlite':{'version':'3.53.2','source_id':'fixture'}}}
+        for index in range(1,4):
+            self.write(self.folder/f'launch-{index}/runtime.json',observed)
+            self.write(self.folder/f'launch-{index}/result.json',{'passed':True,'source_commit':COMMIT,'version':VERSION})
+        for rel in ['checks/source.cdx.json','checks/payload.cdx.json','checks/asar.cdx.json','runtime-observations.cdx.json']:
+            self.write(self.folder/rel,{'components':[{'type':'library','name':'fixture','version':'1'}]})
+
+    def write(self,file,value):
+        file.parent.mkdir(parents=True,exist_ok=True);file.write_text(json.dumps(value),encoding='utf-8')
+
+    def validate(self):return collect.validated_inputs(self.folder,self.target,VERSION,COMMIT)
+
+    def test_native_target_mapping_rejects_cross_labeling_and_unsupported_hosts(self):
+        self.assertEqual(collect.release_target('Windows','AMD64')['folder'],'windows-x64')
+        self.assertEqual(collect.release_target('Linux','x86_64')['folder'],'linux-x64')
+        self.assertEqual(self.target['installer_format'],'macos-dmg')
+        for system,architecture in [('Darwin','x86_64'),('Windows','ARM64'),('Linux','aarch64'),('FreeBSD','x86_64')]:
+            with self.subTest(system=system,architecture=architecture),self.assertRaises(ValueError):collect.release_target(system,architecture)
+
+    def test_collects_macos_arm64_without_os_trust_or_minimum_claims(self):
+        with patch.object(collect,'release_target',return_value=self.target),contextlib.redirect_stdout(io.StringIO()):collect.main()
+        final=self.folder/'candidate';prefix=f'PhaseForge_{VERSION}_macos_arm64'
+        manifest=collect.load(final/f'{prefix}_BUILD_MANIFEST.json')
+        self.assertEqual((manifest['platform'],manifest['architecture'],manifest['installer_format']),('macos','arm64','macos-dmg'))
+        self.assertEqual(manifest['channel'],'beta') # Required marketplace enum, even for alpha prerelease versions.
+        self.assertEqual(manifest['version'],VERSION);self.assertTrue(manifest['intended_prerelease'])
+        self.assertEqual(manifest['source_commit'],COMMIT);self.assertEqual(manifest['workflow']['commit'],COMMIT)
+        self.assertEqual(manifest['observed_native_host'],self.acceptance['host'])
+        signing=manifest['macos_code_signing'];self.assertTrue(signing['ad_hoc_code_integrity_verified'])
+        self.assertEqual(signing['gatekeeper_assessment_status'],3);self.assertFalse(signing['developer_id_signing_performed']);self.assertFalse(signing['notarization_performed'])
+        self.assertNotIn('minimum_macos',manifest);self.assertFalse(manifest['security']['marketplace_admitted'])
+        for line in (final/f'{prefix}_SHA256SUMS.txt').read_text().splitlines():
+            digest,name=line.split('  ',1);self.assertEqual(collect.digest(final/name),digest)
+        with zipfile.ZipFile(final/f'{prefix}_checks.zip') as archive:
+            self.assertIn('evidence/backend-signing.json',archive.namelist());self.assertIn('source/before.json',archive.namelist())
+        with patch.object(collect,'release_target',return_value=self.target),self.assertRaises(FileExistsError):collect.main()
+
+    def test_rejects_7471_evidence_or_another_run_instead_of_relabeling(self):
+        changes=[('NATIVE_ACCEPTANCE.json',lambda r:r.update(source_commit='7471ff72ac2cba9a89e96e88235cda810ebf1c1d')),
+                 ('compiled-dependencies.json',lambda r:r.update(source_commit='0'*40)),
+                 ('launch-3/runtime.json',lambda r:r['build'].update(sourceCommit='0'*40)),
+                 ('backend-signing.json',lambda r:r.update(staged_signed_sha256='c'*64))]
+        for rel,change in changes:
+            file=self.folder/rel;original=collect.load(file);value=copy.deepcopy(original);change(value);self.write(file,value)
+            with self.subTest(path=rel),self.assertRaises(ValueError):self.validate()
+            self.write(file,original)
+        before=self.root/'.local/marketplace/source/before.json';value=collect.load(before);value['workflow']['run_id']='old-run';self.write(before,value)
+        with self.assertRaisesRegex(ValueError,'another workflow'):self.validate()
+        with self.assertRaisesRegex(ValueError,'full immutable'):collect.validated_inputs(self.folder,self.target,VERSION,'7471ff7')
+
+    def test_rejects_changed_materials_wrong_observed_architecture_and_traversal(self):
+        for rel,change in [('installed-payload.json',lambda r:r.update(resources_relative='resources')),
+                           ('launch-1/runtime.json',lambda r:r['runtime'].update(architecture='x64')),
+                           ('NATIVE_ACCEPTANCE.json',lambda r:r['artifact'].update(name='../foreign.dmg')),
+                           ('NATIVE_ACCEPTANCE.json',lambda r:r['host'].update(machine='x86_64'))]:
+            file=self.folder/rel;original=collect.load(file);value=copy.deepcopy(original);change(value);self.write(file,value)
+            with self.subTest(path=rel),self.assertRaises(ValueError):self.validate()
+            self.write(file,original)
+        after=self.root/'.local/marketplace/source/after.json';value=collect.load(after);value['materials'][0]['sha256']='c'*64;self.write(after,value)
+        with self.assertRaisesRegex(ValueError,'materials changed'):self.validate()
+
+    def test_signing_failures_remain_observations_and_never_become_trust_claims(self):
+        value=copy.deepcopy(self.acceptance);value['macos_installation']['signature']['verify']['status']=1
+        description,signing=collect.signing_observation(value,self.target)
+        self.assertFalse(signing['ad_hoc_code_integrity_verified']);self.assertIn('status 1',description)
+        value['macos_installation']['signature']['signature_observation']='unsigned'
+        _,signing=collect.signing_observation(value,self.target);self.assertFalse(signing['ad_hoc_code_integrity_verified'])
+
+    def test_collection_rejects_broken_or_unconfirmed_adhoc_seal_but_retains_os_trust_failures(self):
+        # Non-notarized Gatekeeper/quarantine observations are already nonzero in
+        # the valid fixture. They do not waive a failed application integrity check.
+        self.validate()
+        for change in [lambda s:s['verify'].update(status=1),lambda s:s['display'].update(status=1),
+                       lambda s:s.update(signature_observation='undetermined'),lambda s:s.update(signature_observation='unsigned')]:
+            value=copy.deepcopy(self.acceptance);change(value['macos_installation']['signature'])
+            self.write(self.folder/'NATIVE_ACCEPTANCE.json',value)
+            with self.assertRaisesRegex(ValueError,'verified ad-hoc application seal'):self.validate()
+        self.write(self.folder/'NATIVE_ACCEPTANCE.json',self.acceptance)
+
+if __name__=='__main__':unittest.main()

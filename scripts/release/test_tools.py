@@ -25,7 +25,7 @@ class ToolArchiveTests(unittest.TestCase):
         self.assertEqual(set(pins),{'syft','grype','gh','cargo-auditable','gitleaks'})
         for name,record in pins.items():
             self.assertEqual(record['tag'],'v'+record['version'])
-            for target in ('windows','linux'):
+            for target in ('windows','linux','macos'):
                 self.assertRegex(record[target]['sha256'],r'^[0-9a-f]{64}$')
                 self.assertNotIn('/',record[target]['archive'])
 

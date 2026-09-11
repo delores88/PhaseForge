@@ -1,5 +1,6 @@
 """Fetch only hash-pinned official release executables, without running installer scripts."""
 import argparse, hashlib, io, json, os, pathlib, platform, subprocess, tarfile, urllib.request, zipfile
+from collect import release_target
 
 ROOT=pathlib.Path(__file__).resolve().parents[2]
 LIMIT=256*1024*1024
@@ -17,8 +18,7 @@ def binary_member(archive,filename,content):
 
 def main():
     parser=argparse.ArgumentParser();parser.add_argument('--only',default='syft,grype,gh,cargo-auditable,gitleaks');parser.add_argument('--github-path',action='store_true');args=parser.parse_args()
-    system={'Windows':'windows','Linux':'linux'}.get(platform.system())
-    if system is None or platform.machine().lower() not in ('amd64','x86_64'):raise ValueError('ALPHA release tools support native Windows/Linux x64 only')
+    target_host=release_target();system=target_host['platform']
     pins=json.loads((ROOT/'scripts/release/tool-pins.json').read_text());destination=ROOT/'.local/marketplace/tools';destination.mkdir(parents=True,exist_ok=True)
     if destination.is_symlink() or destination.resolve()!=destination.absolute():raise ValueError('Linked tool directory is refused')
     records=[]
@@ -37,7 +37,7 @@ def main():
         # Its exact tool version is bound by the official release archive digest.
         if name!='cargo-auditable' and specification['version'] not in version:raise ValueError(f'Unexpected tool version: {version}')
         if name=='cargo-auditable' and not version.startswith('cargo '):raise ValueError('cargo-auditable forwarding probe failed')
-        records.append({'name':name,'version':specification['version'],'platform':system,'url':url,'archive_sha256':target['sha256'],'executable_sha256':hashlib.sha256(binary.read_bytes()).hexdigest(),'version_output':version,'version_binding':'Official release archive SHA-256; cargo-auditable probe reports Cargo, not its own version' if name=='cargo-auditable' else 'Pinned archive SHA-256 and executable version output'})
+        records.append({'name':name,'version':specification['version'],'platform':system,'architecture':target_host['architecture'],'url':url,'archive_sha256':target['sha256'],'executable_sha256':hashlib.sha256(binary.read_bytes()).hexdigest(),'version_output':version,'version_binding':'Official release archive SHA-256; cargo-auditable probe reports Cargo, not its own version' if name=='cargo-auditable' else 'Pinned archive SHA-256 and executable version output'})
     (destination/'tool-receipts.json').write_text(json.dumps(records,indent=2)+'\n')
     if args.github_path:
         if os.environ.get('GITHUB_ACTIONS')!='true' or not os.environ.get('GITHUB_PATH'):raise ValueError('GITHUB_PATH is available only in the hosted workflow')

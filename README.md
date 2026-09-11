@@ -14,11 +14,13 @@ need an **OpenAI or Anthropic API key**; you do not need both. Your selected pro
 charges separately for API usage. No additional paid AI service is required.
 Blender, CadQuery and KiCad are optional free tools installed separately.
 
-The first alpha targets Windows x64 and Linux x64 AppImage. Exact candidate
+The first alpha targets Windows x64, Linux x64 AppImage and Apple Silicon macOS
+ARM64 DMG. Intel and universal macOS packages are excluded. Exact candidate
 installation, security review and marketplace acceptance are separate release gates;
 preparing an installer does not establish admission. The preceding 0.8.0 development
 build was installed and tested on an RTX 4090 Laptop GPU, and package builds passed
-for Windows and Linux x64/ARM64. ARM64 is not included in the initial alpha listing.
+for Windows and Linux x64/ARM64. Windows/Linux ARM64 remain outside this initial
+listing; macOS ARM64 requires its own native evidence before admission.
 See the [validation record](docs/RELEASE_VALIDATION.md) for those executed baseline
 checks, and [alpha notes](RELEASE_NOTES_0.8.0-alpha.1.md) for the current changes.
 
@@ -145,7 +147,8 @@ closing the window keeps research running; **Quit PhaseForge** exits the app and
 its owned engine. Projects remain in local SQLite and provider keys stay in the
 operating-system credential store.
 
-Use the [Windows guide](README.windows.md) or [Linux guide](README.linux.md) for
+Use the [Windows guide](README.windows.md), [Linux guide](README.linux.md) or
+[Apple Silicon guide](README.macos.md) for
 source builds, local packaging, development mode and prerequisites. Packaging
 commands explicitly disable publication. Do not run two backends against the same
 data directory. Back up existing data before testing a new build; reinstalling the

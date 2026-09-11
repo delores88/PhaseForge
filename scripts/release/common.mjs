@@ -33,10 +33,16 @@ export function sourceIdentity(expected=process.env.GITHUB_SHA){
   if(dirty)throw Error('Release evidence requires an unchanged clean source checkout');
   return {repository:REPOSITORY,commit,dirty:false};
 }
+export function releaseTarget(platform=process.platform,architecture=process.arch){
+  const name=({win32:'windows',linux:'linux',darwin:'macos'})[platform];
+  if(!name||(platform==='darwin'?architecture!=='arm64':architecture!=='x64'))throw Error('This ALPHA admits Windows/Linux x64 and macOS Apple Silicon arm64 only');
+  return {platform:name,architecture,folder:`${name}-${architecture}`};
+}
 export function hostedWorkspace(){
   if(process.env.GITHUB_ACTIONS!=='true'||process.env.RUNNER_ENVIRONMENT!=='github-hosted'||process.env.PHASEFORGE_RELEASE_ACCEPTANCE!=='1')throw Error('Native installation acceptance is restricted to an explicitly enabled GitHub-hosted disposable job');
   if(path.resolve(process.env.GITHUB_WORKSPACE||'.')!==ROOT||fs.realpathSync(ROOT)!==ROOT)throw Error('Hosted workspace identity does not match this checkout');
-  if(process.arch!=='x64'||!['win32','linux'].includes(process.platform))throw Error('This ALPHA admits Windows/Linux x64 only');
+  releaseTarget();
+  if(process.platform==='darwin'&&command('/usr/bin/uname',['-m'])!=='arm64')throw Error('Native macOS acceptance requires an actual Apple Silicon host, not Rosetta');
   sourceIdentity();
   const temporary=process.env.RUNNER_TEMP;
   if(!temporary||!path.isAbsolute(temporary)||!fs.statSync(temporary).isDirectory())throw Error('Missing hosted temporary directory');
@@ -44,7 +50,15 @@ export function hostedWorkspace(){
 }
 export function machine(file){
   const descriptor=fs.openSync(file,'r');try{
-    const header=Buffer.alloc(4096);fs.readSync(descriptor,header,0,header.length,0);
+    const header=Buffer.alloc(4096),read=fs.readSync(descriptor,header,0,header.length,0);
+    const magic=header.subarray(0,4).toString('hex');
+    if(['cafebabe','bebafeca','cafebabf','bfbafeca'].includes(magic))return {format:'macho-universal',architecture:'universal'};
+    if(['cffaedfe','feedfacf','cefaedfe','feedface'].includes(magic)){
+      const little=magic==='cffaedfe'||magic==='cefaedfe',bits=magic==='cffaedfe'||magic==='feedfacf'?64:32;
+      if(read<(bits===64?32:28))throw Error('Truncated Mach-O header');
+      const cpu=little?header.readUInt32LE(4):header.readUInt32BE(4);
+      return {format:'macho',architecture:({0x0100000c:'arm64',0x01000007:'x64',12:'arm',7:'x86'})[cpu]||'unknown',bits};
+    }
     if(header.subarray(0,2).toString()==='MZ'){
       const offset=header.readUInt32LE(0x3c),pe=Buffer.alloc(6);fs.readSync(descriptor,pe,0,6,offset);
       if(pe.subarray(0,4).toString('binary')!=='PE\0\0')throw Error('Invalid PE header');

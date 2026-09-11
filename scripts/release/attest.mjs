@@ -3,18 +3,18 @@ import fs from 'node:fs';
 import path from 'node:path';
 import assert from 'node:assert/strict';
 import {attestProvenance} from '@actions/attest';
-import {ROOT,REPOSITORY,WORKFLOW,command,hostedWorkspace,inside,readJSON,sha256,writeJSON} from './common.mjs';
+import {ROOT,REPOSITORY,WORKFLOW,command,hostedWorkspace,inside,readJSON,releaseTarget,sha256,writeJSON} from './common.mjs';
 
 hostedWorkspace();assert.equal(process.env.GITHUB_REPOSITORY,REPOSITORY);
 assert.equal(process.env.GITHUB_WORKFLOW_REF?.split('@')[0],WORKFLOW);
-const platform=process.platform==='win32'?'windows':'linux';
-const folder=path.join(ROOT,'.local/marketplace',`${platform}-x64`),final=path.join(folder,'candidate');
+const {platform,architecture,folder:targetFolder}=releaseTarget();
+const folder=path.join(ROOT,'.local/marketplace',targetFolder),final=path.join(folder,'candidate');
 const names=readJSON(path.join(folder,'attestation-subjects.json'));
 assert.ok(Array.isArray(names)&&names.length>0&&names.length<=20);
 assert.equal(new Set(names).size,names.length);
 const subjects=[];
 for(const name of names){assert.equal(path.basename(name),name);const file=inside(final,path.join(final,name),{existing:true});subjects.push({name,digest:{sha256:await sha256(file)}});}
-const prefix=`PhaseForge_${readJSON(path.join(ROOT,'desktop/package.json')).version}_${platform}_x64`;
+const prefix=`PhaseForge_${readJSON(path.join(ROOT,'desktop/package.json')).version}_${platform}_${architecture}`;
 const bundle=path.join(final,`${prefix}_ATTESTATION.jsonl`);
 const result=await attestProvenance({subjects,token:'',sigstore:'github',skipWrite:true});
 fs.writeFileSync(bundle,JSON.stringify(result.bundle)+'\n',{flag:'wx'});

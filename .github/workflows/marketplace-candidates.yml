@@ -8,7 +8,7 @@ permissions:
 
 jobs:
   candidate:
-    name: Native candidate / ${{ matrix.platform }} x64
+    name: Native candidate / ${{ matrix.platform }} ${{ matrix.arch }}
     runs-on: ${{ matrix.runner }}
     timeout-minutes: 90
     permissions:
@@ -18,8 +18,9 @@ jobs:
       fail-fast: false
       matrix:
         include:
-          - {runner: windows-2025, platform: windows}
-          - {runner: ubuntu-24.04, platform: linux}
+          - {runner: windows-2025, platform: windows, arch: x64}
+          - {runner: ubuntu-24.04, platform: linux, arch: x64}
+          - {runner: macos-15, platform: macos, arch: arm64}
     env:
       PHASEFORGE_RELEASE_ACCEPTANCE: '1'
       CSC_IDENTITY_AUTO_DISCOVERY: 'false'
@@ -33,6 +34,8 @@ jobs:
           fetch-depth: 1
       - uses: actions/setup-node@249970729cb0ef3589644e2896645e5dc5ba9c38 # v6
         with: {node-version: '22.23.2'}
+      - name: Require the declared native architecture
+        run: node -e "require('node:assert/strict').equal(process.arch, '${{ matrix.arch }}')"
       - uses: actions/setup-python@ece7cb06caefa5fff74198d8649806c4678c61a1 # v6
         with: {python-version: '3.13.15'}
       - uses: dtolnay/rust-toolchain@6bed0761d98439e5a578e2877258200ad565ba87
@@ -64,7 +67,7 @@ jobs:
         run: cargo auditable build --locked --release
         working-directory: backend
       - name: Dynamic owned-backend smoke against release binary (Linux)
-        if: runner.os == 'Linux'
+        if: runner.os != 'Windows'
         run: node desktop/tests/dynamic-backend-smoke.cjs backend/target/release/phaseforge-backend
       - name: Dynamic owned-backend smoke against release binary (Windows)
         if: runner.os == 'Windows'
@@ -91,6 +94,10 @@ jobs:
         if: runner.os == 'Linux'
         run: npm exec -- electron-builder --linux AppImage --x64 --publish never
         working-directory: desktop
+      - name: Package actual Apple Silicon macOS DMG
+        if: runner.os == 'macOS'
+        run: npm run package:mac:arm64
+        working-directory: desktop
       - name: Verify unchanged source after packaging
         run: node scripts/release/source.mjs after
       - name: Actual Windows install, offline results, restart, backup restore and uninstall
@@ -99,6 +106,9 @@ jobs:
       - name: Actual AppImage launch, offline results, restart, backup restore and removal
         if: runner.os == 'Linux'
         run: xvfb-run --auto-servernum --server-args="-screen 0 1440x1000x24" dbus-run-session -- node scripts/release/native.mjs
+      - name: Actual macOS ARM64 app install, offline results, restart, backup restore and removal
+        if: runner.os == 'macOS'
+        run: node scripts/release/native.mjs
       - name: Inspect exact installed payload and runtime observations
         run: node scripts/release/payload.mjs
       - name: Source and payload inventories, raw vulnerability and secret checks
@@ -112,8 +122,8 @@ jobs:
       - name: Upload exact candidate installer and compact evidence
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7
         with:
-          name: PhaseForge-ALPHA-${{ matrix.platform }}-x64-${{ github.sha }}
-          path: .local/marketplace/${{ matrix.platform }}-x64/candidate/*
+          name: PhaseForge-ALPHA-${{ matrix.platform }}-${{ matrix.arch }}-${{ github.sha }}
+          path: .local/marketplace/${{ matrix.platform }}-${{ matrix.arch }}/candidate/*
           include-hidden-files: true # Only the explicitly assembled files under the hidden .local directory.
           if-no-files-found: error
           retention-days: 14
@@ -122,13 +132,13 @@ jobs:
         if: failure()
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7
         with:
-          name: PhaseForge-ALPHA-failure-${{ matrix.platform }}-x64-${{ github.sha }}
+          name: PhaseForge-ALPHA-failure-${{ matrix.platform }}-${{ matrix.arch }}-${{ github.sha }}
           path: |
             .local/marketplace/source/*.json
-            .local/marketplace/${{ matrix.platform }}-x64/*.json
-            .local/marketplace/${{ matrix.platform }}-x64/launch-*/*.json
-            .local/marketplace/${{ matrix.platform }}-x64/launch-*/*.png
-            .local/marketplace/${{ matrix.platform }}-x64/checks/*
+            .local/marketplace/${{ matrix.platform }}-${{ matrix.arch }}/*.json
+            .local/marketplace/${{ matrix.platform }}-${{ matrix.arch }}/launch-*/*.json
+            .local/marketplace/${{ matrix.platform }}-${{ matrix.arch }}/launch-*/*.png
+            .local/marketplace/${{ matrix.platform }}-${{ matrix.arch }}/checks/*
           include-hidden-files: true # Explicit diagnostic file patterns; no fixture databases or credentials.
           if-no-files-found: warn
           retention-days: 14

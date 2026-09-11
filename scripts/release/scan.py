@@ -1,9 +1,10 @@
 """Retain raw findings and inventory coverage. This is not marketplace admission."""
 import datetime, hashlib, json, os, pathlib, platform, shutil, subprocess
+from collect import release_target
 
 ROOT=pathlib.Path(__file__).resolve().parents[2]
-SYSTEM='windows' if platform.system()=='Windows' else 'linux'
-FOLDER=ROOT/'.local/marketplace'/f'{SYSTEM}-x64'
+TARGET=release_target();SYSTEM=TARGET['platform'];ARCHITECTURE=TARGET['architecture']
+FOLDER=ROOT/'.local/marketplace'/TARGET['folder']
 TOOLS=ROOT/'.local/marketplace/tools'
 REPORTS=FOLDER/'checks'
 

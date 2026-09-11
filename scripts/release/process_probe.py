@@ -18,8 +18,10 @@ def main():
     parser=argparse.ArgumentParser();parser.add_argument('mode',choices=['snapshot','alive','cleanup','host'])
     parser.add_argument('--pid',type=int);parser.add_argument('--created',type=float);parser.add_argument('--identities',type=pathlib.Path);args=parser.parse_args()
     if args.mode=='host':
+        disk=psutil.disk_usage(os.environ.get('RUNNER_TEMP',os.getcwd()))
         result={'system':platform.system(),'release':platform.release(),'version':platform.version(),
                 'machine':platform.machine(),'total_ram_bytes':psutil.virtual_memory().total,
+                'workspace_disk':{'total_bytes':disk.total,'free_bytes':disk.free,'scope':'Observed before native launch; not a certified minimum installation requirement'},
                 'glibc':platform.libc_ver(),'python':sys.version,'psutil':psutil.__version__}
         if pathlib.Path('/etc/os-release').is_file():result['os_release']=pathlib.Path('/etc/os-release').read_text()
     elif args.mode=='snapshot':
