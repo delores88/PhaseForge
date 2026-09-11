@@ -254,8 +254,8 @@ export default function SettingsView({ backend, onHardware, onEventState }) {
     <section className="settingsView settingsView--providersV3">
       <section className="surfacePanel settingsAbout" aria-label="About PhaseForge">
         <div className="aboutBrand">
-          <img className="brandDark" src="/brand/app-icon-dark.png" alt="PhaseForge" />
-          <img className="brandLight" src="/brand/app-icon-light.png" alt="PhaseForge" />
+          <img className="brandDark" src="/brand/app-icon-dark.png?v=1.1" alt="PhaseForge" />
+          <img className="brandLight" src="/brand/app-icon-light.png?v=1.1" alt="PhaseForge" />
           <div><strong className="alphaNotice">Alpha · {appVersion}</strong><h2>Serious research starts with curiosity.</h2></div>
         </div>
         <p>PhaseForge is for anyone who wants to undertake serious scientific research, with or without a formal scientific background. Explore a question, build an experiment and examine the evidence together with AI. This is an alpha release; more features are coming.</p>

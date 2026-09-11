@@ -53,7 +53,7 @@ function makeWindow(url){
   installWorkbenchPermissions(window.webContents,url);
   window.on('close',event=>{if(!quitting&&tray){event.preventDefault();window.hide();}});
   window.once('ready-to-show',()=>{if(!quitting)window.show();});window.loadURL(url);
-  const png=app.isPackaged?path.join(process.resourcesPath,'ui','brand','favicon-32.png'):path.resolve(__dirname,'../frontend/public/brand/favicon-32.png');
+  const png=app.isPackaged?path.join(process.resourcesPath,'ui','icon.png'):path.resolve(__dirname,'../frontend/public/icon.png');
   const icon=nativeImage.createFromPath(png);
   if(!icon.isEmpty()){
     tray=new Tray(icon.resize({width:24,height:24}));tray.setToolTip('PhaseForge · research continues in the background');

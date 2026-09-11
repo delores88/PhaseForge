@@ -29,6 +29,6 @@ def write_ico(target, entries):
 
 
 if __name__ == '__main__':
-    small = [(size, PUBLIC / 'brand' / f'favicon-{size}.png') for size in (16, 32)]
-    write_ico(PUBLIC / 'icon.ico', small + [(size, PUBLIC / 'icon.png') for size in (48, 64, 128, 256)])
-    write_ico(PUBLIC / 'favicon.ico', small + [(64, PUBLIC / 'brand' / 'favicon-64.png')])
+    # Keep the owner's shaded identity at every size, including browser/tray icons.
+    write_ico(PUBLIC / 'icon.ico', [(size, PUBLIC / 'icon.png') for size in (16, 32, 48, 64, 128, 256)])
+    write_ico(PUBLIC / 'favicon.ico', [(size, PUBLIC / 'icon.png') for size in (16, 32, 64)])

@@ -95,7 +95,7 @@ async function brandingScreenshots(electronApp,page,folder){
   await page.waitForFunction(()=>document.querySelector('.appFrame')?.classList.contains('appFrame--compact')&&document.querySelector('.primarySidebar')?.getBoundingClientRect().width===64);
   await page.locator('.primaryBrandSymbol.brandDark').waitFor({state:'visible'});
   const compact=await observeBrand(page,'/brand/phaseforge-symbol-dark.svg');
-  assert.equal(compact.sidebar.width,64);assert.ok(compact.image.bounds.width>=28);
+  assert.equal(compact.sidebar.width,64);assert.ok(compact.image.bounds.width>=48&&compact.image.bounds.height>=38,'Compact navigation must show the readable original color symbol');
   await page.screenshot({path:path.join(folder,'window-compact.png')});
   await page.getByRole('button',{name:'Expand navigation',exact:true}).click();
   await page.waitForFunction(()=>!document.querySelector('.appFrame')?.classList.contains('appFrame--compact')&&document.querySelector('.primarySidebar')?.getBoundingClientRect().width===190);

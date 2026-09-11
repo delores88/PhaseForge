@@ -46,7 +46,10 @@ function startServer(root,backendTarget=null,port=0,{isBackendReady=()=>true}={}
       try{if(fs.statSync(file).isDirectory())file=path.join(file,'index.html');}catch{}
       fs.readFile(file,(err,body)=>{
         if(err){res.writeHead(404).end('Not found');return;}
-        const ext=path.extname(file);const headers={'Content-Type':MIME[ext]||'application/octet-stream','X-Content-Type-Options':'nosniff','Referrer-Policy':'no-referrer','Cache-Control':ext==='.html'?'no-store':'public, max-age=3600'};
+        // Public branding keeps stable URLs across upgrades; only Next's
+        // content/build-addressed static files may remain in the browser cache.
+        const ext=path.extname(file);const versionedAsset=ext!=='.html'&&path.relative(root,file).split(path.sep).join('/').startsWith('_next/static/');
+        const headers={'Content-Type':MIME[ext]||'application/octet-stream','X-Content-Type-Options':'nosniff','Referrer-Policy':'no-referrer','Cache-Control':versionedAsset?'public, max-age=3600':'no-store'};
         if(ext==='.html'){
           // Fixed application configuration, never user content. The renderer has
           // no Node privileges; requests use this loopback origin's API proxy.

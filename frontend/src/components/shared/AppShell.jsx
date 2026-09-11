@@ -45,10 +45,10 @@ export default function AppShell({ backend, hardware, eventState, title, subtitl
   return <div className={`appFrame ${collapsed ? "appFrame--compact" : ""}`}>
     <aside className="primarySidebar" aria-label="Primary navigation">
       <Link href="/" className="primaryBrand" title="PhaseForge · Alpha research workbench" aria-label="PhaseForge · Alpha research workbench">
-        <img className="primaryBrandImage brandDark" src="/brand/phaseforge-horizontal-dark.svg" alt="" />
-        <img className="primaryBrandImage brandLight" src="/brand/phaseforge-horizontal-light.svg" alt="" />
-        <img className="primaryBrandSymbol brandDark" src="/brand/phaseforge-symbol-dark.svg" alt="" />
-        <img className="primaryBrandSymbol brandLight" src="/brand/phaseforge-symbol-light.svg" alt="" />
+        <img className="primaryBrandImage brandDark" src="/brand/phaseforge-horizontal-dark.svg?v=1.1" alt="" />
+        <img className="primaryBrandImage brandLight" src="/brand/phaseforge-horizontal-light.svg?v=1.1" alt="" />
+        <img className="primaryBrandSymbol brandDark" src="/brand/phaseforge-symbol-dark.svg?v=1.1" alt="" />
+        <img className="primaryBrandSymbol brandLight" src="/brand/phaseforge-symbol-light.svg?v=1.1" alt="" />
         <span><small>ALPHA · {appVersion}</small></span>
       </Link>
       <button type="button" className="sidebarNew" onClick={newProject} title="New research project"><Plus size={16}/><span>New research</span></button>

@@ -48,12 +48,20 @@ separate from application regression tests.
 
 ## Color branding and dark default
 
-The current frontend uses the original blue color artwork in both expanded and
-compact navigation. The first-paint theme bootstrap defaults to dark regardless
+The current frontend uses the owner's corrected v1.1 blue color artwork in both
+expanded and compact navigation; compact dimensional symbols are 48px wide.
+Flat, all-black and all-white branding are excluded, including native icons.
+The first-paint theme bootstrap defaults to dark regardless
 of operating-system preference, while preserving an explicit saved light choice.
 The production build and interactive browser checks passed in expanded/compact
 navigation. Internal light-mode compatibility images are excluded from marketplace
 media; marketplace screenshots must use dark mode.
+
+The v1.1 integration verified all 10 packaged asset receipts against their source
+or recorded ICO conversion, built the production frontend, and checked both
+themes and sidebar states visually. The 22 relevant desktop server, authentication
+and lifecycle tests passed after correcting stale public-asset caching. Revisioned
+branding URLs also bypass responses already cached by the previous app version.
 
 The native candidate harness additionally checks an untouched fresh profile,
 reload under renderer light-preference emulation, and an explicit light preference
@@ -71,6 +79,10 @@ The subsequent `63d6807` candidate is also superseded: the owner requires origin
 blue color symbols in compact navigation, dark mode as the default, and dark-only
 marketplace screenshots. Those requirements replace the earlier monochrome
 compact treatment and operating-system theme fallback.
+The subsequent `0f3d43c` native candidate run `34544797712` was cancelled before
+artifact intake when the owner supplied corrected v1.1 artwork. Its v1.0 assets
+and earlier visual approvals are historical; v1.1 requires fresh visual and native
+evidence from the replacement source.
 Replacement packages must bind the corrected source before installation or
 release; the hashes below do not identify that correction.
 
