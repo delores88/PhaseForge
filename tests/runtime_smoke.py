@@ -20,6 +20,47 @@ def wait_for_windows_tree_exit(process, stopped):
                                + stopped.stdout + stopped.stderr) from error
         raise
 
+def wait_for_windows_log_release(log_path, timeout=10):
+    """Wait for inherited Windows log handles, without hiding cleanup failures."""
+    import ctypes
+    from ctypes import wintypes
+    kernel = ctypes.WinDLL('kernel32', use_last_error=True)
+    create = kernel.CreateFileW
+    create.argtypes = [wintypes.LPCWSTR, wintypes.DWORD, wintypes.DWORD,
+                       wintypes.LPVOID, wintypes.DWORD, wintypes.DWORD,
+                       wintypes.HANDLE]
+    create.restype = wintypes.HANDLE
+    close = kernel.CloseHandle
+    close.argtypes = [wintypes.HANDLE]
+    close.restype = wintypes.BOOL
+    deadline = time.monotonic() + timeout
+    while True:
+        # OPEN_EXISTING + no sharing probes for surviving handles without
+        # modifying/deleting the log or granting children delete sharing.
+        handle = create(str(log_path.resolve()), 0x80000000, 0, None, 3, 0x80, None)
+        if handle != ctypes.c_void_p(-1).value:
+            if not close(handle):
+                raise ctypes.WinError(ctypes.get_last_error())
+            return
+        error = ctypes.get_last_error()
+        if error not in (32, 33):  # sharing violation / lock violation only
+            raise ctypes.WinError(error)
+        if time.monotonic() >= deadline:
+            raise RuntimeError(f'Backend log remains locked after {timeout}s: {log_path}')
+        time.sleep(.05)
+
+@contextmanager
+def backend_log(log_path):
+    log = log_path.open('w', encoding='utf-8')
+    try:
+        yield log
+    finally:
+        log.close()
+        if os.name == 'nt':
+            # taskkill waits on the backend, not every inherited file handle.
+            # Verify the log is released before TemporaryDirectory removes it.
+            wait_for_windows_log_release(log_path)
+
 @contextmanager
 def backend_process(command, log_path, *, environment=None):
     """Own the backend and its helpers until their inherited log handles close.
@@ -30,7 +71,7 @@ def backend_process(command, log_path, *, environment=None):
     """
     options = ({'creationflags': subprocess.CREATE_NO_WINDOW} if os.name == 'nt'
                else {'start_new_session': True})
-    with log_path.open('w', encoding='utf-8') as log:
+    with backend_log(log_path) as log:
         process = subprocess.Popen(command, stdin=subprocess.DEVNULL, stdout=log,
                                    stderr=subprocess.STDOUT, env=environment,
                                    close_fds=True, **options)
