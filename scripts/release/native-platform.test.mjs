@@ -53,8 +53,27 @@ test('DMG receipt rejects another mountpoint, multiple mounted volumes and forge
 test('DMG root admits the sole app and expected Applications shortcut only',{skip:process.platform==='win32'?'Windows converts POSIX /Applications symlinks to a drive path; native Linux/macOS jobs validate the exact DMG shortcut':false},context=>{
   const root=fixture(context),bundle=app(root);
   if(!symlink(context,'/Applications',path.join(root,'Applications')))return;
+  fs.writeFileSync(path.join(root,'.background.tiff'),'Pinned packager background fixture');
   assert.equal(validateDmgRoot(root),bundle);
   fs.mkdirSync(path.join(root,'Another.app'));assert.throws(()=>validateDmgRoot(root),/one application/);
+});
+
+test('DMG metadata rejects unexpected entries, directories and oversized background artwork',context=>{
+  const root=fixture(context);app(root);
+  fs.writeFileSync(path.join(root,'unexpected-script'),'not admitted');
+  assert.throws(()=>validateDmgRoot(root),/Unexpected DMG root entries:.*unexpected-script.*file/);
+  fs.unlinkSync(path.join(root,'unexpected-script'));
+  fs.mkdirSync(path.join(root,'.background.tiff'));
+  assert.throws(()=>validateDmgRoot(root),/background must be a regular file/);
+  fs.rmdirSync(path.join(root,'.background.tiff'));
+  fs.writeFileSync(path.join(root,'.background.tiff'),'');fs.truncateSync(path.join(root,'.background.tiff'),16*1024**2+1);
+  assert.throws(()=>validateDmgRoot(root),/background exceeds its metadata budget/);
+});
+
+test('DMG metadata rejects linked background artwork without following it',context=>{
+  const root=fixture(context);app(root);
+  if(!symlink(context,'Contents',path.join(root,'.background.tiff')))return;
+  assert.throws(()=>validateDmgRoot(root),/background must be a regular file/);
 });
 test('DMG root rejects a redirected Applications shortcut',context=>{
   const root=fixture(context);app(root);

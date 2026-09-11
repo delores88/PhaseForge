@@ -29,8 +29,13 @@ export function validateDmgRoot(directory){
   const apps=entries.filter(entry=>entry.name.endsWith('.app'));
   assert.equal(apps.length,1,'DMG must contain one application');
   assert.equal(apps[0].name,'PhaseForge.app');assert.ok(apps[0].isDirectory()&&!apps[0].isSymbolicLink(),'Application root must be a real directory');
-  const allowed=new Set(['PhaseForge.app','Applications','.background','.DS_Store','.VolumeIcon.icns','.fseventsd','.Trashes']);
-  assert.ok(entries.every(entry=>allowed.has(entry.name)),'Unexpected DMG root entry');
+  // Pinned dmg-builder 1.2.5 / dmgbuild 75c8a6c writes the configured
+  // electron-builder templates/background.tiff as this regular root file.
+  const allowed=new Set(['PhaseForge.app','Applications','.background','.background.tiff','.DS_Store','.VolumeIcon.icns','.fseventsd','.Trashes']);
+  const unexpected=entries.filter(entry=>!allowed.has(entry.name)).map(entry=>({name:entry.name,type:entry.isSymbolicLink()?'symlink':entry.isDirectory()?'directory':entry.isFile()?'file':'other'}));
+  assert.equal(unexpected.length,0,`Unexpected DMG root entries: ${JSON.stringify(unexpected)}`);
+  const background=entries.find(entry=>entry.name==='.background.tiff');
+  if(background){assert.ok(background.isFile()&&!background.isSymbolicLink(),'DMG background must be a regular file');assert.ok(fs.statSync(path.join(directory,background.name)).size<=16*1024**2,'DMG background exceeds its metadata budget');}
   const applications=path.join(directory,'Applications');
   assert.ok(fs.lstatSync(applications).isSymbolicLink(),'DMG must contain its expected Applications shortcut');
   assert.equal(fs.readlinkSync(applications),'/Applications','Unexpected Applications shortcut destination');
@@ -84,6 +89,8 @@ export async function installMacDmg(artifact,install,mountpoint,evidence,python)
     const raw=command('/usr/bin/hdiutil',['attach','-readonly','-nobrowse','-mountpoint',mountpoint,'-plist',artifact],{timeout:120000});
     mounted=true;
     const volume=mountedVolume(parse(raw)['system-entities'],mountpoint);
+    const rootEntries=fs.readdirSync(mountpoint,{withFileTypes:true});assert.ok(rootEntries.length<=128,'DMG root exceeds its entry budget');
+    writeJSON(path.join(path.dirname(evidence),'macos-dmg-root.json'),{volume,entries:rootEntries.map(entry=>({name:entry.name,type:entry.isSymbolicLink()?'symlink':entry.isDirectory()?'directory':entry.isFile()?'file':'other'})),scope:'Actual read-only mounted DMG root, recorded before validation. This listing does not admit or execute any entry.'});
     const source=validateDmgRoot(mountpoint),inspection=await inspectMacApp(source),before=inspection.inventory;
     fs.mkdirSync(install);
     const bundle=inside(install,path.join(install,'PhaseForge.app'));

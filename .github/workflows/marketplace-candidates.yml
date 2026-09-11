@@ -2,6 +2,13 @@ name: ALPHA marketplace candidates (no publication)
 
 on:
   workflow_dispatch:
+    inputs:
+      platform:
+        description: Native platform to build (all builds concurrently)
+        type: choice
+        required: true
+        default: all
+        options: [all, windows, macos, linux]
 
 permissions:
   contents: read
@@ -17,10 +24,13 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        include:
-          - {runner: windows-2025, platform: windows, arch: x64}
-          - {runner: ubuntu-24.04, platform: linux, arch: x64}
-          - {runner: macos-15, platform: macos, arch: arm64}
+        include: >-
+          ${{ fromJSON(
+            inputs.platform == 'windows' && '[{"runner":"windows-2025","platform":"windows","arch":"x64"}]' ||
+            inputs.platform == 'macos' && '[{"runner":"macos-15","platform":"macos","arch":"arm64"}]' ||
+            inputs.platform == 'linux' && '[{"runner":"ubuntu-24.04","platform":"linux","arch":"x64"}]' ||
+            '[{"runner":"windows-2025","platform":"windows","arch":"x64"},{"runner":"ubuntu-24.04","platform":"linux","arch":"x64"},{"runner":"macos-15","platform":"macos","arch":"arm64"}]'
+          ) }}
     env:
       PHASEFORGE_RELEASE_ACCEPTANCE: '1'
       CSC_IDENTITY_AUTO_DISCOVERY: 'false'
@@ -127,6 +137,15 @@ jobs:
           include-hidden-files: true # Only the explicitly assembled files under the hidden .local directory.
           if-no-files-found: error
           retention-days: 14
+          compression-level: 0
+      - name: Preserve failed macOS DMG only as an unvalidated diagnostic
+        if: failure() && runner.os == 'macOS'
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7
+        with:
+          name: PhaseForge-UNVALIDATED-DIAGNOSTIC-macos-arm64-${{ github.sha }}
+          path: desktop/dist/*.dmg
+          if-no-files-found: warn
+          retention-days: 3
           compression-level: 0
       - name: Preserve failure evidence without publishing an incomplete candidate
         if: failure()
