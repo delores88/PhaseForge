@@ -6,14 +6,15 @@
 
 # Present the generated, pinned license page exactly once, including updates.
 # The stock assisted-template license location skips --updated installations.
-!ifndef BUILD_UNINSTALLER
+!macro customWelcomePage
+  # electron-builder includes this file before defining licensePage. Defer
+  # consumption until assistedInstaller invokes this macro, just before its
+  # stock update-skipping license block.
   !ifmacrodef licensePage
     !macroundef licensePage
   !else
     !error "The configured Microsoft runtime agreement is required."
   !endif
-!endif
-!macro customWelcomePage
   !define MUI_LICENSEPAGE_CHECKBOX
   !define MUI_LICENSEPAGE_CHECKBOX_TEXT "I accept the Microsoft runtime terms."
   !insertmacro MUI_PAGE_LICENSE "${PROJECT_DIR}\..\tools\third-party\msvc-runtime\END-USER-TERMS.txt"

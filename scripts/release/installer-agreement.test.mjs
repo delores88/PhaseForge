@@ -19,7 +19,8 @@ test('configured Microsoft agreement has exact packaged bytes and preserves MIT 
 
 test('agreement hook consumes the page before the stock update skip and silent installation requires explicit assent',()=>{
   const custom=fs.readFileSync(path.join(ROOT,'desktop/build/installer.nsh'),'utf8');
-  assert.ok(custom.indexOf('!macroundef licensePage')<custom.indexOf('!macro customWelcomePage'));
+  const welcome=custom.slice(custom.indexOf('!macro customWelcomePage'),custom.indexOf('!macroend'));
+  assert.match(welcome,/!ifmacrodef licensePage[\s\S]*!macroundef licensePage/);
   assert.match(custom,/!macro customWelcomePage[\s\S]*!define MUI_LICENSEPAGE_CHECKBOX[\s\S]*!insertmacro MUI_PAGE_LICENSE.*END-USER-TERMS.txt/);
   assert.equal((custom.match(/!insertmacro MUI_PAGE_LICENSE/g)||[]).length,1);
   assert.match(custom,/\$\{If\} \$\{Silent\}[\s\S]*\/ACCEPT_MSVC_TERMS=[\s\S]*\$R1 != "MSVC-2026-09-11"[\s\S]*SetErrorLevel 2[\s\S]*Quit/);
