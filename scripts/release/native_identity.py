@@ -2,6 +2,7 @@
 import email.parser
 import hashlib
 from pathlib import Path
+import re
 import struct
 import tarfile
 import zipfile
@@ -70,19 +71,60 @@ def pe_imports(raw):
         return {"status": "missing", "reason": str(error), "imports": []}
 
 
-def evidence(root, native_rows, sources, archive_root, *, record, opened, version, aliases=None):
+def evidence(root, native_rows, sources, archive_root, *, record, opened, version, aliases=None, replacements=None):
     """Bind every native path to its original verified archive member, if supplied."""
     origins = {row["path"]: [] for row in native_rows}
     aliases = aliases or {}
+    replacements = replacements or {}
     if not isinstance(aliases, dict):
         raise ValueError("Invalid frozen native aliases")
+    if not isinstance(replacements, dict) or set(aliases) & set(replacements):
+        raise ValueError("Invalid or overlapping frozen native replacements")
+    pinned_sources = {source["name"]: source for source in sources}
+    replaced_members = {}
+    auxiliary_members = {}
+    for destination, replacement in replacements.items():
+        if (destination not in origins or not isinstance(replacement, dict)
+                or replacement.get("component") != "SQLite" or destination != "sqlite3.dll"
+                or replacement.get("version") != "3.53.4" or not replacement.get("reason")):
+            raise ValueError("Invalid frozen SQLite native replacement")
+        for role in ("original", "replacement"):
+            pin = replacement.get(role)
+            if not isinstance(pin, dict):
+                raise ValueError("Native replacement lacks original/replacement member pin")
+            source = pinned_sources.get(pin.get("archive_name"))
+            if (source is None or source["sha256"] != pin.get("archive_sha256")
+                    or pin.get("archive_member") != "sqlite3.dll"
+                    or not re.fullmatch(r"[a-f0-9]{64}", str(pin.get("sha256", "")))
+                    or type(pin.get("bytes")) is not int or not 0 < pin["bytes"] <= 512 * 1024 * 1024):
+                raise ValueError("Native replacement archive/member pin differs from frozen sources")
+        pin = replacement["replacement"]
+        row = next(row for row in native_rows if row["path"] == destination)
+        if (pin["sha256"] != row["sha256"] or pin["bytes"] != row["bytes"]
+                or pin.get("version") != replacement["version"]
+                or replacement["original"]["sha256"] == pin["sha256"]):
+            raise ValueError("Native replacement does not match frozen file pin")
+        auxiliary = replacement.get("auxiliary_members", [])
+        if not isinstance(auxiliary, list) or len(auxiliary) != 1:
+            raise ValueError("SQLite replacement must retain its exact definition member")
+        item = auxiliary[0]
+        if (not isinstance(item, dict) or item.get("path") != "source-evidence/sqlite-3.53.4/sqlite3.def"
+                or item.get("archive_member") != "sqlite3.def"
+                or not re.fullmatch(r"[a-f0-9]{64}", str(item.get("sha256", "")))
+                or type(item.get("bytes")) is not int or not 0 < item["bytes"] <= 1024 * 1024):
+            raise ValueError("Invalid SQLite auxiliary member pin")
+        if record(Path(root) / item["path"]) != {"bytes": item["bytes"], "sha256": item["sha256"]}:
+            raise ValueError("SQLite auxiliary file differs from frozen pin")
+        auxiliary_members[item["path"]] = {**item, "archive": pin["archive_name"], "archive_sha256": pin["archive_sha256"], "archive_bytes_verified": False}
     for destination, alias in aliases.items():
         if (destination not in origins or not isinstance(alias, dict)
                 or not isinstance(alias.get("archive_member"), str)
                 or alias.get("sha256") != next(row["sha256"] for row in native_rows if row["path"] == destination)):
             raise ValueError("Native alias does not match frozen file pin")
     witnesses, archives = [], []
-    wanted = set(origins) | {alias["archive_member"] for alias in aliases.values()}
+    wanted = (set(origins) | {alias["archive_member"] for alias in aliases.values()}
+              | {entry[role]["archive_member"] for entry in replacements.values() for role in ("original", "replacement")}
+              | {entry["archive_member"] for entry in auxiliary_members.values()})
     for source in sources:
         receipt = {**source, "archive_bytes_inspected": False}
         archives.append(receipt)
@@ -132,8 +174,26 @@ def evidence(root, native_rows, sources, archive_root, *, record, opened, versio
                             origin = {"archive": source["name"], "archive_sha256": source["sha256"],
                                                   "url": source["url"], "member": name, "bytes": member.file_size,
                                                   "sha256": digest, "transformation": "none; exact original member bytes"}
-                            if name in origins:
+                            if name in origins and name not in replacements:
                                 origins[name].append(origin)
+                            for item in auxiliary_members.values():
+                                if item["archive"] == source["name"] and item["archive_member"] == name:
+                                    if digest != item["sha256"] or member.file_size != item["bytes"]:
+                                        raise ValueError("SQLite auxiliary archive member differs from frozen pin")
+                                    item["archive_bytes_verified"] = True
+                            for destination, replacement in replacements.items():
+                                for role in ("original", "replacement"):
+                                    pin = replacement[role]
+                                    if pin["archive_name"] == source["name"] and pin["archive_member"] == name:
+                                        if digest != pin["sha256"] or member.file_size != pin["bytes"]:
+                                            raise ValueError("Native replacement member bytes differ from frozen pin: " + role)
+                                        if role == "original":
+                                            replaced_members[destination] = origin
+                                        else:
+                                            origins[destination].append({**origin, "destination": destination,
+                                                "transformation": "explicit upstream native replacement; original member not shipped",
+                                                "component": replacement["component"], "component_version": replacement["version"],
+                                                "reason": replacement["reason"], "replaces": replacement["original"]})
                             for destination, alias in aliases.items():
                                 if alias["archive_member"] == name:
                                     if digest != alias["sha256"]:
@@ -158,6 +218,10 @@ def evidence(root, native_rows, sources, archive_root, *, record, opened, versio
                 if value["archive"] == source["name"]:
                     value["distribution_metadata"] = package
     rows = []
+    if archive_root is not None and set(replaced_members) != set(replacements):
+        raise ValueError("Native replacement original archive member is missing")
+    if archive_root is not None and not all(item["archive_bytes_verified"] for item in auxiliary_members.values()):
+        raise ValueError("SQLite auxiliary source archive member is missing")
     for row in native_rows:
         path = Path(root) / row["path"]
         with opened(path) as (stream, _):
@@ -174,6 +238,8 @@ def evidence(root, native_rows, sources, archive_root, *, record, opened, versio
                      "origin_status": "verified_exact_archive_member" if len(matches) == 1 else "missing_archive_bytes",
                      "component_identity_scope": "PE resource claims and exact upstream distribution ownership are separate; a wheel version is not the version of every transitive DLL"})
     return {"files": rows, "archives": archives, "upstream_metadata_witnesses": witnesses,
+            "replaced_original_members": replaced_members,
+            "replacement_auxiliary_members": list(auxiliary_members.values()),
             "all_native_archive_members_verified": bool(rows) and all(row["origin"] for row in rows),
             "missing_pe_versions": [row["path"] for row in rows if row["pe_version"]["status"] == "missing"],
             "missing_pe_imports": [row["path"] for row in rows if row["pe"]["status"] == "missing"],

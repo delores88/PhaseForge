@@ -7,9 +7,9 @@ import {verifySourceFile} from './openmm-sources.mjs';
 export const MSVC_RESOURCE='tools/third-party/msvc-runtime';
 export const msvcNoticeRoot=path.join(ROOT,MSVC_RESOURCE);
 export const MSVC_NOTICES=Object.freeze({
-  'NOTICE.txt':{bytes:1427,sha256:'f1be968e43f26d5a8f14546e458cd940dcdc87e74d03a35a181716f47a980045'},
+  'NOTICE.txt':{bytes:1427,sha256:'a43e512bcde52804d30a88494093517ee54769c86604390bfb69688ffba78ecb'},
   'Visual-Studio-2022-Community-License.txt':{bytes:19043,sha256:'a38d10afc3ef8fb2e64af972a9c64d998ef964de8101b9f7a59703f72fa3a5ab'},
-  'provenance.json':{bytes:2933,sha256:'7a7f25ee347218d2faddf4d939a80a92f3d6a9733dd0eeb7da2d95c52f1508f5'},
+  'provenance.json':{bytes:2933,sha256:'e73cc55ee941bdcf76ef39fc890f5cc38dcf1d132e621b49a904aea1ef738376'},
   'END-USER-TERMS.txt':{bytes:4185,sha256:'ee84514c1e240e9976a811b885ad5bf194f2d4523a0402e9fdef6cf7564d9bc1'},
 });
 
@@ -22,14 +22,14 @@ export async function verifyMsvcNotices(directory=msvcNoticeRoot){
   }
   const provenance=readJSON(path.join(directory,'provenance.json'));
   assert.equal(provenance.schema,'phaseforge.msvc-runtime-provenance.v1');
-  const frozen=path.join(ROOT,'tools/runtime-seeds/science-v3.manifest.json'),manifest=readJSON(frozen);
+  const frozen=path.join(ROOT,'tools/runtime-seeds/science-v4.manifest.json'),manifest=readJSON(frozen);
   const alias=manifest.transformations.native_aliases['MSVCP140.dll'];
-  assert.equal(manifest.kind,'science-v3');
+  assert.equal(manifest.kind,'science-v4');
   assert.equal(alias.archive_member,provenance.origin.member);
   assert.equal(alias.sha256,provenance.component.sha256);
   assert.equal(manifest.files['MSVCP140.dll'],provenance.component.sha256);
   assert.equal(manifest.file_bytes['MSVCP140.dll'],provenance.component.bytes);
-  assert.equal(provenance.origin.destination,'runtime/runtime-seeds/science-v3/MSVCP140.dll');
+  assert.equal(provenance.origin.destination,'runtime/runtime-seeds/science-v4/MSVCP140.dll');
   assert.ok(manifest.sources.some(source=>source.url===provenance.origin.url&&source.sha256===provenance.origin.sha256),'Microsoft runtime origin must be an exact frozen upstream archive');
   for(const [name,pin] of Object.entries(provenance.files))assert.deepEqual(pin,MSVC_NOTICES[name]);
   return {schema:'phaseforge.msvc-runtime-delivery.v1',resource_directory:MSVC_RESOURCE,outside_asar:true,

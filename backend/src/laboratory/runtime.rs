@@ -14,6 +14,23 @@ pub(super) const SCIENCE_SMOKE: &str = r#"
 import sys,json,pathlib,csv,numpy,openmm,PIL
 def local_origin(value): return pathlib.Path(str(pathlib.Path(value).resolve()).removeprefix('\\\\?\\'))
 root=local_origin(sys.executable).parent
+import sqlite3,_sqlite3,ctypes
+from ctypes import wintypes
+assert sqlite3.sqlite_version=='3.53.4',sqlite3.sqlite_version
+database=sqlite3.connect(':memory:')
+database.execute('CREATE VIRTUAL TABLE documents USING fts5(body)')
+database.execute("INSERT INTO documents VALUES ('phaseforge numerical evidence')")
+assert database.execute("SELECT body FROM documents WHERE documents MATCH 'numerical'").fetchall()==[('phaseforge numerical evidence',)]
+kernel=ctypes.WinDLL('kernel32',use_last_error=True)
+kernel.GetModuleHandleW.argtypes=[wintypes.LPCWSTR];kernel.GetModuleHandleW.restype=wintypes.HMODULE
+kernel.GetModuleFileNameW.argtypes=[wintypes.HMODULE,wintypes.LPWSTR,wintypes.DWORD];kernel.GetModuleFileNameW.restype=wintypes.DWORD
+sqlite_handle=kernel.GetModuleHandleW('sqlite3.dll');assert sqlite_handle
+sqlite_buffer=ctypes.create_unicode_buffer(32768);sqlite_length=kernel.GetModuleFileNameW(sqlite_handle,sqlite_buffer,len(sqlite_buffer));assert 0<sqlite_length<len(sqlite_buffer)
+sqlite_dll=local_origin(sqlite_buffer.value)
+assert str(sqlite_dll).lower()==str(root/'sqlite3.dll').lower(),str(sqlite_dll)
+assert local_origin(_sqlite3.__file__).is_relative_to(root)
+sqlite_receipt={'version':sqlite3.sqlite_version,'source_id':database.execute('SELECT sqlite_source_id()').fetchone()[0],'compile_options':[r[0] for r in database.execute('PRAGMA compile_options')],'loaded_dll':str(sqlite_dll),'module_origin':str(local_origin(_sqlite3.__file__)),'fts5_query_passed':True}
+database.close()
 modules={m.__name__:str(local_origin(m.__file__)) for m in (json,pathlib,csv,numpy,openmm,PIL)}
 assert sys.version_info[:3]==(3,13,15)
 assert (numpy.__version__,openmm.__version__,PIL.__version__)==('2.4.6','8.5.2','12.3.0')
@@ -39,16 +56,16 @@ handle=kernel.GetModuleHandleW('MSVCP140.dll');assert handle,'OpenMM C++ runtime
 buffer=ctypes.create_unicode_buffer(32768);length=kernel.GetModuleFileNameW(handle,buffer,len(buffer));assert 0<length<len(buffer)
 cpp_runtime=local_origin(buffer.value)
 assert str(cpp_runtime).lower()==str(root/'MSVCP140.dll').lower(),str(cpp_runtime)
-print(json.dumps({'python':sys.version,'sys_path':sys.path,'module_origins':modules,'runtime':str(root),'openmm':openmm.__version__,'numpy':numpy.__version__,'pillow':PIL.__version__,'reference_steps':2,'position_x_nm':x,'energy_before_kj_mol':before,'loaded_msvcp140':str(cpp_runtime),'isolated':sys.flags.isolated,'dont_write_bytecode':sys.flags.dont_write_bytecode,'optimize':sys.flags.optimize}))
+print(json.dumps({'python':sys.version,'sys_path':sys.path,'module_origins':modules,'runtime':str(root),'openmm':openmm.__version__,'numpy':numpy.__version__,'pillow':PIL.__version__,'reference_steps':2,'position_x_nm':x,'energy_before_kj_mol':before,'loaded_msvcp140':str(cpp_runtime),'sqlite':sqlite_receipt,'isolated':sys.flags.isolated,'dont_write_bytecode':sys.flags.dont_write_bytecode,'optimize':sys.flags.optimize}))
 "#;
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub(super) enum RuntimeKind { Science, Generated }
 impl RuntimeKind {
-    pub(super) fn name(self) -> &'static str { match self { Self::Science => "science-v3", Self::Generated => "python-numpy-v2" } }
+    pub(super) fn name(self) -> &'static str { match self { Self::Science => "science-v4", Self::Generated => "python-numpy-v3" } }
     fn bytes(self) -> &'static [u8] { match self {
-        Self::Science => include_bytes!("../../../tools/runtime-seeds/science-v3.manifest.json"),
-        Self::Generated => include_bytes!("../../../tools/runtime-seeds/python-numpy-v2.manifest.json"),
+        Self::Science => include_bytes!("../../../tools/runtime-seeds/science-v4.manifest.json"),
+        Self::Generated => include_bytes!("../../../tools/runtime-seeds/python-numpy-v3.manifest.json"),
     } }
     pub(super) fn directory(self, data: &Path) -> PathBuf {
         let root = data.join("environments").join(self.name());
@@ -59,7 +76,7 @@ impl RuntimeKind {
 
 #[derive(Debug, Deserialize)]
 struct Manifest {
-    schema_version: u32, schema: String, kind: String, python: String, numpy: String,
+    schema_version: u32, schema: String, kind: String, python: String, numpy: String, sqlite: String,
     sources: Vec<serde_json::Value>, files: BTreeMap<String, String>, file_bytes: BTreeMap<String, u64>,
     native_files: BTreeMap<String, String>,
 }
@@ -68,7 +85,7 @@ struct Manifest {
 pub(super) struct VerifiedRuntime {
     pub directory: PathBuf, pub python: PathBuf, pub kind: &'static str,
     pub manifest_sha256: String, pub file_count: usize, pub content_bytes: u64,
-    pub python_version: &'static str, pub numpy_version: &'static str,
+    pub python_version: &'static str, pub numpy_version: &'static str, pub sqlite_version: &'static str,
     pub source_count: usize,
 }
 
@@ -140,14 +157,14 @@ fn read_bounded(path: &Path, limit: u64) -> anyhow::Result<Vec<u8>> {
 fn parse(kind: RuntimeKind, bytes: &[u8]) -> anyhow::Result<Manifest> {
     let manifest: Manifest = serde_json::from_slice(bytes)?;
     ensure!(manifest.schema_version == 1 && manifest.schema == "phaseforge.runtime-seed.v1" && manifest.kind == kind.name()
-            && manifest.python == "3.13.15" && manifest.numpy == "2.4.6", "Unsupported compiled runtime contract");
+            && manifest.python == "3.13.15" && manifest.numpy == "2.4.6" && manifest.sqlite == "3.53.4", "Unsupported compiled runtime contract");
     ensure!(!manifest.files.is_empty() && manifest.files.len() <= 10000 && manifest.files.keys().eq(manifest.file_bytes.keys()), "Invalid compiled runtime inventory");
     ensure!(manifest.files.contains_key("python.exe") && manifest.files.contains_key("python313._pth")
             && manifest.files.contains_key("Lib/os.py") && !manifest.files.contains_key(OUTER), "Missing interpreter/source-stdlib contract");
     let expected_sources: &[&str] = if kind == RuntimeKind::Science { &[
         "d1f04d990aee1253d8569e8e5104e30fa9f5fa830899f14843448872d936a2cf", "1e66a7945a48390ee4c2a4268a0e4185884059a13c4aab6d148aa208deea4a76", "c4fc99836233ea196540b17ab0983aff60ed07941751930f5f4d05bc3b3b7359",
-        "289c870e28c946b03992215f1f01f0b7d870f84a6f4c0a57e103bd8d62712b46", "1cca606cd25738df4ed873d5ad46bbdb3d83b5cbca291f6b4ff13a4df6b0bbe8"] } else { &[
-        "d1f04d990aee1253d8569e8e5104e30fa9f5fa830899f14843448872d936a2cf", "1e66a7945a48390ee4c2a4268a0e4185884059a13c4aab6d148aa208deea4a76", "c4fc99836233ea196540b17ab0983aff60ed07941751930f5f4d05bc3b3b7359"] };
+        "289c870e28c946b03992215f1f01f0b7d870f84a6f4c0a57e103bd8d62712b46", "1cca606cd25738df4ed873d5ad46bbdb3d83b5cbca291f6b4ff13a4df6b0bbe8", "8b959b7eff4a81f6a62fc3468f9273e5cfe78d4a927e62215aed231b654fb104"] } else { &[
+        "d1f04d990aee1253d8569e8e5104e30fa9f5fa830899f14843448872d936a2cf", "1e66a7945a48390ee4c2a4268a0e4185884059a13c4aab6d148aa208deea4a76", "c4fc99836233ea196540b17ab0983aff60ed07941751930f5f4d05bc3b3b7359", "8b959b7eff4a81f6a62fc3468f9273e5cfe78d4a927e62215aed231b654fb104"] };
     let source_hashes: BTreeSet<_> = manifest.sources.iter().map(|source| source["sha256"].as_str().unwrap_or("")).collect();
     ensure!(manifest.sources.len() == expected_sources.len() && source_hashes == expected_sources.iter().copied().collect(), "Compiled runtime upstream source pins differ");
     let mut folded = BTreeSet::new();
@@ -164,7 +181,7 @@ fn parse(kind: RuntimeKind, bytes: &[u8]) -> anyhow::Result<Manifest> {
 
 fn verify_inner(root: &Path, outer: &Manifest) -> anyhow::Result<()> {
     let inner: serde_json::Value = serde_json::from_slice(&read_bounded(&root.join(INNER), 2 * 1024 * 1024)?)?;
-    ensure!(inner["schema_version"] == 1 && inner["python"] == "3.13.15" && inner["numpy"] == "2.4.6"
+    ensure!(inner["schema_version"] == 1 && inner["python"] == "3.13.15" && inner["numpy"] == "2.4.6" && inner["sqlite"] == "3.53.4"
             && inner["sources"] == serde_json::json!(outer.sources), "Generated runtime inner source/version receipt differs");
     let files = inner["files"].as_object().context("Inner runtime inventory missing")?;
     ensure!(files.len() + 1 == outer.files.len(), "Inner/outer runtime inventory count differs");
@@ -219,7 +236,7 @@ fn verify_contract(root: &Path, kind: RuntimeKind, compiled: &[u8], token: &Canc
     if kind == RuntimeKind::Generated { verify_inner(root, &manifest)?; }
     Ok(VerifiedRuntime { directory: root.to_path_buf(), python: root.join("python.exe"), kind: kind.name(),
         manifest_sha256: sha(compiled), file_count: observed.len(), content_bytes: manifest.file_bytes.values().sum(),
-        python_version: "3.13.15", numpy_version: "2.4.6", source_count: manifest.sources.len() })
+        python_version: "3.13.15", numpy_version: "2.4.6", sqlite_version: "3.53.4", source_count: manifest.sources.len() })
 }
 
 pub(super) fn verify(root: &Path, kind: RuntimeKind, token: &CancellationToken) -> anyhow::Result<VerifiedRuntime> {
@@ -307,7 +324,7 @@ fn create_ordinary_directories(path: &Path) -> anyhow::Result<()> {
 }
 
 pub(super) fn provision(data: &Path, kind: RuntimeKind, token: &CancellationToken) -> anyhow::Result<VerifiedRuntime> {
-    ensure!(cfg!(windows), "Bundled v2 runtimes require Windows; no unrestricted fallback is permitted");
+    ensure!(cfg!(windows), "Bundled managed runtimes require Windows; no unrestricted fallback is permitted");
     provision_from(&source_root()?.join(kind.name()), &kind.directory(data), kind, token)
 }
 
@@ -358,8 +375,12 @@ mod tests {
         let seeds = source_root().unwrap(); let token = CancellationToken::new(); let data = output.join("data");
         fs::create_dir_all(data.join("environments/science-v1")).unwrap(); fs::write(data.join("environments/science-v1/prior-evidence"), b"preserve v1").unwrap();
         fs::create_dir_all(data.join("environments/science-v2")).unwrap(); fs::write(data.join("environments/science-v2/prior-evidence"), b"preserve v2").unwrap();
-        let science = provision_from(&seeds.join("science-v3"), &RuntimeKind::Science.directory(&data), RuntimeKind::Science, &token).unwrap();
-        let generated = provision_from(&seeds.join("python-numpy-v2"), &RuntimeKind::Generated.directory(&data), RuntimeKind::Generated, &token).unwrap();
+        for prior in ["science-v3", "python-numpy-v2"] {
+            fs::create_dir_all(data.join("environments").join(prior)).unwrap();
+            fs::write(data.join("environments").join(prior).join("prior-evidence"), prior.as_bytes()).unwrap();
+        }
+        let science = provision_from(&seeds.join("science-v4"), &RuntimeKind::Science.directory(&data), RuntimeKind::Science, &token).unwrap();
+        let generated = provision_from(&seeds.join("python-numpy-v3"), &RuntimeKind::Generated.directory(&data), RuntimeKind::Generated, &token).unwrap();
         let trusted_work = output.join("trusted-work"); fs::create_dir(&trusted_work).unwrap();
         let mut command = process::clean_command(&science.python, &trusted_work);
         command.args(["-I", "-B", "-c", SCIENCE_SMOKE]).stdout(File::create(trusted_work.join("stdout.json")).unwrap()).stderr(File::create(trusted_work.join("stderr.log")).unwrap());
@@ -375,11 +396,28 @@ mod tests {
 import json,pathlib,csv,numpy,sys
 def local_origin(value): return pathlib.Path(str(pathlib.Path(value).resolve()).removeprefix('\\\\?\\'))
 root=local_origin(sys.executable).parent
+import sqlite3,_sqlite3,ctypes
+from ctypes import wintypes
+assert sqlite3.sqlite_version=='3.53.4',sqlite3.sqlite_version
+database=sqlite3.connect(':memory:')
+database.execute('CREATE VIRTUAL TABLE documents USING fts5(body)')
+database.execute("INSERT INTO documents VALUES ('phaseforge numerical evidence')")
+assert database.execute("SELECT body FROM documents WHERE documents MATCH 'numerical'").fetchall()==[('phaseforge numerical evidence',)]
+kernel=ctypes.WinDLL('kernel32',use_last_error=True)
+kernel.GetModuleHandleW.argtypes=[wintypes.LPCWSTR];kernel.GetModuleHandleW.restype=wintypes.HMODULE
+kernel.GetModuleFileNameW.argtypes=[wintypes.HMODULE,wintypes.LPWSTR,wintypes.DWORD];kernel.GetModuleFileNameW.restype=wintypes.DWORD
+sqlite_handle=kernel.GetModuleHandleW('sqlite3.dll');assert sqlite_handle
+sqlite_buffer=ctypes.create_unicode_buffer(32768);sqlite_length=kernel.GetModuleFileNameW(sqlite_handle,sqlite_buffer,len(sqlite_buffer));assert 0<sqlite_length<len(sqlite_buffer)
+sqlite_dll=local_origin(sqlite_buffer.value)
+assert str(sqlite_dll).lower()==str(root/'sqlite3.dll').lower(),str(sqlite_dll)
+assert local_origin(_sqlite3.__file__).is_relative_to(root)
+sqlite_receipt={'version':sqlite3.sqlite_version,'source_id':database.execute('SELECT sqlite_source_id()').fetchone()[0],'compile_options':[r[0] for r in database.execute('PRAGMA compile_options')],'loaded_dll':str(sqlite_dll),'module_origin':str(local_origin(_sqlite3.__file__)),'fts5_query_passed':True}
+database.close()
 origins={m.__name__:str(local_origin(m.__file__)) for m in (json,pathlib,csv,numpy)}
 assert all(pathlib.Path(p).is_relative_to(root) for p in origins.values()),origins
 assert all(local_origin(p).is_relative_to(root) for p in sys.path),sys.path
 assert sys.flags.isolated and sys.flags.dont_write_bytecode and sys.flags.optimize==0
-pathlib.Path('module-origins.json').write_text(json.dumps({'runtime':str(root),'sys_path':sys.path,'module_origins':origins,'isolated':sys.flags.isolated,'dont_write_bytecode':sys.flags.dont_write_bytecode,'optimize':sys.flags.optimize}))
+pathlib.Path('module-origins.json').write_text(json.dumps({'runtime':str(root),'sys_path':sys.path,'module_origins':origins,'sqlite':sqlite_receipt,'isolated':sys.flags.isolated,'dont_write_bytecode':sys.flags.dont_write_bytecode,'optimize':sys.flags.optimize}))
 "#;
         fs::write(work.join("probe.py"), format!("{}\n{}", include_str!("../../../tools/isolation_probe.py"), origin_script)).unwrap();
         fs::write(work.join("input.json"), serde_json::to_vec(&json!({"read_canary":outside,"write_canary":outside_write,"runtime_canary":runtime_write,"listening_port":port})).unwrap()).unwrap();
@@ -396,11 +434,16 @@ pathlib.Path('module-origins.json').write_text(json.dumps({'runtime':str(root),'
         assert_eq!(fs::read(data.join("environments/science-v1/prior-evidence")).unwrap(), b"preserve v1");
         assert_eq!(fs::read(data.join("environments/science-v2/prior-evidence")).unwrap(), b"preserve v2");
         assert_eq!(fs::read_dir(data.join("environments/science-v2")).unwrap().count(),1);
+        for prior in ["science-v3", "python-numpy-v2"] {
+            let saved=data.join("environments").join(prior);
+            assert_eq!(fs::read(saved.join("prior-evidence")).unwrap(),prior.as_bytes());
+            assert_eq!(fs::read_dir(saved).unwrap().count(),1);
+        }
         let outer = generated.directory.join(OUTER); let saved_outer = fs::read(&outer).unwrap(); fs::write(&outer, b"{}").unwrap();
         assert!(IsolatedProcess::spawn(spec).is_err()); assert_eq!(fs::read(&outer).unwrap(), b"{}");
         fs::write(&outer, saved_outer).unwrap();
         let missing_destination = output.join("missing-runtime"); assert!(provision_from(&output.join("missing-seed"), &missing_destination, RuntimeKind::Science, &token).is_err()); assert!(!missing_destination.exists());
-        let report = json!({"passed":true,"science":science,"generated":generated,"trusted_science":science_receipt,"lpac":negative,"lpac_origins":lpac_origins,"runtime_unchanged_after_execution":true,"changed_outer_launch_refused":true,"missing_seed_no_fallback":true,"v1_preserved":true,"v2_preserved":true,"offline_copy":true});
+        let report = json!({"passed":true,"science":science,"generated":generated,"trusted_science":science_receipt,"lpac":negative,"lpac_origins":lpac_origins,"runtime_unchanged_after_execution":true,"changed_outer_launch_refused":true,"missing_seed_no_fallback":true,"v1_preserved":true,"v2_preserved":true,"science_v3_preserved":true,"generated_v2_preserved":true,"offline_copy":true});
         fs::write(output.join("report.json"), serde_json::to_vec_pretty(&report).unwrap()).unwrap(); println!("Current runtime acceptance: {}", output.join("report.json").display());
     }
     #[cfg(windows)]

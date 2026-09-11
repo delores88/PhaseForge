@@ -193,7 +193,7 @@ class ManagedRuntimeTests(unittest.TestCase):
             self.put(source / "numpy-fixture.dist-info/METADATA", b"Name: numpy\nVersion: fixture-exact-version\n")
             archive = {"name": "fixture.zip", "url": "https://example.invalid/fixture.zip", "sha256": "a" * 64,
                        "bytes": 42, "upstream_metadata": "https://example.invalid/metadata"}
-            if name == "python-numpy-v2":
+            if name == "python-numpy-v3":
                 inner = {"schema_version": 1, "python": "fixture-python", "numpy": "fixture-numpy", "sources": [archive],
                          "files": {path.relative_to(source).as_posix(): self.sha(path) for path in source.rglob("*") if path.is_file()}}
                 self.json(source / "phaseforge-isolation-runtime.json", inner)
@@ -224,31 +224,31 @@ class ManagedRuntimeTests(unittest.TestCase):
             self.assertTrue(runtime["copy_comparison"]["outer_manifest_identical"])
             self.assertTrue(runtime["frozen_source_manifest"]["matches_installed_seed_manifest"])
             self.assertFalse(runtime["archive_provenance"]["archive_bytes_inspected"])
-        self.assertTrue(report["runtimes"]["python-numpy-v2"]["copy_pin_verification"]["isolation_manifest_verification"]["valid"])
+        self.assertTrue(report["runtimes"]["python-numpy-v3"]["copy_pin_verification"]["isolation_manifest_verification"]["valid"])
 
     def test_bundled_copy_mutation_missing_file_and_added_cache_are_detected(self):
         seeds, frozen = self.bundled_fixtures()
-        destination = self.workspace / inventory.SEED_LAYOUT["science-v3"]
+        destination = self.workspace / inventory.SEED_LAYOUT["science-v4"]
         self.put(destination / "python.exe", b"mutated")
         (destination / "numpy/_core.pyd").unlink()
         self.put(destination / "__pycache__/unexpected.pyc", b"unexpected cache")
         with patch.object(inventory, "FROZEN_MANIFEST_ROOT", frozen):
             report = inventory.build_report(self.workspace, seed_root=seeds)
         self.assertFalse(report["integrity_valid"])
-        comparison = report["runtimes"]["science-v3"]["copy_comparison"]
+        comparison = report["runtimes"]["science-v4"]["copy_comparison"]
         self.assertEqual(comparison["changed_files"], ["python.exe"])
         self.assertEqual(comparison["missing_files"], ["numpy/_core.pyd"])
         self.assertEqual(comparison["unexpected_files"], ["__pycache__/unexpected.pyc"])
 
     def test_mutating_both_outer_manifests_cannot_replace_frozen_source_anchor(self):
         seeds, frozen = self.bundled_fixtures()
-        for root in [seeds / "science-v3", self.workspace / inventory.SEED_LAYOUT["science-v3"]]:
+        for root in [seeds / "science-v4", self.workspace / inventory.SEED_LAYOUT["science-v4"]]:
             manifest = json.loads((root / inventory.SEED_MANIFEST).read_text())
             manifest["transformations"] = {"fixture": "changed claim"}
             self.json(root / inventory.SEED_MANIFEST, manifest)
         with patch.object(inventory, "FROZEN_MANIFEST_ROOT", frozen):
             report = inventory.build_report(self.workspace, seed_root=seeds)
-        science = report["runtimes"]["science-v3"]
+        science = report["runtimes"]["science-v4"]
         self.assertTrue(science["seed_pin_verification"]["valid"])
         self.assertTrue(science["copy_comparison"]["outer_manifest_identical"])
         self.assertFalse(science["frozen_source_manifest"]["matches_installed_seed_manifest"])
@@ -256,23 +256,23 @@ class ManagedRuntimeTests(unittest.TestCase):
 
     def test_wrong_seed_kind_is_rejected(self):
         seeds, frozen = self.bundled_fixtures()
-        outer = seeds / "science-v3" / inventory.SEED_MANIFEST
+        outer = seeds / "science-v4" / inventory.SEED_MANIFEST
         manifest = json.loads(outer.read_text())
-        manifest["kind"] = "python-numpy-v2"
+        manifest["kind"] = "python-numpy-v3"
         self.json(outer, manifest)
         with patch.object(inventory, "FROZEN_MANIFEST_ROOT", frozen), self.assertRaisesRegex(inventory.InventoryError, "Unsupported runtime seed"):
             inventory.build_report(self.workspace, seed_root=seeds)
 
     def test_bundled_byte_count_claim_is_independently_checked(self):
         seeds, frozen = self.bundled_fixtures()
-        outer = seeds / "science-v3" / inventory.SEED_MANIFEST
+        outer = seeds / "science-v4" / inventory.SEED_MANIFEST
         manifest = json.loads(outer.read_text())
         manifest["file_bytes"]["python.exe"] += 1
         self.json(outer, manifest)
         with patch.object(inventory, "FROZEN_MANIFEST_ROOT", frozen):
             report = inventory.build_report(self.workspace, seed_root=seeds)
         self.assertFalse(report["integrity_valid"])
-        changed = report["runtimes"]["science-v3"]["seed_pin_verification"]["changed_files"]
+        changed = report["runtimes"]["science-v4"]["seed_pin_verification"]["changed_files"]
         self.assertEqual(changed[0]["path"], "python.exe")
         self.assertEqual(changed[0]["expected_bytes"], changed[0]["observed_bytes"] + 1)
 

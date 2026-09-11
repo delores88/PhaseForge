@@ -9,6 +9,7 @@ import {ROOT,command,copyEvidenceTree,hostedWorkspace,inside,inventory,machine,r
 import {startInertListeners} from './legacy-listeners.mjs';
 import {installMacDmg,payloadLayout,removeMacApp} from './native-platform.mjs';
 import {createLaboratoryAcceptance} from './native-laboratory.mjs';
+import {observeManagedSqlite} from './sqlite-runtime.mjs';
 
 const version=readJSON(path.join(ROOT,'desktop/package.json')).version;
 const {platform,architecture,folder:targetFolder}=releaseTarget();
@@ -261,6 +262,7 @@ async function main(){
   const fixture=await session(executable,workspace,1,null);await session(executable,workspace,2,fixture);
   if(platform==='windows'){
     const observed=readJSON(path.join(output,'installed-payload.json'));
+    writeJSON(path.join(output,'managed-sqlite-runtime.json'),await observeManagedSqlite({workspace,sourceCommit:process.env.GITHUB_SHA}));
     const args=['-B',path.join(ROOT,'scripts/release/managed_runtime.py'),'--workspace',workspace,'--seed-root',path.join(observed.runtime.resourcesPath,'runtime/runtime-seeds'),'--source-commit',process.env.GITHUB_SHA,'--output',path.join(output,'managed-runtime-materials.json')];
     args.push('--archive-root',fs.realpathSync.native(path.join(process.env.RUNNER_TEMP,'phaseforge-seed-archives')));
     if(process.env.PHASEFORGE_SCIENCE_BOOTSTRAP_PYTHON)args.push('--bootstrap-python',process.env.PHASEFORGE_SCIENCE_BOOTSTRAP_PYTHON);
@@ -299,6 +301,7 @@ async function main(){
     assert.equal(laboratory.passed,true);assert.equal(laboratory.source_commit,process.env.GITHUB_SHA);
     receipt.laboratory_evidence={path:'LABORATORY_ACCEPTANCE.json',sha256:await sha256(path.join(output,'LABORATORY_ACCEPTANCE.json'))};
     receipt.managed_runtime_evidence={path:'managed-runtime-materials.json',sha256:await sha256(path.join(output,'managed-runtime-materials.json')),delivery:'bundled_immutable_seeds'};
+    receipt.managed_sqlite_evidence={path:'managed-sqlite-runtime.json',sha256:await sha256(path.join(output,'managed-sqlite-runtime.json'))};
   }
   writeJSON(path.join(output,'NATIVE_ACCEPTANCE.json'),receipt);console.log(JSON.stringify({passed:true,platform,version,artifact:receipt.artifact.name}));
 }

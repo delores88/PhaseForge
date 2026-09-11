@@ -187,6 +187,7 @@ impl LaboratoryService {
             job.kind == "generated" && job.state == "queued",
             "Only queued generated-code attempts can start"
         );
+        self.ensure_generated_attempt_identity(id)?;
         if let Err(error) = validate_generated_input(&job.input) {
             self.update(id, |job| {
                 job.state = "failed".into();
@@ -243,6 +244,13 @@ impl LaboratoryService {
             // Serialize durable replacement creation. A live original worker cannot
             // be resumed, and repeated clicks share one retained replacement ID.
             let _gate = self.gate.lock();
+            let original = self.get(id)?;
+            for existing in self.database.lab_records()?.into_iter().filter(|job| {
+                job.kind == "generated" && job.project_id == original.project_id
+                    && job.input["restarted_from_job_id"] == json!(id) && job.state == "queued"
+            }) {
+                self.ensure_generated_attempt_identity(existing.id)?;
+            }
             let _reservation = self
                 .acquire(id)
                 .context("The old process is still stopping; retry after it exits")?;
@@ -322,6 +330,7 @@ impl LaboratoryService {
     }
 
     async fn run_generated(&self, id: Uuid, token: &CancellationToken) -> anyhow::Result<()> {
+        self.ensure_generated_attempt_identity(id)?;
         let job = self.get(id)?;
         let input = validate_generated_input(&job.input)?;
         let tool_deadline = input
@@ -368,11 +377,33 @@ impl LaboratoryService {
         super::runtime::RuntimeKind::Generated.directory(&self.config.data_directory)
     }
 
+    fn ensure_generated_attempt_identity(&self, id: Uuid) -> anyhow::Result<()> {
+        let job = self.get(id)?;
+        ensure!(job.kind == "generated", "Not a generated-code attempt");
+        let current = super::runtime::RuntimeKind::Generated;
+        let mut recorded = false;
+        for event in job.events.iter().filter(|event| event.kind == "runtime_verified") {
+            recorded = true;
+            ensure!(event.data["kind"].as_str() == Some(current.name())
+                && event.data["manifest_sha256"].as_str() == Some(current.manifest_sha256().as_str()),
+                "Original generated runtime differs; new immutable attempt required. Existing source, outputs and runtime receipts are preserved.");
+        }
+        let root = self.directory(id);
+        if ["work", "prepared.json", "source.py", "source-input.json", "execution.json", "manifest.json", "generated-artifacts.json"]
+            .iter().any(|name| root.join(name).exists())
+        {
+            ensure!(recorded,
+                "Original generated runtime identity is unavailable; new immutable attempt required. Existing source and outputs are preserved.");
+        }
+        Ok(())
+    }
+
     async fn ensure_generated_runtime(
         &self,
         id: Uuid,
         token: &CancellationToken,
     ) -> anyhow::Result<PathBuf> {
+        self.ensure_generated_attempt_identity(id)?;
         ensure!(
             cfg!(windows),
             "Generated-code execution requires the validated Windows boundary"
@@ -492,6 +523,7 @@ impl LaboratoryService {
         input: &GeneratedInput,
         token: &CancellationToken,
     ) -> anyhow::Result<()> {
+        self.ensure_generated_attempt_identity(id)?;
         let _slot = tokio::select! { _ = token.cancelled() => bail!("Cancelled in experiment queue"), slot = self.solver_slots.acquire() => slot? };
         self.update(id, |job| {
             if job.active() {
@@ -934,6 +966,88 @@ mod tests {
             bad["limits"][field] = json!(value);
             assert!(validate_generated_input(&bad).is_err());
         }
+    }
+
+    #[tokio::test]
+    async fn generated_runtime_v3_rejects_prior_attempt_before_mutation_or_provisioning() {
+        for mixed in [false, true] {
+            let temp = tempfile::tempdir().unwrap();
+            let (service, project) = service(temp.path());
+            let job = create(&service, project, input("pass"));
+            service.event(job.id, "runtime_verified", "Previous runtime", json!({"kind":"python-numpy-v2","manifest_sha256":"bb2bbd5163b1cc488fa32e7b663974b3bb23b3edf6dc579af6e9fd7c138d3a52"})).unwrap();
+            if mixed {
+                service.event(job.id, "runtime_verified", "A later matching event cannot erase prior identity", json!({"kind":super::super::runtime::RuntimeKind::Generated.name(),"manifest_sha256":super::super::runtime::RuntimeKind::Generated.manifest_sha256()})).unwrap();
+            }
+            let root = service.directory(job.id);
+            fs::write(root.join("source.py"), b"retained original source").unwrap();
+            let before = serde_json::to_vec(&service.get(job.id).unwrap()).unwrap();
+            let token = CancellationToken::new();
+            assert!(service.start_generated(job.id).unwrap_err().to_string().contains("Original generated runtime differs"));
+            assert!(service.run_generated(job.id, &token).await.unwrap_err().to_string().contains("Original generated runtime differs"));
+            assert!(service.ensure_generated_runtime(job.id, &token).await.unwrap_err().to_string().contains("Original generated runtime differs"));
+            let request = validate_generated_input(&job.input).unwrap();
+            assert!(service.execute_generated(job.id, &request, &token).await.unwrap_err().to_string().contains("Original generated runtime differs"));
+            assert_eq!(serde_json::to_vec(&service.get(job.id).unwrap()).unwrap(), before);
+            assert_eq!(service.read_generated_artifact(job.id, "source.py").unwrap(), b"retained original source");
+            assert!(!service.executing(job.id));
+            assert!(!service.generated_runtime_directory().exists());
+            assert!(!root.join("work").exists());
+        }
+    }
+
+    #[test]
+    fn generated_runtime_v3_requires_identity_for_retained_evidence_and_exact_current_hash() {
+        let temp = tempfile::tempdir().unwrap();
+        let (service, project) = service(temp.path());
+        let job = create(&service, project, input("pass"));
+        service.ensure_generated_attempt_identity(job.id).unwrap();
+        fs::write(service.directory(job.id).join("prepared.json"), b"{}").unwrap();
+        let before = serde_json::to_vec(&service.get(job.id).unwrap()).unwrap();
+        assert!(service.start_generated(job.id).unwrap_err().to_string().contains("identity is unavailable"));
+        assert_eq!(serde_json::to_vec(&service.get(job.id).unwrap()).unwrap(), before);
+        service.event(job.id,"runtime_verified","Current runtime",json!({"kind":super::super::runtime::RuntimeKind::Generated.name(),"manifest_sha256":super::super::runtime::RuntimeKind::Generated.manifest_sha256()})).unwrap();
+        service.ensure_generated_attempt_identity(job.id).unwrap();
+        service.event(job.id,"runtime_verified","Wrong current hash",json!({"kind":super::super::runtime::RuntimeKind::Generated.name(),"manifest_sha256":"wrong"})).unwrap();
+        assert!(service.ensure_generated_attempt_identity(job.id).unwrap_err().to_string().contains("runtime differs"));
+        assert_eq!(service.generated_runtime_directory(), service.config.data_directory.join("environments/python-numpy-v3/runtime"));
+    }
+
+    #[test]
+    fn generated_runtime_v3_rejects_old_queued_replacement_before_restart_receipt_mutation() {
+        let temp = tempfile::tempdir().unwrap();
+        let (service, project) = service(temp.path());
+        let original = create(&service, project, input("pass"));
+        service.update(original.id, |job| job.state = "paused".into()).unwrap();
+        let mut request = original.input.clone();request["restarted_from_job_id"] = json!(original.id);
+        let replacement = create(&service, project, request);
+        service.event(replacement.id,"runtime_verified","Prior runtime",json!({"kind":"python-numpy-v2","manifest_sha256":"bb2bbd5163b1cc488fa32e7b663974b3bb23b3edf6dc579af6e9fd7c138d3a52"})).unwrap();
+        let old = serde_json::to_vec(&service.get(original.id).unwrap()).unwrap();
+        let queued = serde_json::to_vec(&service.get(replacement.id).unwrap()).unwrap();
+        assert!(service.restart_generated(original.id,None).unwrap_err().to_string().contains("Original generated runtime differs"));
+        assert_eq!(serde_json::to_vec(&service.get(original.id).unwrap()).unwrap(),old);
+        assert_eq!(serde_json::to_vec(&service.get(replacement.id).unwrap()).unwrap(),queued);
+        assert!(!service.executing(original.id) && !service.executing(replacement.id));
+        assert_eq!(service.list(Some(project)).unwrap().len(),2);
+    }
+
+    #[tokio::test]
+    async fn generated_runtime_v3_restart_of_v2_source_uses_a_new_immutable_attempt() {
+        let temp = tempfile::tempdir().unwrap();
+        let (service, project) = service(temp.path());
+        let original = create(&service, project, input("pass"));
+        service.event(original.id,"runtime_verified","Prior runtime",json!({"kind":"python-numpy-v2","manifest_sha256":"bb2bbd5163b1cc488fa32e7b663974b3bb23b3edf6dc579af6e9fd7c138d3a52"})).unwrap();
+        service.update(original.id, |job| job.state="paused".into()).unwrap();
+        fs::write(service.directory(original.id).join("source.py"), b"pass").unwrap();
+        let permits = service.solver_slots.acquire_many(2).await.unwrap();
+        let replacement = service.restart_generated(original.id,None).unwrap();
+        assert_ne!(replacement.id,original.id);
+        assert_eq!(replacement.input["restarted_from_job_id"],json!(original.id));
+        service.ensure_generated_attempt_identity(replacement.id).unwrap();
+        assert_eq!(service.get(original.id).unwrap().events.iter().filter(|e|e.kind=="runtime_verified").count(),1);
+        assert_eq!(fs::read(service.directory(original.id).join("source.py")).unwrap(),b"pass");
+        service.stop(replacement.id,"paused").unwrap();
+        assert_eq!(finished(&service,replacement.id).await.state,"paused");drop(permits);
+        assert!(!service.generated_runtime_directory().exists());
     }
 
     #[test]

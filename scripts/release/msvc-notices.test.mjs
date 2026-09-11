@@ -11,9 +11,10 @@ function fixture(t){
   fs.cpSync(msvcNoticeRoot,path.join(root,'notices'),{recursive:true});
   return {root,notices:path.join(root,'notices')};
 }
-test('exact Microsoft notices bind the copied files to the frozen science-v3 DLL and upstream archive',async t=>{
+test('exact Microsoft notices bind the copied files to the frozen science-v4 DLL and upstream archive',async t=>{
   const {notices}=fixture(t),result=await verifyMsvcNotices(notices);
-  assert.equal(result.seed_kind,'science-v3');assert.equal(result.files.length,4);assert.equal(result.outside_asar,true);
+  assert.equal(result.seed_kind,'science-v4');assert.equal(result.files.length,4);assert.equal(result.outside_asar,true);
+  assert.equal(result.origin.destination,'runtime/runtime-seeds/science-v4/MSVCP140.dll');
   assert.equal(result.component.version,'14.40.33810.0');assert.equal(result.component.bytes,575056);
 });
 test('missing Microsoft license and unregistered extra member both fail closed',async t=>{

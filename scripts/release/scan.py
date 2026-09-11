@@ -59,7 +59,14 @@ def main():
     all_matches=[]
     scan_boms=[(scope,REPORTS/f'{scope}.cdx.json') for scope in targets]
     scan_boms.extend([('runtime',FOLDER/'runtime-observations.cdx.json'),('runtime-screening-aliases',FOLDER/'runtime-screening-aliases.cdx.json')])
-    if SYSTEM=='windows':scan_boms.append(('installer-native',FOLDER/'installer-native.cdx.json'))
+    if SYSTEM=='windows':
+        scan_boms.append(('installer-native',FOLDER/'installer-native.cdx.json'))
+        components=json.loads((FOLDER/'runtime-observations.cdx.json').read_text())['components']
+        for kind in ('science-v4','python-numpy-v3'):
+            rows=[item for item in components if item.get('name')=='sqlite-'+kind]
+            if (len(rows)!=1 or rows[0].get('version')!='3.53.4'
+                    or rows[0].get('cpe')!='cpe:2.3:a:sqlite:sqlite:3.53.4:*:*:*:*:*:*:*'):
+                raise RuntimeError('Managed SQLite DLL lacks exact observed-version scanner coverage: '+kind)
     for scope,bom in scan_boms:
         result=invoke(tool('grype'),[f'sbom:{bom}','-o','json'],'grype-'+scope,env=grype_env)
         data=json.loads(result.stdout);matches=data.get('matches')

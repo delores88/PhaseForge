@@ -41,12 +41,18 @@ datasets and imported assets retain their respective provenance and licenses.
 ## Bundled Windows scientific runtimes
 
 The Windows 0.9 package includes CPython 3.13.15 and NumPy 2.4.6 in
-`resources/runtime/runtime-seeds/science-v2` and `python-numpy-v2`. The science
+`resources/runtime/runtime-seeds/science-v4` and `python-numpy-v3`. The science
 seed also contains OpenMM 8.5.2 and Pillow 12.3.0. These components are copied
 into managed environments without changing their binary or license files.
 The matching CPython source standard library replaces embedded bytecode, as
 recorded in each seed's manifest. Generated-code isolation is a separate Windows
 process boundary and does not change these licenses.
+
+Both seeds replace CPython's original SQLite DLL with the exact official
+SQLite 3.53.4 Windows x64 DLL. Each manifest records both original and replacement
+archive/member hashes and the replacement's upstream public-domain statement at
+https://www.sqlite.org/copyright.html. The original DLL remains in historical
+seed evidence; it is absent from the current installer.
 
 | Component | License and included notice location, relative to its seed |
 | --- | --- |
@@ -54,6 +60,7 @@ process boundary and does not change these licenses.
 | NumPy 2.4.6 | BSD-3-Clause and bundled component terms: `numpy-2.4.6.dist-info/licenses/LICENSE.txt`, plus all nested notices in that directory |
 | OpenMM 8.5.2 | MIT for core, Reference/CPU and application layers; LGPL-3.0-or-later for bundled OpenCL platforms and XTC/XDR code, with additional component terms. Exact upstream notices accompany the application under `resources/tools/third-party/openmm-8.5.2/`, outside the frozen seed. |
 | Pillow 12.3.0 | MIT-CMU and bundled image/font/codec terms: `pillow-12.3.0.dist-info/licenses/LICENSE` |
+| SQLite 3.53.4 | Public domain; exact official DLL and companion `source-evidence/sqlite-3.53.4/sqlite3.def` are mapped in the runtime manifest |
 
 NumPy's aggregate notice includes OpenBLAS, LAPACK, and the GCC runtime's GPLv3
 license with GCC Runtime Library Exception 3.1. CPython's aggregate notices
@@ -87,7 +94,7 @@ dependency's license.
 
 ## Microsoft Visual C++ runtime
 
-The bundled `science-v3` environment retains Microsoft's MSVCP140 runtime
+The bundled `science-v4` environment retains Microsoft's MSVCP140 runtime
 14.40.33810.0, including a byte-identical `MSVCP140.dll` alias for OpenMM.
 Its bytes come from the pinned NumPy wheel; Microsoft's terms apply separately
 from NumPy's BSD license and PhaseForge's MIT license. The existing Visual

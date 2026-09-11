@@ -41,12 +41,21 @@ def validate_laboratory_inputs(folder,version,commit,backend_hash,acceptance):
         if file.is_symlink() or not file.is_file() or not file.resolve().is_relative_to(folder.resolve()):raise ValueError('Missing or linked laboratory evidence')
         if type(row.get('bytes')) is not int or file.stat().st_size!=row['bytes'] or row['bytes']>64*1024*1024 or digest(file)!=row.get('sha256'):raise ValueError('Retained laboratory evidence changed')
     if managed.get('source_commit')!=commit or managed.get('delivery')!='bundled_immutable_seeds' or managed.get('integrity_valid') is not True:raise ValueError('Bundled runtime copy provenance is incomplete or stale')
-    for kind in ('science-v3','python-numpy-v2'):
+    sqlite_file=folder/'managed-sqlite-runtime.json';sqlite=load(sqlite_file);binding=acceptance.get('managed_sqlite_evidence',{})
+    if binding.get('path')!=sqlite_file.name or binding.get('sha256')!=digest(sqlite_file):raise ValueError('Managed SQLite execution evidence binding is missing or changed')
+    if sqlite.get('schema')!='phaseforge.managed-sqlite-execution.v1' or sqlite.get('source_commit')!=commit or sqlite.get('passed') is not True:raise ValueError('Managed SQLite execution did not complete for this source')
+    if set(sqlite.get('runtimes',{}))!={'science-v4','python-numpy-v3'}:raise ValueError('Both active managed SQLite copies require observations')
+    for kind in ('science-v4','python-numpy-v3'):
         runtime=managed.get('runtimes',{}).get(kind,{})
         if any(runtime.get(key,{}).get('valid') is not True for key in ('seed_pin_verification','copy_pin_verification','copy_comparison')):raise ValueError('A managed runtime differs from bundled source bytes')
         frozen=runtime.get('frozen_source_manifest',{})
         expected=ROOT/'tools/runtime-seeds'/f'{kind}.manifest.json'
         if frozen.get('matches_installed_seed_manifest') is not True or frozen.get('sha256')!=digest(expected):raise ValueError('Runtime manifest is not the frozen source version')
+        sqlite_row=sqlite['runtimes'][kind]
+        if (sqlite_row.get('passed') is not True or sqlite_row.get('sqlite_version')!='3.53.4' or sqlite_row.get('module_version')!='3.53.4'
+                or 'ENABLE_FTS5' not in sqlite_row.get('compile_options',[])
+                or sqlite_row.get('fts5_rows')!=[[1,'retained result']] or sqlite_row.get('seed_manifest_sha256')!=digest(expected)):
+            raise ValueError('Managed SQLite version/FTS5 observation is incomplete or stale')
     return lab,managed
 
 def validated_inputs(folder,target,version,commit):

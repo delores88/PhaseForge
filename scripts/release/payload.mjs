@@ -10,6 +10,7 @@ import {cryptoRuntimeIdentity} from './runtime-identity.mjs';
 import {frontendModuleEvidence} from './frontend-map.mjs';
 import {OPENMM_RESOURCE,verifyOpenmmSourceDelivery} from './openmm-sources.mjs';
 import {MSVC_RESOURCE,verifyMsvcNotices} from './msvc-notices.mjs';
+import {sqliteComponentEvidence} from './sqlite-runtime.mjs';
 
 const {platform,architecture,folder:targetFolder}=releaseTarget();
 const folder=path.join(ROOT,'.local/marketplace',targetFolder),payload=path.join(folder,'payload');
@@ -85,7 +86,10 @@ if(platform==='windows'){
   writeJSON(path.join(folder,'runtime-seed-build.json'),rebuilt);
   const managed=readJSON(path.join(folder,'managed-runtime-materials.json'));
   assert.equal(managed.source_commit,installed.source_commit);assert.equal(managed.delivery,'bundled_immutable_seeds');assert.equal(managed.integrity_valid,true);
-  for(const kind of ['science-v3','python-numpy-v2']){
+  const sqliteExecution=readJSON(path.join(folder,'managed-sqlite-runtime.json'));
+  assert.equal(sqliteExecution.schema,'phaseforge.managed-sqlite-execution.v1');assert.equal(sqliteExecution.passed,true);assert.equal(sqliteExecution.source_commit,installed.source_commit);
+  assert.deepEqual(Object.keys(sqliteExecution.runtimes).sort(),['python-numpy-v3','science-v4']);
+  for(const kind of ['science-v4','python-numpy-v3']){
     const seed=path.join(resources,'runtime/runtime-seeds',kind),manifestPath=path.join(seed,'phaseforge-runtime-seed.json');
     const manifest=readJSON(manifestPath),hash=await sha256(manifestPath);
     assert.equal(hash,await sha256(path.join(ROOT,'tools/runtime-seeds',`${kind}.manifest.json`)));
@@ -96,7 +100,10 @@ if(platform==='windows'){
     const rows=(await inventory(seed)).files.filter(row=>row.path!=='phaseforge-runtime-seed.json');
     assert.equal(rows.length,Object.keys(manifest.files).length);
     for(const row of rows){assert.equal(row.sha256,manifest.files[row.path]);assert.equal(row.bytes,manifest.file_bytes[row.path]);}
-    const versions={python:manifest.python,numpy:manifest.numpy,...(kind==='science-v3'?{openmm:manifest.openmm,pillow:manifest.pillow}:{})};
+    assert.equal(sqliteExecution.runtimes[kind].seed_manifest_sha256,hash);
+    const sqliteEvidence=sqliteComponentEvidence(kind,sqliteExecution.runtimes[kind],managed.runtimes[kind].native_identity,manifest);
+    components.push({...component(sqliteEvidence.name,sqliteEvidence.version,sqliteEvidence.purl,sqliteEvidence.cpe,sqliteEvidence.properties),hashes:sqliteEvidence.hashes});
+    const versions={python:manifest.python,numpy:manifest.numpy,...(kind==='science-v4'?{openmm:manifest.openmm,pillow:manifest.pillow}:{})};
     for(const [name,version] of Object.entries(versions)){
       assert.match(version,/^\d+\.\d+\.\d+$/);
       const purl=name==='python'?`pkg:generic/cpython@${version}?consumer=${kind}`:`pkg:pypi/${name}@${version}?consumer=${kind}`;

@@ -2,7 +2,8 @@
 
 This does not install or execute Python, pip, wheels, or scientific code. The
 embedded standard-library module set is replaced one-for-one with matching
-CPython source. Native and wheel files are retained without exclusions.
+CPython source. Native and wheel files are retained except explicitly pinned
+upstream replacements recorded in the immutable manifest.
 """
 from __future__ import annotations
 
@@ -24,6 +25,7 @@ SOURCES = [
     {"name": "numpy-2.4.6-cp313-cp313-win_amd64.whl", "url": "https://files.pythonhosted.org/packages/b5/cd/9cc4dc876fb065d5c220aae4d5e14826b2715331bb7618ce1fb07a679d99/numpy-2.4.6-cp313-cp313-win_amd64.whl", "sha256": "c4fc99836233ea196540b17ab0983aff60ed07941751930f5f4d05bc3b3b7359", "upstream_metadata": "https://pypi.org/pypi/numpy/2.4.6/json"},
     {"name": "openmm-8.5.2-cp313-cp313-win_amd64.whl", "url": "https://files.pythonhosted.org/packages/69/9f/447f86684722ea5a5ec5d2785cd7e1151ccd15a8c6aab7e6b1b39833ff53/openmm-8.5.2-cp313-cp313-win_amd64.whl", "sha256": "289c870e28c946b03992215f1f01f0b7d870f84a6f4c0a57e103bd8d62712b46", "upstream_metadata": "https://pypi.org/pypi/OpenMM/8.5.2/json"},
     {"name": "pillow-12.3.0-cp313-cp313-win_amd64.whl", "url": "https://files.pythonhosted.org/packages/a6/9b/7a58e61d62be561da3a356fe2384d4059a6345fc130e23ef1c36a5b81d24/pillow-12.3.0-cp313-cp313-win_amd64.whl", "sha256": "1cca606cd25738df4ed873d5ad46bbdb3d83b5cbca291f6b4ff13a4df6b0bbe8", "upstream_metadata": "https://pypi.org/pypi/Pillow/12.3.0/json"},
+    {"name": "sqlite-dll-win-x64-3530400.zip", "url": "https://www.sqlite.org/2026/sqlite-dll-win-x64-3530400.zip", "sha256": "8b959b7eff4a81f6a62fc3468f9273e5cfe78d4a927e62215aed231b654fb104", "sha3_256": "deddee963c810d1eeac3ce5e15c7c41da21a1c54d7a39cf54fbf577d2f50de3a", "version": "3.53.4", "upstream_metadata": "https://www.sqlite.org/download.html", "license_url": "https://www.sqlite.org/copyright.html"},
 ]
 MAX_ARCHIVE = 128 * 1024 * 1024
 MAX_EXPANDED = 1024 * 1024 * 1024
@@ -33,6 +35,11 @@ PTH = b".\nLib\n# Isolated vendored runtime; no registry, user site, or executab
 
 def digest(data):
     return hashlib.sha256(data).hexdigest()
+
+
+def archive_matches(payload, source):
+    return (len(payload) <= MAX_ARCHIVE and digest(payload) == source["sha256"]
+            and ("sha3_256" not in source or hashlib.sha3_256(payload).hexdigest() == source["sha3_256"]))
 
 
 def safe_name(name):
@@ -69,12 +76,12 @@ def cached(source, cache, offline=False):
             if response.url != source["url"]:
                 raise ValueError("Unexpected redirect for pinned archive")
             payload = response.read(MAX_ARCHIVE + 1)
-        if len(payload) > MAX_ARCHIVE or digest(payload) != source["sha256"]:
+        if not archive_matches(payload, source):
             raise ValueError("Downloaded archive does not match its frozen hash")
         with target.open("xb") as stream:
             stream.write(payload)
     payload = target.read_bytes()
-    if len(payload) > MAX_ARCHIVE or digest(payload) != source["sha256"]:
+    if not archive_matches(payload, source):
         raise ValueError("Cached archive does not match its frozen hash")
     return payload
 
@@ -117,9 +124,38 @@ def source_files(payload):
 
 MSVC_MEMBER = "numpy.libs/msvcp140-a4c2229bdc2a2a630acdc095b4d86008.dll"
 MSVC_SHA256 = "a4c2229bdc2a2a630acdc095b4d86008e5c3e3bc7773174354f3da4f5beb9cde"
+SQLITE_ORIGINAL_SHA256 = "c6812eaf0f8605df273b9bf7e359b83fd65038ecc66455c3f7a933768cb92f3f"
+SQLITE_ORIGINAL_BYTES = 1584864
+SQLITE_DLL_SHA256 = "ab57d0437795ecc757cb693f32ea224173fa9856594d95cfa6b5033e645cd1ec"
+SQLITE_DLL_BYTES = 3285504
+SQLITE_DEF_SHA256 = "a93b7867cc1fdb4e1dd0d4eef727cf910fe9f2bb6cd612d933744add1fa7f11b"
+SQLITE_DEF_BYTES = 8722
 
 
-def assemble(embedded, source, wheels, add_msvc_alias=False):
+def replace_sqlite(output, replacement):
+    if ("sqlite3.dll" not in output or digest(output["sqlite3.dll"]) != SQLITE_ORIGINAL_SHA256
+            or len(output["sqlite3.dll"]) != SQLITE_ORIGINAL_BYTES):
+        raise ValueError("Original embedded SQLite DLL does not match its pinned identity")
+    if set(replacement) != {"sqlite3.dll", "sqlite3.def"}:
+        raise ValueError("SQLite archive requires exactly the reviewed DLL and definition members")
+    for name, expected, size in (("sqlite3.dll", SQLITE_DLL_SHA256, SQLITE_DLL_BYTES), ("sqlite3.def", SQLITE_DEF_SHA256, SQLITE_DEF_BYTES)):
+        if digest(replacement[name]) != expected or len(replacement[name]) != size:
+            raise ValueError("Replacement SQLite member does not match its pinned identity: " + name)
+    definition = "source-evidence/sqlite-3.53.4/sqlite3.def"
+    if definition.casefold() in {name.casefold() for name in output}:
+        raise ValueError("SQLite definition provenance destination is occupied")
+    output["sqlite3.dll"] = replacement["sqlite3.dll"]
+    output[definition] = replacement["sqlite3.def"]
+    return {"sqlite3.dll": {
+        "component": "SQLite", "version": "3.53.4",
+        "original": {"archive_name": SOURCES[0]["name"], "archive_sha256": SOURCES[0]["sha256"], "archive_member": "sqlite3.dll", "sha256": SQLITE_ORIGINAL_SHA256, "bytes": SQLITE_ORIGINAL_BYTES, "version": "3.50.4"},
+        "replacement": {"archive_name": SOURCES[5]["name"], "archive_sha256": SOURCES[5]["sha256"], "archive_member": "sqlite3.dll", "sha256": SQLITE_DLL_SHA256, "bytes": SQLITE_DLL_BYTES, "version": "3.53.4"},
+        "auxiliary_members": [{"path": definition, "archive_member": "sqlite3.def", "sha256": SQLITE_DEF_SHA256, "bytes": SQLITE_DEF_BYTES}],
+        "reason": "Replace the older embedded SQLite with the exact official fixed Windows x64 DLL",
+        "upstream_advisory": "https://www.sqlite.org/cves.html"}}
+
+
+def assemble(embedded, source, wheels, add_msvc_alias=False, sqlite_replacement=None):
     """Pure archive transformation; every departure is represented in receipts."""
     if "python313.zip" not in embedded or "python313._pth" not in embedded:
         raise ValueError("Official embedded standard library/configuration absent")
@@ -159,7 +195,7 @@ def assemble(embedded, source, wheels, add_msvc_alias=False):
                 raise ValueError("Wheel install scheme requires explicit mapping: " + name)
             occupied.add(name.casefold())
             output[name] = value
-    transformations = {"stdlib": "Exact embedded module set replaced with corresponding pinned CPython Lib source; other standard library resources and all interpreter/native members retained", "stdlib_replacements": replacements, "stdlib_resources": resources, "configuration": {"path": "python313._pth", "before_sha256": digest(embedded["python313._pth"]), "after_sha256": digest(PTH), "reason": "Resolve local source Lib and vendored wheel files only; disable site imports"}, "upstream_stdlib_archive_sha256": digest(embedded["python313.zip"])}
+    transformations = {"stdlib": "Exact embedded module set replaced with corresponding pinned CPython Lib source; other standard library resources and interpreter/native members retained except explicitly recorded native replacements", "stdlib_replacements": replacements, "stdlib_resources": resources, "configuration": {"path": "python313._pth", "before_sha256": digest(embedded["python313._pth"]), "after_sha256": digest(PTH), "reason": "Resolve local source Lib and vendored wheel files only; disable site imports"}, "upstream_stdlib_archive_sha256": digest(embedded["python313.zip"])}
     if add_msvc_alias:
         if MSVC_MEMBER not in output or digest(output[MSVC_MEMBER]) != MSVC_SHA256:
             raise ValueError("Missing or changed pinned MSVCP140 source member")
@@ -169,6 +205,8 @@ def assemble(embedded, source, wheels, add_msvc_alias=False):
         transformations["native_aliases"] = {"MSVCP140.dll": {
             "archive_member": MSVC_MEMBER, "sha256": MSVC_SHA256,
             "reason": "Unmodified app-local alias for OpenMM's plain MSVCP140.dll imports; preserve NumPy's original renamed member for its own imports"}}
+    if sqlite_replacement is not None:
+        transformations["native_replacements"] = replace_sqlite(output, sqlite_replacement)
     return output, transformations
 
 
@@ -186,23 +224,23 @@ def build(output, cache, offline=False, source_commit=None, freeze=False, manife
     manifest_root = checked_path(manifest_root or Path(__file__).resolve().parents[2] / "tools/runtime-seeds")
     if freeze:
         manifest_root.mkdir(parents=True, exist_ok=True)
-    for kind, count in (("python-numpy-v2", 3), ("science-v3", 5)):
-        files, transformations = assemble(embedded, source, [zip_files(a) for a in archives[2:count]], add_msvc_alias=kind == "science-v3")
+    for kind, indexes in (("python-numpy-v3", (0, 1, 2, 5)), ("science-v4", (0, 1, 2, 3, 4, 5))):
+        files, transformations = assemble(embedded, source, [zip_files(archives[i]) for i in indexes if i in (2, 3, 4)], add_msvc_alias=kind == "science-v4", sqlite_replacement=zip_files(archives[5]))
         root = output / kind
         root.mkdir()
         for name, value in sorted(files.items()):
             destination = root.joinpath(*PurePosixPath(name).parts)
             destination.parent.mkdir(parents=True, exist_ok=True)
             destination.write_bytes(value)
-        sources = [{**s, "bytes": len(a)} for s, a in zip(SOURCES[:count], archives[:count])]
-        if kind == "python-numpy-v2":
-            isolation = {"schema_version": 1, "python": "3.13.15", "numpy": "2.4.6", "sources": sources, "files": {name: digest(value) for name, value in sorted(files.items())}, "stdlib": "Matching pinned source modules replace embedded bytecode", "security": "Pinned dependencies only; generated code requires the separately verified Windows LPAC boundary"}
+        sources = [{**SOURCES[i], "bytes": len(archives[i])} for i in indexes]
+        if kind == "python-numpy-v3":
+            isolation = {"schema_version": 1, "python": "3.13.15", "numpy": "2.4.6", "sqlite": "3.53.4", "sources": sources, "files": {name: digest(value) for name, value in sorted(files.items())}, "stdlib": "Matching pinned source modules replace embedded bytecode", "security": "Pinned dependencies only; generated code requires the separately verified Windows LPAC boundary"}
             files["phaseforge-isolation-runtime.json"] = (json.dumps(isolation, indent=2) + "\n").encode()
             (root / "phaseforge-isolation-runtime.json").write_bytes(files["phaseforge-isolation-runtime.json"])
         hashes = {name: digest(value) for name, value in sorted(files.items())}
         sizes = {name: len(value) for name, value in sorted(files.items())}
-        manifest = {"schema_version": 1, "schema": "phaseforge.runtime-seed.v1", "kind": kind, "python": "3.13.15", "numpy": "2.4.6", "sources": sources, "files": hashes, "file_bytes": sizes, "native_files": {k: v for k, v in hashes.items() if Path(k).suffix.lower() in NATIVE}, "transformations": transformations, "licenses": [k for k in hashes if "license" in k.lower() or "copying" in k.lower()], "delivery": "Bundled inspectable files; copy bytes into a managed runtime after verifying this manifest", "security": "Pinned dependencies only; generated code still requires the separately verified Windows LPAC boundary"}
-        if kind == "science-v3":
+        manifest = {"schema_version": 1, "schema": "phaseforge.runtime-seed.v1", "kind": kind, "python": "3.13.15", "numpy": "2.4.6", "sqlite": "3.53.4", "sources": sources, "files": hashes, "file_bytes": sizes, "native_files": {k: v for k, v in hashes.items() if Path(k).suffix.lower() in NATIVE}, "transformations": transformations, "licenses": [k for k in hashes if "license" in k.lower() or "copying" in k.lower()], "delivery": "Bundled inspectable files; copy bytes into a managed runtime after verifying this manifest", "security": "Pinned dependencies only; generated code still requires the separately verified Windows LPAC boundary"}
+        if kind == "science-v4":
             manifest.update(openmm="8.5.2", pillow="12.3.0")
         name = "phaseforge-runtime-seed.json"
         raw = (json.dumps(manifest, indent=2, ensure_ascii=True) + "\n").encode()

@@ -12,7 +12,7 @@
     "url": "https://files.pythonhosted.org/packages/b5/cd/9cc4dc876fb065d5c220aae4d5e14826b2715331bb7618ce1fb07a679d99/numpy-2.4.6-cp313-cp313-win_amd64.whl",
     "sha256": "c4fc99836233ea196540b17ab0983aff60ed07941751930f5f4d05bc3b3b7359",
     "member": "numpy.libs/msvcp140-a4c2229bdc2a2a630acdc095b4d86008.dll",
-    "destination": "runtime/runtime-seeds/science-v3/MSVCP140.dll",
+    "destination": "runtime/runtime-seeds/science-v4/MSVCP140.dll",
     "transformation": "Additional byte-identical app-local alias; retain original renamed NumPy member"
   },
   "licensing": {
@@ -41,7 +41,7 @@
   },
   "files": {
     "NOTICE.txt": {
-      "sha256": "f1be968e43f26d5a8f14546e458cd940dcdc87e74d03a35a181716f47a980045",
+      "sha256": "a43e512bcde52804d30a88494093517ee54769c86604390bfb69688ffba78ecb",
       "bytes": 1427
     },
     "Visual-Studio-2022-Community-License.txt": {

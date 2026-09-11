@@ -1,5 +1,6 @@
 """Static synthetic PE/archive fixtures; no inspected program executes."""
 import contextlib
+import copy
 import hashlib
 from pathlib import Path
 import struct
@@ -79,6 +80,45 @@ class NativeIdentityTests(unittest.TestCase):
             (root / 'test.pyd').write_bytes(raw + b'changed')
             with self.assertRaisesRegex(ValueError, 'changed since inventory'):
                 inspect([source], root)
+
+    def test_explicit_sqlite_replacement_replays_both_origins_and_refuses_forged_mapping(self):
+        with tempfile.TemporaryDirectory(prefix='pf-native-sqlite-') as temporary:
+            root = Path(temporary).resolve()
+            original, replacement, definition = self.pe(), self.pe()+b'new upstream DLL', b'EXPORTS\nsqlite3_open\n'
+            def record(path):
+                data=Path(path).read_bytes()
+                return {'sha256':hashlib.sha256(data).hexdigest(),'bytes':len(data)}
+            @contextlib.contextmanager
+            def opened(path):
+                with Path(path).open('rb') as stream:yield stream,None
+            sources=[]
+            for name,raw in [('python.zip',original),('sqlite.zip',replacement)]:
+                with zipfile.ZipFile(root/name,'w') as archive:
+                    archive.writestr('sqlite3.dll',raw)
+                    if name=='sqlite.zip':archive.writestr('sqlite3.def',definition)
+                sources.append({'name':name,'url':'https://example.invalid/'+name,**record(root/name)})
+            (root/'sqlite3.dll').write_bytes(replacement)
+            aux=root/'source-evidence/sqlite-3.53.4/sqlite3.def';aux.parent.mkdir(parents=True);aux.write_bytes(definition)
+            row={'path':'sqlite3.dll',**record(root/'sqlite3.dll')}
+            pin={'component':'SQLite','version':'3.53.4','reason':'Synthetic upstream replacement fixture',
+                 'original':{'archive_name':'python.zip','archive_sha256':sources[0]['sha256'],'archive_member':'sqlite3.dll','sha256':hashlib.sha256(original).hexdigest(),'bytes':len(original),'version':'3.50.4'},
+                 'replacement':{'archive_name':'sqlite.zip','archive_sha256':sources[1]['sha256'],'archive_member':'sqlite3.dll','sha256':row['sha256'],'bytes':row['bytes'],'version':'3.53.4'},
+                 'auxiliary_members':[{'path':'source-evidence/sqlite-3.53.4/sqlite3.def','archive_member':'sqlite3.def',**record(aux)}]}
+            def inspect(value=pin,archive_root=root):
+                return native.evidence(root,[row],sources,archive_root,record=record,opened=opened,
+                                       version=lambda _: {'status':'missing'},replacements={'sqlite3.dll':value})
+            result=inspect();observed=result['files'][0]
+            self.assertEqual(observed['origin']['archive'],'sqlite.zip')
+            self.assertEqual(observed['origin']['component_version'],'3.53.4')
+            self.assertEqual(result['replaced_original_members']['sqlite3.dll']['archive'],'python.zip')
+            self.assertTrue(result['replacement_auxiliary_members'][0]['archive_bytes_verified'])
+            self.assertTrue(result['all_native_archive_members_verified'])
+            self.assertIsNone(inspect(archive_root=None)['files'][0]['origin'])
+            for mutate in [lambda p:p['original'].__setitem__('sha256','a'*64),lambda p:p['replacement'].__setitem__('archive_name','python.zip'),lambda p:p['replacement'].__setitem__('sha256','b'*64),lambda p:p.__setitem__('original',{}),lambda p:p['auxiliary_members'][0].__setitem__('sha256','c'*64),lambda p:p['auxiliary_members'][0].__setitem__('path','../sqlite3.def')]:
+                bad=copy.deepcopy(pin);mutate(bad)
+                with self.assertRaises(ValueError):inspect(bad)
+            aux.write_bytes(definition+b'changed')
+            with self.assertRaisesRegex(ValueError,'auxiliary file'):inspect()
 
 
 if __name__ == '__main__':

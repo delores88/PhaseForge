@@ -55,14 +55,34 @@ class CandidateCollectionTests(unittest.TestCase):
              'checks':{key:True for key in ('openmm','diffusion','lpac','cancel','quit_recovery','backup_restore')},
              'evidence_files':[{'path':'laboratory/fixture.json','bytes':evidence.stat().st_size,'sha256':collect.digest(evidence)}]}
         runtimes={}
-        for kind in ('science-v3','python-numpy-v2'):
+        for kind in ('science-v4','python-numpy-v3'):
             frozen=self.root/'tools/runtime-seeds'/f'{kind}.manifest.json';self.write(frozen,{'synthetic_fixture':kind})
             runtimes[kind]={'seed_pin_verification':{'valid':True},'copy_pin_verification':{'valid':True},'copy_comparison':{'valid':True},'frozen_source_manifest':{'matches_installed_seed_manifest':True,'sha256':collect.digest(frozen)}}
         managed={'source_commit':COMMIT,'delivery':'bundled_immutable_seeds','integrity_valid':True,'runtimes':runtimes}
-        for key,name,value in [('laboratory_evidence','LABORATORY_ACCEPTANCE.json',lab),('managed_runtime_evidence','managed-runtime-materials.json',managed)]:
+        sqlite={'schema':'phaseforge.managed-sqlite-execution.v1','source_commit':COMMIT,'passed':True,'runtimes':{kind:{'passed':True,'sqlite_version':'3.53.4','module_version':'3.53.4','compile_options':['ENABLE_FTS5'],'fts5_rows':[[1,'retained result']],'seed_manifest_sha256':runtime['frozen_source_manifest']['sha256']} for kind,runtime in runtimes.items()}}
+        for key,name,value in [('laboratory_evidence','LABORATORY_ACCEPTANCE.json',lab),('managed_runtime_evidence','managed-runtime-materials.json',managed),('managed_sqlite_evidence','managed-sqlite-runtime.json',sqlite)]:
             self.write(self.folder/name,value);self.acceptance[key]={'path':name,'sha256':collect.digest(self.folder/name)}
         self.write(self.folder/'NATIVE_ACCEPTANCE.json',self.acceptance)
         return lab,managed
+
+    def test_laboratory_collection_requires_both_fixed_sqlite_queries_bound_to_exact_receipts(self):
+        self.laboratory_fixture()
+        sqlite_file=self.folder/'managed-sqlite-runtime.json'
+        original=collect.load(sqlite_file)
+        self.assertIsNotNone(collect.validate_laboratory_inputs(self.folder,VERSION,COMMIT,'b'*64,self.acceptance))
+        mutations=[lambda data:data['runtimes'].pop('python-numpy-v3'),
+                   lambda data:data['runtimes']['science-v4'].__setitem__('sqlite_version','3.50.4'),
+                   lambda data:data['runtimes']['science-v4'].__setitem__('fts5_rows',[]),
+                   lambda data:data['runtimes']['science-v4'].__setitem__('seed_manifest_sha256','0'*64)]
+        for mutate in mutations:
+            changed=copy.deepcopy(original);mutate(changed);self.write(sqlite_file,changed)
+            acceptance=copy.deepcopy(self.acceptance);acceptance['managed_sqlite_evidence']['sha256']=collect.digest(sqlite_file)
+            with self.assertRaisesRegex(ValueError,'SQLite'):
+                collect.validate_laboratory_inputs(self.folder,VERSION,COMMIT,'b'*64,acceptance)
+        self.write(sqlite_file,original)
+        with sqlite_file.open('a') as stream:stream.write(' ')
+        with self.assertRaisesRegex(ValueError,'SQLite execution evidence binding'):
+            collect.validate_laboratory_inputs(self.folder,VERSION,COMMIT,'b'*64,self.acceptance)
 
     def test_native_target_mapping_rejects_cross_labeling_and_unsupported_hosts(self):
         self.assertEqual(collect.release_target('Windows','AMD64')['folder'],'windows-x64')
@@ -142,7 +162,7 @@ class CandidateCollectionTests(unittest.TestCase):
         (self.folder/'laboratory/fixture.json').write_bytes(b'changed')
         with self.assertRaisesRegex(ValueError,'evidence changed'):validate()
         self.laboratory_fixture()
-        file=self.root/'tools/runtime-seeds/science-v3.manifest.json';file.write_bytes(b'other source seed')
+        file=self.root/'tools/runtime-seeds/science-v4.manifest.json';file.write_bytes(b'other source seed')
         with self.assertRaisesRegex(ValueError,'frozen source'):validate()
 
     def test_omitted_native_phase_and_prerelease_versions_block_final_assembly(self):

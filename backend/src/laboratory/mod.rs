@@ -309,7 +309,7 @@ impl LaboratoryService {
     async fn ensure_environment(&self,id:Uuid,token:&CancellationToken)->anyhow::Result<PathBuf> {
         let _guard=tokio::select!{_=token.cancelled()=>bail!("Cancelled while waiting for environment"),guard=self.provision.lock()=>guard};
         self.ensure_science_attempt_identity(id)?;
-        self.event(id,"provisioning","Verifying and copying the bundled scientific runtime. No host Python or network installation is used.",json!({"runtime":"science-v3"}))?;
+        self.event(id,"provisioning","Verifying and copying the bundled scientific runtime. No host Python or network installation is used.",json!({"runtime":"science-v4"}))?;
         let data=self.config.data_directory.clone();let copy_token=token.clone();
         let verified=tokio::task::spawn_blocking(move||runtime::provision(&data,runtime::RuntimeKind::Science,&copy_token)).await??;
         self.event(id,"runtime_verified","The runtime matches the compiled full inventory and upstream source pins.",serde_json::to_value(&verified)?)?;
