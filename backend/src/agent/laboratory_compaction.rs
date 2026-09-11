@@ -331,7 +331,22 @@ mod compaction_recovery_tests {
             assert!(tokio::time::timeout(Duration::from_millis(220),&mut completion).await.is_err());
             assert!(f.posts.lock().is_empty());assert_eq!(f.state.database.list_usage_records().unwrap().len(),1);
             f.state.agent.usage.finish(occupied.id,"completed",Some(&summary()),None).unwrap();
-            tokio::time::timeout(Duration::from_secs(3),&mut completion).await.unwrap().unwrap();
+            // Admission and durable receipt/context commits use real local HTTP
+            // and fsync/rename operations. The 220ms assertion above tests the
+            // blocked slot; completion is not a three-second performance SLA.
+            match tokio::time::timeout(Duration::from_secs(30),&mut completion).await{
+              Ok(result)=>result.unwrap(),
+              Err(_)=>{
+                let saved=reload(&f);
+                let rows=f.state.database.list_usage_records().unwrap();
+                let diagnostics=json!({"posts":f.posts.lock().len(),"gets":*f.gets.lock(),
+                    "mock_server_finished":f.server.is_finished(),
+                    "compaction_pending_state":saved.compaction_pending.as_ref().map(|pending|&pending.state),
+                    "delivery_pending":saved.compaction_delivery.is_some(),"committed_summaries":saved.compactions.len(),
+                    "usage":rows.iter().map(|row|json!({"id":row.id,"purpose":row.purpose,"status":row.status})).collect::<Vec<_>>()});
+                panic!("Compaction did not complete after admission within 30 seconds: {diagnostics}");
+              }
+            }
         }
         assert_eq!(journal.compactions.len(),1);assert_eq!(f.posts.lock().len(),1);
         let rows=f.state.database.list_usage_records().unwrap();assert_eq!(rows.len(),2);assert_eq!(rows.iter().filter(|row|row.purpose==PURPOSE).count(),1);
