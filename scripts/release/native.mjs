@@ -42,8 +42,72 @@ async function offlineExperiment(page){
   writeJSON(path.join(output,'offline-experiment-result.json'),result);return result;
 }
 
+async function observeBrand(page,assetPath){
+  const expected=readJSON(path.join(ROOT,'frontend/public/brand/provenance.json')).files.find(row=>row.path===`frontend/public${assetPath}`);
+  assert.ok(expected,'The observed logo must have original artwork provenance');
+  assert.equal(expected.source,`02_SVG/${path.basename(assetPath)}`);
+  assert.equal(expected.transformation,'none; exact original bytes');
+  const observed=await page.evaluate(async assetPath=>{
+    const sidebar=document.querySelector('.primarySidebar'),brand=document.querySelector('.primaryBrand');
+    const bounds=element=>{const {x,y,width,height,right,bottom}=element.getBoundingClientRect();return {x,y,width,height,right,bottom};};
+    const visible=[...brand.querySelectorAll('img')].filter(image=>{
+      const style=getComputedStyle(image),rect=image.getBoundingClientRect();
+      return rect.width>0&&rect.height>0&&style.display!=='none'&&style.visibility==='visible'&&Number(style.opacity)>0;
+    });
+    if(visible.length!==1)throw Error(`Expected one visible original logo, found ${visible.length}`);
+    const image=visible[0],url=new URL(image.currentSrc);
+    if(url.origin!==location.origin||url.pathname!==assetPath)throw Error('Displayed branding uses an unexpected artwork URL');
+    if(!image.complete||!image.naturalWidth||!image.naturalHeight)throw Error('Displayed original artwork has not loaded');
+    const response=await fetch(url.href);if(!response.ok)throw Error('Displayed artwork could not be read');
+    const bytes=await response.arrayBuffer();if(bytes.byteLength>2_000_000)throw Error('Unexpectedly large logo');
+    const digest=Array.from(new Uint8Array(await crypto.subtle.digest('SHA-256',bytes)),byte=>byte.toString(16).padStart(2,'0')).join('');
+    const canvas=document.createElement('canvas');canvas.width=256;canvas.height=Math.max(1,Math.round(256*image.naturalHeight/image.naturalWidth));
+    if(canvas.height>1024)throw Error('Unexpected logo aspect ratio');
+    const context=canvas.getContext('2d',{willReadFrequently:true});context.drawImage(image,0,0,canvas.width,canvas.height);
+    const pixels=context.getImageData(0,0,canvas.width,canvas.height).data;let bluePixels=0;
+    for(let i=0;i<pixels.length;i+=4)if(pixels[i+3]>32&&pixels[i+2]>pixels[i]+30&&Math.max(...pixels.subarray(i,i+3))-Math.min(...pixels.subarray(i,i+3))>40)bluePixels++;
+    const ancestors=[];
+    for(let element=image;element;element=element.parentElement){const style=getComputedStyle(element);ancestors.push({tag:element.tagName,filter:style.filter,opacity:style.opacity,mix_blend_mode:style.mixBlendMode});}
+    return {theme:document.documentElement.dataset.theme,viewport:{width:innerWidth,height:innerHeight},sidebar:bounds(sidebar),image:{url:url.pathname,bytes:bytes.byteLength,sha256:digest,bounds:bounds(image),natural_width:image.naturalWidth,natural_height:image.naturalHeight,blue_pixels:bluePixels,raster_width:canvas.width,raster_height:canvas.height},ancestors,app_background:getComputedStyle(document.querySelector('.appFrame')).backgroundColor};
+  },assetPath);
+  assert.equal(observed.theme,'dark','Marketplace screenshots must show the actual dark UI');
+  assert.equal(observed.image.sha256,expected.sha256);assert.equal(observed.image.bytes,expected.bytes);
+  assert.ok(observed.image.blue_pixels>16,'The loaded logo must contain the original blue artwork, not a monochrome symbol');
+  assert.ok(observed.ancestors.every(style=>style.filter==='none'&&Number(style.opacity)===1&&style.mix_blend_mode==='normal'),'CSS must not recolor or fade the original artwork');
+  const background=observed.app_background.match(/^rgb\((\d+), (\d+), (\d+)\)$/);
+  assert.ok(background&&background.slice(1).every(value=>Number(value)<80),'The rendered application background must be dark');
+  const rect=observed.image.bounds;
+  assert.ok(rect.x>=observed.sidebar.x&&rect.right<=observed.sidebar.right&&rect.y>=0&&rect.bottom<=observed.viewport.height,'The full artwork must fit visibly within the native sidebar');
+  return observed;
+}
+
+async function brandingScreenshots(electronApp,page,folder){
+  const nativeWindow=await electronApp.browserWindow(page);
+  await nativeWindow.evaluate(window=>{window.setContentSize(1008,700);window.setPosition(0,0);});
+  await page.waitForFunction(()=>innerWidth===1008&&document.querySelector('.primarySidebar')?.getBoundingClientRect().width===190,{},{timeout:10000});
+  await page.getByRole('button',{name:'Switch to light mode',exact:true}).waitFor({state:'visible'});
+  await page.locator('.primaryBrandImage.brandDark').waitFor({state:'visible'});
+  const expanded=await observeBrand(page,'/brand/phaseforge-horizontal-dark.svg');
+  assert.equal(expanded.viewport.width,1008);assert.equal(expanded.sidebar.width,190);
+  assert.ok(expanded.image.bounds.width>=160,'Expanded navigation must retain the full readable wordmark');
+  await page.screenshot({path:path.join(folder,'window.png')});
+  await page.getByRole('button',{name:'Collapse navigation',exact:true}).click();
+  await page.waitForFunction(()=>document.querySelector('.appFrame')?.classList.contains('appFrame--compact')&&document.querySelector('.primarySidebar')?.getBoundingClientRect().width===64);
+  await page.locator('.primaryBrandSymbol.brandDark').waitFor({state:'visible'});
+  const compact=await observeBrand(page,'/brand/phaseforge-symbol-dark.svg');
+  assert.equal(compact.sidebar.width,64);assert.ok(compact.image.bounds.width>=28);
+  await page.screenshot({path:path.join(folder,'window-compact.png')});
+  await page.getByRole('button',{name:'Expand navigation',exact:true}).click();
+  await page.waitForFunction(()=>!document.querySelector('.appFrame')?.classList.contains('appFrame--compact')&&document.querySelector('.primarySidebar')?.getBoundingClientRect().width===190);
+  await nativeWindow.dispose();
+  const receipt={passed:true,source_commit:process.env.GITHUB_SHA,expanded,compact,screenshot_theme:'dark',scope:'Actual native BrowserWindow resized to 1008 content pixels; loaded original SVG byte identities, blue raster pixels, CSS treatment and visible bounds observed in its renderer. Compact navigation is exercised through its visible control.'};
+  writeJSON(path.join(folder,'branding.json'),receipt);return receipt;
+}
+
 async function session(executable,workspace,index,fixture){
   await requireClosed();const folder=path.join(output,`launch-${index}`);fs.mkdirSync(folder,{recursive:true});
+  const freshProfile=!fs.existsSync(path.join(workspace,'electron-profile'));
+  if(index===1||index===3)assert.ok(freshProfile,'Default-theme acceptance requires a genuinely fresh Electron profile');
   const environment={...process.env,PHASEFORGE_DATA_DIR:workspace,PHASEFORGE_DISABLE_GPU:'1'};
   for(const key of ['OPENAI_API_KEY','ANTHROPIC_API_KEY','GH_TOKEN','GITHUB_TOKEN','ACTIONS_ID_TOKEN_REQUEST_TOKEN','ACTIONS_ID_TOKEN_REQUEST_URL','NODE_OPTIONS','ELECTRON_RUN_AS_NODE'])delete environment[key];
   for(const key of Object.keys(environment))if(/(?:TOKEN|SECRET|API_KEY|PASSWORD|CREDENTIAL)/i.test(key))delete environment[key];
@@ -73,6 +137,22 @@ async function session(executable,workspace,index,fixture){
     page.on('pageerror',error=>errors.push(error.message));
     page.on('request',request=>{const url=new URL(request.url());if(['http:','https:'].includes(url.protocol)&&url.hostname!=='127.0.0.1')requests.push(url.origin);});
     await page.waitForLoadState('domcontentloaded');await page.getByRole('link',{name:'PhaseForge · Alpha research workbench',exact:true}).waitFor({state:'visible',timeout:30000});
+    const appearance=()=>page.evaluate(()=>({theme:document.documentElement.dataset.theme,stored_theme:localStorage.getItem('phaseforge.theme'),prefers_light:matchMedia('(prefers-color-scheme: light)').matches}));
+    const initialAppearance=await appearance();
+    if(freshProfile){assert.equal(initialAppearance.stored_theme,null,'A fresh profile must have no seeded theme preference');assert.equal(initialAppearance.theme,'dark','The untouched fresh installation must default to dark mode');}
+    else{assert.equal(index,2);assert.equal(initialAppearance.stored_theme,'light','The explicitly saved light preference must survive normal Quit');assert.equal(initialAppearance.theme,'light','Reopening must honor the explicitly saved light preference');}
+    writeJSON(path.join(folder,'initial-appearance.json'),{fresh_profile:freshProfile,...initialAppearance});
+    if(index===1){
+      await page.emulateMedia({colorScheme:'light'});await page.reload({waitUntil:'domcontentloaded'});
+      await page.getByRole('link',{name:'PhaseForge · Alpha research workbench',exact:true}).waitFor({state:'visible'});
+      const underLightPreference=await appearance();
+      assert.equal(underLightPreference.prefers_light,true);assert.equal(underLightPreference.stored_theme,null);assert.equal(underLightPreference.theme,'dark','An OS light preference must not replace the fresh dark default');
+      writeJSON(path.join(folder,'default-under-light-preference.json'),{passed:true,...underLightPreference,scope:'The actual packaged entry page reloaded with Playwright renderer prefers-color-scheme: light emulation; no theme storage or DOM override, and no native operating-system setting change.'});
+      await page.emulateMedia({colorScheme:null});
+    }else if(index===2){
+      await page.getByRole('button',{name:'Switch to dark mode',exact:true}).click();
+      await page.waitForFunction(()=>document.documentElement.dataset.theme==='dark'&&localStorage.getItem('phaseforge.theme')==='dark');
+    }
     const health=await call(page,'/api/health');assert.equal(health.status,'ok');assert.equal(health.version,version);assert.equal(health.local_only,true);
     assert.match(health.sqlite?.version||'',/^\d+\.\d+\.\d+$/,'Actual backend SQLite version is required');
     assert.ok(Number.isInteger(health.sqlite.version_number));assert.match(health.sqlite.source_id,/^[0-9-]+ [0-9:]+ [a-f0-9]+$/);
@@ -109,8 +189,15 @@ async function session(executable,workspace,index,fixture){
     for(let i=0;i<6;i++){const records=remember();peakRSS=Math.max(peakRSS,records.reduce((sum,item)=>sum+item.rss_bytes,0));assert.equal((await call(page,'/api/health')).status,'ok');await sleep(2000);}
     assert.deepEqual(requests,[],'Native fixture unexpectedly requested an external website');
     assert.deepEqual(errors,[],'Packaged page reported an uncaught JavaScript error');
-    await page.screenshot({path:path.join(folder,'window.png')});
-    writeJSON(path.join(folder,'runtime.json'),{runtime,health,build:metadata,page_errors:errors,external_origins:requests,ready_seconds:readySeconds,peak_sampled_tree_rss_bytes:peakRSS});
+    const branding=await brandingScreenshots(electronApp,page,folder);
+    assert.deepEqual(requests,[]);assert.deepEqual(errors,[]);
+    writeJSON(path.join(folder,'runtime.json'),{runtime,health,build:metadata,initial_appearance:{fresh_profile:freshProfile,...initialAppearance},branding,page_errors:errors,external_origins:requests,ready_seconds:readySeconds,peak_sampled_tree_rss_bytes:peakRSS});
+    if(index===1){
+      await page.getByRole('button',{name:'Switch to light mode',exact:true}).click();
+      await page.waitForFunction(()=>document.documentElement.dataset.theme==='light'&&localStorage.getItem('phaseforge.theme')==='light');
+    }
+    writeJSON(path.join(folder,'saved-theme-before-quit.json'),await appearance());
+    assert.deepEqual(requests,[]);assert.deepEqual(errors,[]);
     remember();const closed=electronApp.waitForEvent('close',{timeout:30000});
     const launcher=electronApp.process();
     const nativeExit=launcher.exitCode!==null||launcher.signalCode!==null?Promise.resolve({code:launcher.exitCode,signal:launcher.signalCode}):new Promise(resolve=>launcher.once('exit',(code,signal)=>resolve({code,signal})));
@@ -176,6 +263,9 @@ async function main(){
   assert.ok(legacyPorts.every(row=>row.connections===0&&row.received_bytes===0),'The packaged application probed an occupied legacy port');
   const receipt={schema:'phaseforge.native-acceptance.v1',passed:true,source_commit:process.env.GITHUB_SHA,version,platform,architecture:'x64',host,artifact:{name:path.basename(artifact),bytes:fs.statSync(artifact).size,sha256:await sha256(artifact)},fresh_install:true,same_workspace_restart:true,offline_numerical_engine:true,normal_quit:true,uninstall:true,fixture_data_preserved:true,closed_database_backup_restore:true,fixture,retained_fixture:before,observed_at:new Date().toISOString(),limits:['No bundled local LLM or optional Blender/CAD engine was exercised.','Runner RAM and sampled RSS are recorded; they do not establish a minimum-RAM certification.','No prior-version upgrade/downgrade test.','AppImage installation means copying the distributed portable executable to a new application directory; removal deletes that executable.']};
   receipt.occupied_legacy_ports=legacyPorts;
+  receipt.dark_mode_original_color_branding=true;
+  receipt.explicit_light_preference_survives_restart=true;
+  receipt.branding_evidence='launch-*/initial-appearance.json, branding.json, window.png and window-compact.png';
   writeJSON(path.join(output,'NATIVE_ACCEPTANCE.json'),receipt);console.log(JSON.stringify({passed:true,platform,version,artifact:receipt.artifact.name}));
 }
 main().catch(error=>{writeJSON(path.join(output,'NATIVE_FAILURE.json'),{passed:false,error:String(error.stack||error),source_commit:process.env.GITHUB_SHA,recorded_at:new Date().toISOString()});console.error(error);process.exitCode=1;}).finally(async()=>{if(legacyListeners){writeJSON(path.join(output,'occupied-legacy-ports.json'),legacyListeners.receipts());await legacyListeners.close();}});

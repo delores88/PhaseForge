@@ -9,9 +9,9 @@ the source filename and SHA-256 of each selected asset. Original SVG and PNG cop
 are byte-identical; the source correspondence was checked again when the receipt
 was produced. No email content, account identifiers or source archive is bundled.
 
-The sidebar uses original dark/light horizontal wordmarks, with the original
-monochrome symbol at compact widths. The About view uses original 512-pixel app
-tiles. The application icon, installer/uninstaller, window, taskbar identity,
+The sidebar uses original dark/light color horizontal wordmarks, with the original
+blue symbol at compact widths. Monochrome substitutes are not used. The About view
+uses original 512-pixel app tiles. The application icon, installer/uninstaller, window, taskbar identity,
 shortcut, tray and browser favicon refer to the supplied artwork. Native shell
 appearance must be checked on the exact installed candidate; source paths alone
 do not prove Windows cache or shortcut behavior.
@@ -30,3 +30,8 @@ when changing layouts.
 
 The responsive symbol switch and sidebar collapse share the 950-pixel breakpoint.
 An expanded sidebar between 951 and 1050 pixels must retain the full wordmark.
+
+Dark mode is the first-launch default, independent of the operating system's
+theme. A researcher can explicitly choose light mode and retain that preference.
+Marketplace screenshots use dark mode exclusively; light-mode images are internal
+compatibility checks and are not marketplace media.

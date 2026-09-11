@@ -46,12 +46,31 @@ redirect rejection, key redaction and SQLite preservation tests are included in
 the full Rust result above. Runtime and dependency scanner findings remain
 separate from application regression tests.
 
+## Color branding and dark default
+
+The current frontend uses the original blue color artwork in both expanded and
+compact navigation. The first-paint theme bootstrap defaults to dark regardless
+of operating-system preference, while preserving an explicit saved light choice.
+The production build and interactive browser checks passed in expanded/compact
+navigation. Internal light-mode compatibility images are excluded from marketplace
+media; marketplace screenshots must use dark mode.
+
+The native candidate harness additionally checks an untouched fresh profile,
+reload under renderer light-preference emulation, and an explicit light preference
+across normal Quit and reopen. Its 1008px native-window screenshots must show dark
+mode and the exact original color assets in both navigation states. These added
+native assertions remain pending execution in a replacement candidate.
+
 ## Superseded candidate packages
 
 The packages below are retained engineering evidence. They were superseded by a
 branding correction: the full wordmark previously disappeared at 1050 pixels
 while the sidebar stayed expanded until 950 pixels. The corrected CSS aligns
 those breakpoints. Original artwork and application theme colors are unchanged.
+The subsequent `63d6807` candidate is also superseded: the owner requires original
+blue color symbols in compact navigation, dark mode as the default, and dark-only
+marketplace screenshots. Those requirements replace the earlier monochrome
+compact treatment and operating-system theme fallback.
 Replacement packages must bind the corrected source before installation or
 release; the hashes below do not identify that correction.
 

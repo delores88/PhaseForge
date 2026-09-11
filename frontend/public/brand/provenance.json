@@ -56,17 +56,17 @@
       "transformation": "none; exact original bytes"
     },
     {
-      "path": "frontend/public/brand/phaseforge-symbol-mono-ink.svg",
-      "source": "02_SVG/phaseforge-symbol-mono-ink.svg",
-      "bytes": 4616,
-      "sha256": "d80efdada7a4fa061118f7f98f19bae6a06ec38bc96a09eb4f3b5adb0895acd0",
+      "path": "frontend/public/brand/phaseforge-symbol-dark.svg",
+      "source": "02_SVG/phaseforge-symbol-dark.svg",
+      "bytes": 131675,
+      "sha256": "e8b4a396921d10653746da8302c80a9637b288764cb4b18ed8e67ff99426755c",
       "transformation": "none; exact original bytes"
     },
     {
-      "path": "frontend/public/brand/phaseforge-symbol-mono-white.svg",
-      "source": "02_SVG/phaseforge-symbol-mono-white.svg",
-      "bytes": 4618,
-      "sha256": "870c7d425163172e25a450ec16f718514e8c4e6c1a7900b4a337faea631789ef",
+      "path": "frontend/public/brand/phaseforge-symbol-light.svg",
+      "source": "02_SVG/phaseforge-symbol-light.svg",
+      "bytes": 142993,
+      "sha256": "56efe39a22ec18b4d395211bdc50d0c032940601ecac0b4faef518dbac6f09b6",
       "transformation": "none; exact original bytes"
     },
     {
