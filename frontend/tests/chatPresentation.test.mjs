@@ -22,3 +22,13 @@ test('ordinary user text and incomplete legacy prefixes remain ordinary messages
     assert.deepEqual(chatPresentation({role:'user',content}),{session:false,label:'YOU',content});
   }
 });
+
+test('recognized legacy viewport suffix is hidden while retained original evidence is unchanged',()=>{
+  const content='Explain the selected object.\n\nCurrent viewport inspection (visual context, not new empirical evidence): '+JSON.stringify({camera:{position:[1,2,3]},inspection:{node:'sample'}});
+  const message={role:'user',content};
+  assert.equal(chatPresentation(message).content,'Explain the selected object.');
+  assert.equal(message.content,content);
+  const ordinary='Discuss this marker:\n\nCurrent viewport inspection (visual context, not new empirical evidence): {"other":"user data"}';
+  assert.equal(chatPresentation({role:'user',content:ordinary}).content,ordinary);
+  assert.equal(chatPresentation({...message,metadata:{display_content:'Original question'}}).content,'Original question');
+});

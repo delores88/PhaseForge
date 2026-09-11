@@ -70,6 +70,7 @@ pub(crate) fn router_with_readiness(state: Arc<AppState>, readiness: desktop_rea
     Ok(Router::new()
         .merge(readiness.router())
         .merge(crate::studio::render::routes())
+        .merge(crate::laboratory::routes())
         .merge(crate::studio::fabrication::routes())
         .merge(crate::research::assets::routes())
         .merge(crate::agent::studio::routes())
@@ -753,7 +754,7 @@ async fn run_findings(State(state): State<Arc<AppState>>, Path(id): Path<Uuid>) 
     Ok(Json(report))
 }
 #[derive(Deserialize)]
-struct ExplainRequest { request_id: Uuid, #[serde(default)] provider: Option<ProviderKind> }
+struct ExplainRequest { request_id: Uuid, #[serde(default)] provider: Option<ProviderKind>, #[serde(default)] model: Option<String>, #[serde(default)] reasoning_effort: Option<String> }
 async fn explain_run(State(state): State<Arc<AppState>>, Path(id): Path<Uuid>, Json(request): Json<ExplainRequest>) -> Result<Json<Value>, ApiError> {
-    Ok(Json(state.agent.explain_run(id,request.request_id,request.provider).await.map_err(ApiError::unprocessable_from)?))
+    Ok(Json(state.agent.explain_run(id,request.request_id,request.provider,request.model,request.reasoning_effort).await.map_err(ApiError::unprocessable_from)?))
 }

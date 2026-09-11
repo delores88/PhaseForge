@@ -28,7 +28,7 @@ test('release admission keeps Windows/Linux x64 and admits only Apple Silicon ma
   assert.deepEqual(releaseTarget('win32','x64'),{platform:'windows',architecture:'x64',folder:'windows-x64'});
   assert.deepEqual(releaseTarget('linux','x64'),{platform:'linux',architecture:'x64',folder:'linux-x64'});
   assert.deepEqual(releaseTarget('darwin','arm64'),{platform:'macos',architecture:'arm64',folder:'macos-arm64'});
-  for(const pair of [['darwin','x64'],['darwin','universal'],['darwin','arm'],['linux','arm64'],['freebsd','x64']])assert.throws(()=>releaseTarget(...pair),/admits/);
+  for(const pair of [['darwin','x64'],['darwin','universal'],['darwin','arm'],['linux','arm64'],['freebsd','x64']])assert.throws(()=>releaseTarget(...pair),/requires/);
 });
 test('reads thin Mach-O CPU identities and exposes universal binaries for rejection',context=>{
   const root=fixture(context),file=path.join(root,'binary');

@@ -202,8 +202,7 @@ impl AgentService {
         request.validate()?;
         self.database.get_project(project_id)?.context("Research project not found")?;
         let provider = self.choose_provider(request.provider, request.model.as_deref())?.context("Configure a provider and model before starting research")?;
-        let status = self.provider_status(provider)?;
-        let model = request.model.filter(|model| !model.trim().is_empty()).unwrap_or(status.model);
+        let model = request.model.filter(|model| !model.trim().is_empty()).context("Choose a conversation model before starting research")?;
         self.task_client(provider, &model, request.reasoning_effort.as_deref())?;
         let task = ResearchTask { id: Uuid::new_v4(), project_id, objective: request.objective.trim().into(),
             state: TaskState::Running, stage: TaskStage::Specialists, cycle: 1, max_cycles: request.max_cycles,
@@ -252,10 +251,12 @@ impl AgentService {
                 if self.database.list_agent_tasks()?.iter().any(|t| t.id != id && t.project_id == task.project_id && t.state == TaskState::Running) { bail!("Another task in this project is running"); }
                 if let Some(minutes) = request.duration_minutes { validate_duration(minutes)?; task.remaining_seconds = minutes as u64 * 60; task.duration_minutes = minutes; }
                 if task.remaining_seconds == 0 { bail!("This task used its time budget. Set duration_minutes to grant more time."); }
+                let explicit_selection=request.provider.is_some() || request.model.is_some();
                 let provider = request.provider.unwrap_or(task.provider);
                 let provider_changed = provider != task.provider;
-                let model = request.model.unwrap_or_else(|| if provider_changed { self.provider_status(provider).map(|s| s.model).unwrap_or_default() } else { task.model.clone() });
-                let effort = request.reasoning_effort.or_else(|| if provider_changed || model != task.model { None } else { task.reasoning_effort.clone() });
+                if provider_changed && request.model.is_none(){bail!("Choose a model when changing the research provider");}
+                let model = request.model.unwrap_or_else(|| task.model.clone());
+                let effort = if explicit_selection {request.reasoning_effort} else {request.reasoning_effort.or_else(||task.reasoning_effort.clone())};
                 self.task_client(provider, &model, effort.as_deref())?;
                 task.provider = provider; task.model = model; task.reasoning_effort = effort;
                 if let Some(enabled)=request.research_mode {task.research_mode=enabled;}

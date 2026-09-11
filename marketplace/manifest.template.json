@@ -8,9 +8,9 @@
     "slug": "phaseforge",
     "publisherId": null,
     "repository": {"id": null, "url": "https://github.com/delores88/PhaseForge"},
-    "release": {"id": null, "tag": null, "version": "0.8.0-alpha.1", "channel": "beta", "sourceCommit": null},
-    "summary": "An alpha research workbench for curious people: experiments, detailed 3D and AI collaboration.",
-    "description": "Explore scientific questions with or without a formal scientific background. Build bounded numerical experiments, retrieve public research, inspect detailed 3D models and collaborate with timed research teams. Optional separately installed Blender, CadQuery and KiCad produce rendered scenes, CAD and circuit-board artifacts. The app is free; AI features need one OpenAI OR Anthropic API key with separate provider charges. More features are coming. Visual representations and numerical evidence have distinct scopes; this alpha does not establish scientific discoveries, treatment efficacy or universal solver coverage. Closing the window can keep research running in the app tray; Quit stops the app.",
+    "release": {"id": null, "tag": null, "version": "0.9.0", "channel": "stable", "sourceCommit": null},
+    "summary": "A scientific workbench with retained numerical experiments, animated results and AI collaboration.",
+    "description": "Explore scientific questions through retained numerical experiments, public research and AI collaboration. The Windows x64 installer includes pinned CPython, NumPy, OpenMM and Pillow runtimes for supported molecular, spatial-field and numerical workflows. Generated Python/NumPy experiments run inside a Windows boundary with no network access; only explicitly supported dependencies are available. Scientific simulations and rendered illustrations have distinct evidence scopes. Optional separately installed Blender, CadQuery and KiCad provide additional rendering, CAD and circuit-board tools. The app is free; AI features require an OpenAI OR Anthropic API key with separate provider charges. Successful computations do not establish discoveries, treatment efficacy or universal solver coverage. Closing the window can keep work running in the app tray; Quit stops owned work and retains recovery records.",
     "category": "data-science",
     "sourceVisibility": "public",
     "license": "MIT",
@@ -18,20 +18,22 @@
     "free": {"price": 0, "trial": false, "paidUnlocks": false, "mandatoryDeveloperCredits": false},
     "intelligence": {
       "capabilities": ["Scientific experiment design", "Collaborating research agents", "Numerical evidence review", "Procedural scientific visualization"],
-      "functionalTest": "To be completed from native package evidence: execute a deterministic local ODE, inspect its retained trajectory, validate bounded task pause/resume with a test provider, and verify finite rendered scene geometry. Run the optional real GPU analytic control on compatible physical hardware. These tests do not demonstrate physical, biological, or clinical validity."
+      "functionalTest": "To be filled only from the exact final Windows installer evidence: run the local ODE control, a real OpenMM trajectory, a Fourier diffusion reference and an LPAC NumPy calculation through normal APIs without provider credentials; retain numerical results, boundary/process receipts and bundled-to-managed runtime hashes. Exercise cancellation, Quit, explicit recovery and backup restoration. Source-level or prior-installer evidence cannot substitute for this run. These checks do not demonstrate biological or clinical validity."
     },
     "execution": "hybrid",
     "offline": false,
     "integrations": [
       {"name": "OpenAI", "required": false, "purpose": "User-requested experiment design and research collaboration.", "costDisclosure": "Bring your own API key. Provider token and tool charges are separate. Local saved simulations do not require paid model calls.", "url": "https://platform.openai.com"},
       {"name": "Anthropic", "required": false, "purpose": "Alternative AI provider; choose OpenAI or Anthropic, both are not required.", "costDisclosure": "Bring your own API key; provider charges apply. Native numerical work is local.", "url": "https://www.anthropic.com"},
+      {"name": "OpenMM", "required": false, "purpose": "Bundled pinned CPU molecular simulation runtime for explicitly supported models.", "costDisclosure": "No provider charge for local numerical computation; the runtime is included in the Windows installer.", "url": "https://openmm.org"},
+      {"name": "CPython and NumPy", "required": false, "purpose": "Bundled, hash-verified numerical runtimes; generated experiments run under the Windows LPAC boundary. No separate host Python installation is required for these bundled workflows.", "costDisclosure": "Included in the Windows installer; no runtime package download or paid credits required.", "url": "https://www.python.org"},
       {"name": "Blender", "required": false, "purpose": "Separately installed local Cycles rendering and editable 3D exports.", "costDisclosure": "Free engine; installed separately and not bundled in the app.", "url": "https://www.blender.org"},
       {"name": "CadQuery", "required": false, "purpose": "Separately installed CAD engine for solid validation, STEP and STL.", "costDisclosure": "Free engine and dependencies, installed separately.", "url": "https://cadquery.readthedocs.io"},
       {"name": "KiCad", "required": false, "purpose": "Separately installed PCB engine for editable boards and native design-rule checks.", "costDisclosure": "Free engine; installed separately and not bundled in the app.", "url": "https://www.kicad.org"}
     ],
     "privacy": {
-      "dataLeavesDevice": "Selected research questions, attachments and evidence are sent to the chosen provider for authorized AI calls. Source searches send the submitted query to public scientific catalogs. GPU/CPU diagnostics and numerical computation remain local. Provider background requests may use temporary polling storage.",
-      "retention": "Research projects, numerical results, checkpoints and metering receipts persist in the local database until removed. Provider retention follows the account's provider terms and settings.",
+      "dataLeavesDevice": "For authorized AI calls, the selected provider receives research questions, selected attachments, numerical evidence, generated experiment source and requested rendered-image frames. Public research/data acquisition sends the submitted query or requested public-resource identifier to the source host. Scientific computation, runtime seed copying and local hardware measurements remain on device. Bundled numerical runtimes do not require post-install executable downloads. Provider background requests may use temporary polling storage.",
+      "retention": "Research projects, uploaded/imported data, experiment source, numerical trajectories, image observations, checkpoints, model and tool receipts remain in local app data until removed. Provider retention follows the account's provider terms and settings.",
       "telemetry": "Hardware and usage measurements are local; no product analytics service is configured."
     },
     "permissions": {

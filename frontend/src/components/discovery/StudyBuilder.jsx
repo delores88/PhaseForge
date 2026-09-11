@@ -2,14 +2,16 @@ import {allMetrics} from "@/lib/research";
 import {useMemo,useState} from "react";
 import {Plus,Trash2,ShieldCheck} from "lucide-react";
 import {api} from "@/lib/api";
+import {useModelSelection} from "@/lib/modelSelection";
 import {initialRecipe,targets,validateRecipe,suggestedParameter} from "@/lib/discovery";
 
 export default function StudyBuilder({manifest,onCreated,onCancel}) {
+  const {getSelection,getSelectionError}=useModelSelection();
   const [r,setR]=useState(()=>initialRecipe(manifest));const [busy,setBusy]=useState(false);const [error,setError]=useState("");const [approved,setApproved]=useState(false);
   const options=useMemo(()=>targets(manifest),[manifest]);const metrics=useMemo(()=>[...allMetrics(manifest).map(o=>({name:o.name,unit:o.unit})),...(manifest.model?.variables||[]).map(v=>({name:`final_${v.name}`,unit:v.unit}))],[manifest]);
   const patch=(key,value)=>{setApproved(false);setR(old=>({...old,[key]:value}));};
   const edit=(key,index,field,value)=>patch(key,r[key].map((row,i)=>i===index?{...row,[field]:value}:row));
-  const create=async()=>{const problem=validateRecipe(r);if(problem){setError(problem);return;}setBusy(true);try{const result=await api.createStudy(r);onCreated(result.study);}catch(e){setError(e.message);}finally{setBusy(false);}};
+  const create=async()=>{const problem=validateRecipe(r)||(r.auto_review&&getSelectionError(manifest.project_id));if(problem){setError(problem);return;}const selection=getSelection(manifest.project_id);const payload={...r,review_model:r.auto_review?{provider:selection.provider,model:selection.model,reasoning_effort:selection.reasoning_effort}:null};setBusy(true);try{const result=await api.createStudy(payload);onCreated(result.study);}catch(e){setError(e.message);}finally{setBusy(false);}};
   return <section className="discoveryBuilder discoveryCard">
     <header><div><span className="eyebrow">PROTOCOL · FROZEN BEFORE COMPUTE</span><h2>Define what is worth exploring</h2><p>Use this to test a space of possibilities, not to generate a story around a single good-looking result.</p></div><button className="button button--secondary" onClick={onCancel}>Close</button></header>
     <div className="discFields"><label>Study name<input value={r.title} onChange={e=>patch("title",e.target.value)}/></label><label>Search strategy<select value={r.strategy} onChange={e=>patch("strategy",e.target.value)}><option value="latin_hypercube">Latin hypercube · broad stratified coverage</option><option value="map_elites">MAP-Elites · adaptive behavioral diversity</option><option value="novelty_search">Novelty search · pursue sparse measured behaviors</option></select></label></div>

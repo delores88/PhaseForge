@@ -1,6 +1,7 @@
 import {buildSceneGraph} from './scene-geometry.mjs';
 import {PALETTE} from './scene.mjs';
 import {releaseRenderer} from './viewer-resources.mjs';
+import {installCameraNavigation} from './viewer-camera.mjs';
 
 const radiusFor=(entity,fallback)=>Number.isFinite(entity?.radius)&&entity.radius>0?entity.radius:fallback;
 const interpolatePosition=(a,b,alpha)=>b?a.position.map((v,i)=>v+(b.position[i]-v)*alpha):a.position;
@@ -13,11 +14,11 @@ export async function createSceneViewer(host,config) {
   const renderer=new THREE.WebGLRenderer({antialias:quality!=='low',alpha:false,powerPreference:'high-performance'});
   renderer.outputColorSpace=THREE.SRGBColorSpace;renderer.toneMapping=THREE.ACESFilmicToneMapping;renderer.toneMappingExposure=1.18;renderer.localClippingEnabled=true;
   let pixelRatio=Math.min(window.devicePixelRatio||1,quality==='high'?2:quality==='low'?1:1.5);renderer.setPixelRatio(pixelRatio);host.replaceChildren(renderer.domElement);
-  let graph=null,raf=0,observer=null,controls=null,disposed=false;
+  let graph=null,raf=0,observer=null,controls=null,navigation=null,disposed=false;
   const extraGeometry=new Set(),extraMaterial=new Set(),extraInstances=new Set(),listeners=[];
   const addGeometry=g=>(extraGeometry.add(g),g),addMaterial=m=>(extraMaterial.add(m),m);
   const listen=(type,handler)=>{renderer.domElement.addEventListener(type,handler);listeners.push([type,handler]);};
-  const dispose=()=>{if(disposed)return;disposed=true;cancelAnimationFrame(raf);observer?.disconnect();controls?.dispose();for(const [type,handler] of listeners)renderer.domElement.removeEventListener(type,handler);graph?.dispose();extraInstances.forEach(object=>object.dispose());extraGeometry.forEach(g=>g.dispose());extraMaterial.forEach(m=>m.dispose());releaseRenderer(renderer);};
+  const dispose=()=>{if(disposed)return;disposed=true;cancelAnimationFrame(raf);observer?.disconnect();navigation?.dispose();controls?.dispose();for(const [type,handler] of listeners)renderer.domElement.removeEventListener(type,handler);graph?.dispose();extraInstances.forEach(object=>object.dispose());extraGeometry.forEach(g=>g.dispose());extraMaterial.forEach(m=>m.dispose());releaseRenderer(renderer);};
   try {
     const world=new THREE.Group();scene.add(world);
     if(sceneSpec?.nodes.length){graph=buildSceneGraph(THREE,sceneSpec,{quality});world.add(graph.root);}
@@ -57,7 +58,9 @@ export async function createSceneViewer(host,config) {
     const selectionBox=new THREE.Box3Helper(new THREE.Box3(),'#a2efe4');selectionBox.visible=false;scene.add(selectionBox);extraGeometry.add(selectionBox.geometry);extraMaterial.add(selectionBox.material);
     let cursor=meta.start,last=performance.now(),renderClock=last,lastInteraction=last,interacting=false,uiTime=last,statsTime=last,statsCount=0,poseStamp='',visibleIDs=[],lowFrames=0;
     const cameraState=()=>({position:camera.position.clone().add(center).toArray(),target:controls.target.clone().add(center).toArray(),up:camera.up.toArray(),selected_node_id:options().selected||null,time:cursor,units:sceneSpec?.units||'model units'});
-    const reportCamera=()=>options().onCameraChange?.(cameraState());
+    const cameraKey=`phaseforge.scene.camera.${config.runId||sceneSpec?.title||'scene'}`;
+    const reportCamera=()=>{const value=cameraState();try{sessionStorage.setItem(cameraKey,JSON.stringify(value));}catch{}options().onCameraChange?.(value);};
+    let savedCamera=null;try{savedCamera=JSON.parse(sessionStorage.getItem(cameraKey)||'null');}catch{}
     controls.addEventListener('start',()=>{interacting=true;lastInteraction=performance.now();});
     controls.addEventListener('change',()=>{lastInteraction=performance.now();});
     controls.addEventListener('end',()=>{interacting=false;lastInteraction=performance.now();reportCamera();});
@@ -70,6 +73,7 @@ export async function createSceneViewer(host,config) {
       const direction=which==='xy'?new THREE.Vector3(0,0,1):which==='xz'?new THREE.Vector3(0,1,.0001):which==='yz'?new THREE.Vector3(1,0,0):new THREE.Vector3(.72,.36,1).normalize();
       camera.position.copy(focus).addScaledVector(direction,distance);controls.update();reportCamera();
     }
+    navigation=installCameraNavigation(THREE,{camera,controls,element:renderer.domElement,span,onChange:reportCamera,fit:()=>fit()});
     const resize=()=>{const w=Math.max(1,host.clientWidth),h=Math.max(1,host.clientHeight);renderer.setSize(w,h,false);camera.aspect=w/h;camera.updateProjectionMatrix();};
     observer=new ResizeObserver(resize);observer.observe(host);resize();fit(config.view);
     if(sceneSpec?.camera){camera.position.set(...sceneSpec.camera.position).sub(center);controls.target.set(...sceneSpec.camera.target).sub(center);controls.update();}
@@ -92,9 +96,9 @@ export async function createSceneViewer(host,config) {
       world.updateMatrixWorld(true);const target=graph?.objects.get(opts.selected);selectionBox.visible=!!target&&target.visible;if(target)selectionBox.box.setFromObject(target);
     };
     function capture(){renderer.render(scene,camera);const a=document.createElement('a');a.download=`phaseforge-${config.runId||'scene'}.png`;a.href=renderer.domElement.toDataURL('image/png');a.click();}
-    function command(value){if(value.view)fit(value.view,value.node_id);if(Array.isArray(value.position)&&value.position.length===3&&value.position.every(Number.isFinite))camera.position.set(...value.position).sub(center);if(Array.isArray(value.target)&&value.target.length===3&&value.target.every(Number.isFinite))controls.target.set(...value.target).sub(center);if(value.node_id)onSelect(value.node_id);controls.update();reportCamera();}
-    const api={dispose,seek:t=>{cursor=Math.max(meta.start,Math.min(meta.end,t));onTime(cursor);apply(cursor);reportCamera();},view:fit,capture,cameraState,command,vectorScale};
-    apply(cursor);if(config.cameraCommand)command(config.cameraCommand);
+    function command(value){if(value.view)fit(value.view,value.node_id);if(Array.isArray(value.position)&&value.position.length===3&&value.position.every(Number.isFinite))camera.position.set(...value.position).sub(center);if(Array.isArray(value.target)&&value.target.length===3&&value.target.every(Number.isFinite))controls.target.set(...value.target).sub(center);if(Array.isArray(value.up)&&value.up.length===3&&value.up.every(Number.isFinite))camera.up.set(...value.up).normalize();if(value.node_id)onSelect(value.node_id);navigation.command(value);controls.update();reportCamera();}
+    const api={dispose,seek:t=>{cursor=Math.max(meta.start,Math.min(meta.end,t));onTime(cursor);apply(cursor);reportCamera();},view:fit,fit,capture,cameraState,command,navigate:navigation.command,setCamera:command,vectorScale};
+    apply(cursor);if(savedCamera)command(savedCamera);if(config.cameraCommand)command(config.cameraCommand);
     const draw=now=>{
       if(disposed)return;
       raf=requestAnimationFrame(draw);
@@ -105,7 +109,7 @@ export async function createSceneViewer(host,config) {
       if(elapsed<interval)return;
       renderClock=now-elapsed%interval;
       const dt=Math.max(0,(now-last)/1000);last=now;
-      if(options().playing&&meta.end>meta.start){cursor+=dt*(meta.end-meta.start)/15*options().speed;if(cursor>=meta.end){cursor=meta.end;onStop();}}
+      if(options().playing&&meta.end>meta.start){cursor+=dt*(meta.end-meta.start)/Math.max(.1,Number(options().playbackDurationSeconds)||30)*options().speed;if(cursor>=meta.end){cursor=meta.end;onStop();}}
       apply(cursor);controls.update();renderer.render(scene,camera);statsCount++;
       if(now-uiTime>100){onTime(cursor);uiTime=now;}
       if(now-statsTime>1800){const fps=Math.round(statsCount*1000/(now-statsTime));lowFrames=active&&fps<24?lowFrames+1:0;if(lowFrames>=2&&pixelRatio>1){pixelRatio=1;renderer.setPixelRatio(pixelRatio);resize();lowFrames=0;}onStats({fps,idle:!active,triangles:renderer.info.render.triangles,drawCalls:renderer.info.render.calls,pixelRatio});statsCount=0;statsTime=now;}

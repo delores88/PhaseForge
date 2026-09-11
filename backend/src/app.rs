@@ -21,6 +21,7 @@ pub struct AppState {
     pub agent: AgentService,
     pub discovery: crate::discovery::DiscoveryService,
     pub assurance: crate::assurance::AssuranceService,
+    pub laboratory: crate::laboratory::LaboratoryService,
     pub started_at: Instant,
     pub telemetry: crate::compute::telemetry::Telemetry,
 }
@@ -60,6 +61,7 @@ impl Application {
 
         let discovery = crate::discovery::DiscoveryService::new(database.clone(), scheduler.clone(), agent.clone())?;
         let assurance = crate::assurance::AssuranceService::new(database.clone())?;
+        let laboratory = crate::laboratory::LaboratoryService::new(database.clone(), config.clone())?;
         let state = Arc::new(AppState {
             config: config.clone(),
             database,
@@ -67,6 +69,7 @@ impl Application {
             agent,
             discovery,
             assurance,
+            laboratory,
             started_at: Instant::now(),
             telemetry: crate::compute::telemetry::Telemetry::start(),
         });

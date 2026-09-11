@@ -19,7 +19,38 @@ def release_target(system=None,architecture=None):
             'installer_format':{'windows':'windows-nsis','linux':'linux-appimage','macos':'macos-dmg'}[name],
             'installer_suffix':{'windows':'-setup.exe','linux':'.AppImage','macos':'.dmg'}[name]}
 
+def validate_laboratory_inputs(folder,version,commit,backend_hash,acceptance):
+    """An old ODE-only profile cannot be relabeled as current native coverage."""
+    lab_file=folder/'LABORATORY_ACCEPTANCE.json';managed_file=folder/'managed-runtime-materials.json'
+    lab=load(lab_file);managed=load(managed_file)
+    for key,file in [('laboratory_evidence',lab_file),('managed_runtime_evidence',managed_file)]:
+        binding=acceptance.get(key,{})
+        if binding.get('path')!=file.name or binding.get('sha256')!=digest(file):raise ValueError('Native laboratory evidence binding is missing or changed')
+    if lab.get('schema')!='phaseforge.native-laboratory.v1' or lab.get('passed') is not True:raise ValueError('Actual installed laboratory checks did not complete')
+    if lab.get('source_commit')!=commit or lab.get('version')!=version or lab.get('backend_sha256')!=backend_hash:raise ValueError('Laboratory evidence belongs to other installed bytes')
+    if lab.get('provider_tokens')!=0:raise ValueError('Credential-free native checks require zero observed provider tokens')
+    for check in ('openmm','diffusion','lpac','cancel','quit_recovery','backup_restore'):
+        if lab.get('checks',{}).get(check) is not True:raise ValueError('Missing native laboratory check: '+check)
+    files=lab.get('evidence_files')
+    if not isinstance(files,list) or not files or len(files)>10000:raise ValueError('Laboratory numerical/process evidence inventory is missing')
+    seen=set()
+    for row in files:
+        name=row.get('path','');relative=pathlib.PurePosixPath(name)
+        if not name.startswith('laboratory/') or '\\' in name or ':' in name or relative.is_absolute() or any(part in ('','.','..') for part in name.split('/')) or name.casefold() in seen:raise ValueError('Unsafe or duplicate laboratory evidence path')
+        seen.add(name.casefold());file=folder.joinpath(*relative.parts)
+        if file.is_symlink() or not file.is_file() or not file.resolve().is_relative_to(folder.resolve()):raise ValueError('Missing or linked laboratory evidence')
+        if type(row.get('bytes')) is not int or file.stat().st_size!=row['bytes'] or row['bytes']>64*1024*1024 or digest(file)!=row.get('sha256'):raise ValueError('Retained laboratory evidence changed')
+    if managed.get('source_commit')!=commit or managed.get('delivery')!='bundled_immutable_seeds' or managed.get('integrity_valid') is not True:raise ValueError('Bundled runtime copy provenance is incomplete or stale')
+    for kind in ('science-v2','python-numpy-v2'):
+        runtime=managed.get('runtimes',{}).get(kind,{})
+        if any(runtime.get(key,{}).get('valid') is not True for key in ('seed_pin_verification','copy_pin_verification','copy_comparison')):raise ValueError('A managed runtime differs from bundled source bytes')
+        frozen=runtime.get('frozen_source_manifest',{})
+        expected=ROOT/'tools/runtime-seeds'/f'{kind}.manifest.json'
+        if frozen.get('matches_installed_seed_manifest') is not True or frozen.get('sha256')!=digest(expected):raise ValueError('Runtime manifest is not the frozen source version')
+    return lab,managed
+
 def validated_inputs(folder,target,version,commit):
+    if not re.fullmatch(r'\d+\.\d+\.\d+',version):raise ValueError('Stable candidate requires a final version without a prerelease suffix')
     if not re.fullmatch(r'[a-f0-9]{40}',commit):raise ValueError('Expected one full immutable source commit')
     acceptance=load(folder/'NATIVE_ACCEPTANCE.json');review=load(folder/'checks/SCAN_REVIEW.json')
     if acceptance.get('passed') is not True or review.get('tools_completed') is not True:raise ValueError('Incomplete native/scanner execution cannot produce a final candidate')
@@ -56,6 +87,7 @@ def validated_inputs(folder,target,version,commit):
         for name in ('installer-wrapper','installer-native'):
             raw=load(folder/f'checks/grype-{name}.stdout')
             if not isinstance(raw.get('matches'),list) or load(folder/f'checks/grype-{name}.command.json')['exit_code']!=0:raise ValueError('Installer wrapper scan did not complete')
+        validate_laboratory_inputs(folder,version,commit,installed['backend']['sha256'],acceptance)
     if target['platform']=='macos':
         backend_signing=load(folder/'backend-signing.json')
         if backend_signing['source_commit']!=commit or backend_signing['staged_signed_sha256']!=installed['backend']['sha256'] or backend_signing['compiler_dependency_section_unchanged'] is not True or backend_signing['verification']['status']!=0:raise ValueError('Signed backend provenance is stale or unverified')
@@ -105,6 +137,9 @@ def main():
         files=[file for file in (folder/'checks').rglob('*') if file.is_file()]
         files.extend(file for file in folder.glob('*.json') if file.is_file())
         files.extend(file for file in folder.glob('launch-*/*') if file.is_file() and file.suffix in ('.json','.png'))
+        if system=='windows':
+            laboratory=load(folder/'LABORATORY_ACCEPTANCE.json')
+            files.extend(folder.joinpath(*pathlib.PurePosixPath(row['path']).parts) for row in laboratory['evidence_files'])
         for file in sorted(files):
             if file.is_symlink() or not file.resolve().is_relative_to(folder.resolve()):raise ValueError('Linked evidence file refused')
             archive.write(file,'evidence/'+file.relative_to(folder).as_posix())
@@ -112,14 +147,18 @@ def main():
             archive.write(ROOT/'.local/marketplace/source'/name,'source/'+name)
         archive.write(ROOT/'scripts/release/tool-pins.json','source/tool-pins.json')
     files=[{'name':file.name,'bytes':file.stat().st_size,'sha256':digest(file)} for file in sorted(final.iterdir())]
-    manifest={'schema':'phaseforge.candidate-evidence.v1','version':version,'channel':'beta','intended_prerelease':True,'repository':'delores88/PhaseForge','source_commit':commit,'workflow':{'path':'.github/workflows/marketplace-candidates.yml','commit':commit,'run_id':os.environ['GITHUB_RUN_ID'],'attempt':os.environ['GITHUB_RUN_ATTEMPT'],'url':f'https://github.com/delores88/PhaseForge/actions/runs/{os.environ["GITHUB_RUN_ID"]}'},'platform':system,'architecture':architecture,'installer_format':target['installer_format'],'native_acceptance':acceptance,'runtime_versions':observed['runtime']['versions'],'backend_sqlite':observed['health']['sqlite'],'installed_payload_bytes':installed['bytes'],'backend_sha256':installed['backend']['sha256'],'files':files,'security':{'scanner_tools_completed':True,'security_review_required':True,'unreviewed_high_critical_count':len(review['unreviewed_high_critical']),'secret_findings_count':len(review['secret_findings']),'marketplace_admitted':False},'os_code_signing':'Unsigned; no OS signing credential is used by this workflow. Detached GitHub OIDC authenticates build origin, not a security verdict.','limits':['This is build/native evidence, not the DeloresAI submission manifest or signed marketplace review.','Only the recorded hosted OS version, architecture and disposable workflows were tested.','Runtime RAM/disk observations do not certify minimum requirements.','No release is published by this workflow.']}
-    # The marketplace accepts beta as its prerelease channel; alpha remains in the version.
+    manifest={'schema':'phaseforge.candidate-evidence.v1','version':version,'channel':'stable','intended_prerelease':False,'repository':'delores88/PhaseForge','source_commit':commit,'workflow':{'path':'.github/workflows/marketplace-candidates.yml','commit':commit,'run_id':os.environ['GITHUB_RUN_ID'],'attempt':os.environ['GITHUB_RUN_ATTEMPT'],'url':f'https://github.com/delores88/PhaseForge/actions/runs/{os.environ["GITHUB_RUN_ID"]}'},'platform':system,'architecture':architecture,'installer_format':target['installer_format'],'native_acceptance':acceptance,'runtime_versions':observed['runtime']['versions'],'backend_sqlite':observed['health']['sqlite'],'installed_payload_bytes':installed['bytes'],'backend_sha256':installed['backend']['sha256'],'files':files,'security':{'scanner_tools_completed':True,'security_review_required':True,'unreviewed_high_critical_count':len(review['unreviewed_high_critical']),'secret_findings_count':len(review['secret_findings']),'marketplace_admitted':False},'os_code_signing':'Unsigned; no OS signing credential is used by this workflow. Detached GitHub OIDC authenticates build origin, not a security verdict.','limits':['This is build/native evidence, not the DeloresAI submission manifest or signed marketplace review.','Only the recorded hosted OS version, architecture and disposable workflows were tested.','Runtime RAM/disk observations do not certify minimum requirements.','No release is published by this workflow.']}
+    # Stable intent is bound to a final source version; this workflow never publishes.
     manifest['os_code_signing'],mac_signing=signing_observation(acceptance,target)
     if mac_signing is not None:manifest['macos_code_signing']=mac_signing
     manifest['observed_native_host']=acceptance['host']
     manifest['security']['runtime_identity_gaps']=review.get('runtime_identity_gaps',[])
     manifest['security']['inventory_complete']=False
-    if system=='windows':manifest['installer_wrapper_evidence']=review['installer_wrapper']
+    if system=='windows':
+        manifest['installer_wrapper_evidence']=review['installer_wrapper']
+        lab=load(folder/'LABORATORY_ACCEPTANCE.json');managed=load(folder/'managed-runtime-materials.json')
+        manifest['laboratory_evidence']={'receipt':acceptance['laboratory_evidence'],'checks':lab['checks'],'provider_tokens':lab['provider_tokens'],'limits':lab.get('limitations',[])}
+        manifest['managed_runtime_evidence']={'receipt':acceptance['managed_runtime_evidence'],'delivery':managed['delivery'],'inventory_complete':False,'missing_provenance':managed.get('missing_provenance',[]),'frozen_manifest_hashes':{kind:runtime['frozen_source_manifest']['sha256'] for kind,runtime in managed['runtimes'].items()}}
     manifest['frontend_module_evidence']={'summary':frontend_modules['summary'],'gaps':frontend_modules['gaps'],'evidence':'frontend-modules.json in the checks archive; identical evidence is packaged in resources/runtime'}
     write(final/f'{prefix}_BUILD_MANIFEST.json',manifest)
     subjects=sorted(file.name for file in final.iterdir() if file.is_file())

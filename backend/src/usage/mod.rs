@@ -12,6 +12,10 @@ use serde_json::{json, Value};
 use uuid::Uuid;
 use crate::{domain::ProviderKind, persistence::Database};
 
+#[derive(Debug,thiserror::Error)]
+#[error("The configured concurrent-call limit is reached. Wait or stop an active call in Usage & cost.")]
+pub struct ConcurrentCallLimit;
+
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct ModelRate {
     pub provider: ProviderKind,
@@ -206,7 +210,7 @@ impl UsageService {
         if settings.paused { bail!("Paid model calls are paused in Usage & cost"); }
         let records = self.database.list_usage_records()?;
         if records.iter().filter(|r| r.status == "running").count() >= settings.max_parallel_calls {
-            bail!("The configured concurrent-call limit is reached. Wait or stop an active call in Usage & cost.");
+            return Err(ConcurrentCallLimit.into());
         }
         // Bytes + overhead deliberately reserves more than common English tokenization.
         // Not a tokenizer and not an enforceable provider-side billing cap.

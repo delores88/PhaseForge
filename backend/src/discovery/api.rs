@@ -43,7 +43,7 @@ async fn detail(State(state):State<Arc<AppState>>,Path(id):Path<Uuid>)->Result<J
 async fn start(State(state):State<Arc<AppState>>,Path(id):Path<Uuid>)->Result<Json<Value>,Error>{Ok(Json(json!({"study":state.discovery.start(id)?})))}
 async fn pause(State(state):State<Arc<AppState>>,Path(id):Path<Uuid>)->Result<Json<Value>,Error>{Ok(Json(json!({"study":state.discovery.stop(id,false)?})))}
 async fn cancel(State(state):State<Arc<AppState>>,Path(id):Path<Uuid>)->Result<Json<Value>,Error>{Ok(Json(json!({"study":state.discovery.stop(id,true)?})))}
-async fn review(State(state):State<Arc<AppState>>,Path(id):Path<Uuid>)->Result<Json<Value>,Error>{Ok(Json(state.discovery.review(id).await?))}
+async fn review(State(state):State<Arc<AppState>>,Path(id):Path<Uuid>,Json(selection):Json<StudyModelSelection>)->Result<Json<Value>,Error>{Ok(Json(state.discovery.review(id,selection).await?))}
 async fn fork(State(state):State<Arc<AppState>>,Path(id):Path<Uuid>)->Result<Json<Value>,Error>{
     let old=state.discovery.get(id)?;let mut recipe=old.recipe.clone();recipe.title=format!("{} / follow-up",recipe.title.chars().take(175).collect::<String>());recipe.seed=recipe.seed.wrapping_add(1);
     let study=state.discovery.create(recipe)?;Ok(Json(json!({"study":study,"source_study_id":id})))
@@ -68,4 +68,4 @@ async fn inspect_signals(State(state):State<Arc<AppState>>,Path(id):Path<Uuid>)-
     let value=tokio::task::spawn_blocking(move||signals::inspect(&result)).await.map_err(|e|Error(anyhow::anyhow!(e)))?;Ok(Json(value))
 }
 
-async fn next_proposal(State(state):State<Arc<AppState>>,Path(id):Path<Uuid>)->Result<Json<Value>,Error>{Ok(Json(state.discovery.propose_next(id).await?))}
+async fn next_proposal(State(state):State<Arc<AppState>>,Path(id):Path<Uuid>,Json(selection):Json<StudyModelSelection>)->Result<Json<Value>,Error>{Ok(Json(state.discovery.propose_next(id,selection).await?))}

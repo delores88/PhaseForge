@@ -20,7 +20,7 @@ fn session() -> Uuid { *SESSION.get_or_init(Uuid::new_v4) }
 
 #[derive(Clone, Debug, Serialize, Deserialize)]
 #[serde(deny_unknown_fields)]
-pub struct RenderCamera { pub position: [f64; 3], pub target: [f64; 3], #[serde(default="lens")] pub focal_length_mm: f64 }
+pub struct RenderCamera { pub position: [f64; 3], pub target: [f64; 3], #[serde(default)] pub up: Option<[f64;3]>, #[serde(default="lens")] pub focal_length_mm: f64 }
 #[derive(Clone, Debug, Serialize, Deserialize)]
 #[serde(deny_unknown_fields)]
 pub struct RenderBinding { pub node_id:String, pub structure_id:Uuid }
@@ -83,6 +83,12 @@ fn validate(q:&RenderRequest)->anyhow::Result<()> {
     if let Some(scene)=&q.scene { crate::sandbox::validate_scene(scene)?; if scene["nodes"].as_array().is_none_or(|n|n.is_empty()) { bail!("Render scene must contain geometry"); } }
     if let Some(c)=&q.camera {
         if c.position.iter().chain(&c.target).any(|n|!n.is_finite()||n.abs()>1e15)||!(20.0..=120.0).contains(&c.focal_length_mm)||c.position.iter().zip(c.target).map(|(a,b)|(a-b).powi(2)).sum::<f64>()<1e-12 { bail!("Camera needs distinct finite position/target and a 20–120 mm lens"); }
+        if let Some(up)=c.up {
+            let direction=std::array::from_fn::<_,3,_>(|i|c.target[i]-c.position[i]);
+            let up_norm=up.iter().map(|x|x*x).sum::<f64>();let direction_norm=direction.iter().map(|x|x*x).sum::<f64>();
+            let dot=up.iter().zip(direction).map(|(a,b)|a*b).sum::<f64>();
+            anyhow::ensure!(up.iter().all(|n|n.is_finite()&&n.abs()<=1e15)&&up_norm>1e-12&&1.0-dot*dot/(up_norm*direction_norm)>1e-10,"Camera up must be finite, nonzero and not parallel to its viewing direction");
+        }
     }
     Ok(())
 }
@@ -119,6 +125,14 @@ fn resolve_bindings(q:&RenderRequest,mut fetch:impl FnMut(Uuid)->anyhow::Result<
         resolved.insert(binding.node_id.clone(),structure);
     }
     Ok(resolved)
+}
+/// Resolve data-only geometry once before admitting a durable laboratory render.
+pub(crate) fn resolved_input(state:&AppState,request:&RenderRequest)->anyhow::Result<Value>{
+    validate(request)?;state.database.get_project(request.project_id)?.context("Project not found")?;
+    let structure=if let Some(id)=request.structure_id{let value=state.database.get_molecule(id)?.context("Molecular structure not found")?;validate_structure(&value,request.project_id)?;Some(value)}else{None};
+    let bound_structures=resolve_bindings(request,|id|state.database.get_molecule(id))?;
+    let value=json!({"request":request,"structure":structure,"bound_structures":bound_structures,"gpu_enabled":state.config.gpu_enabled});
+    anyhow::ensure!(serde_json::to_vec(&value)?.len()<=48*1024*1024,"Resolved render input exceeds 48 MiB");Ok(value)
 }
 async fn create(State(s):State<Arc<AppState>>,Json(q):Json<RenderRequest>)->Result<(StatusCode,Json<RenderJob>),Error> {
     validate(&q)?;
@@ -219,7 +233,7 @@ fn render_process(folder:&FilePath,blender:&FilePath,job:&RenderJob,token:&Atomi
     for name in ["render.png","scene.blend","scene.glb"] {let info=fs::metadata(folder.join(name)).with_context(||format!("Blender did not produce {name}"))?;let limit=if name=="scene.glb" {128} else {256};if info.len()==0||info.len()>limit*1024*1024 {bail!("{name} is empty or exceeds its {limit} MiB artifact budget");}}
     Ok(serde_json::from_slice(&fs::read(folder.join("renderer.json"))?)?)
 }
-fn find_blender()->Option<PathBuf> {
+pub(crate) fn find_blender()->Option<PathBuf> {
     if let Some(path)=std::env::var_os("BLENDER_PATH").map(PathBuf::from) {if path.is_file(){return Some(path);}}
     let name=if cfg!(windows){"blender.exe"}else{"blender"};
     if let Some(paths)=std::env::var_os("PATH") {for directory in std::env::split_paths(&paths){let path=directory.join(name);if path.is_file(){return Some(path);}}}
@@ -278,7 +292,7 @@ fn find_blender()->Option<PathBuf> {
         for i in 0..5 {let id=format!("part-{i}");let mut node=first.clone();node["id"]=json!(id);nodes.push(node);q.bindings.push(RenderBinding{node_id:id,structure_id:structure.id});}
         q.scene.as_mut().unwrap()["nodes"]=json!(nodes);assert!(resolve_bindings(&q,|_|Ok(Some(structure.clone()))).unwrap_err().to_string().contains("50000"));
     }
-    #[test]fn enforces_exclusive_source_and_resource_caps(){let mut q=request();assert!(validate(&q).is_ok());q.scene=Some(json!({}));assert!(validate(&q).is_err());q.scene=None;q.width=16384;assert!(validate(&q).is_err());q=request();q.max_seconds=0;assert!(validate(&q).is_err());q=request();q.camera=Some(RenderCamera{position:[0.;3],target:[0.;3],focal_length_mm:50.});assert!(validate(&q).is_err());}
+    #[test]fn enforces_exclusive_source_and_resource_caps(){let mut q=request();assert!(validate(&q).is_ok());q.scene=Some(json!({}));assert!(validate(&q).is_err());q.scene=None;q.width=16384;assert!(validate(&q).is_err());q=request();q.max_seconds=0;assert!(validate(&q).is_err());q=request();q.camera=Some(RenderCamera{position:[0.;3],target:[0.;3],up:None,focal_length_mm:50.});assert!(validate(&q).is_err());}
     #[test]fn artifact_names_cannot_escape_job_directory(){assert!(artifact_type("render.png").is_some());for name in ["../job.json","worker.py","C:\\secret","blender.log"]{assert!(artifact_type(name).is_none());}}
     #[test]fn restart_marks_active_job_interrupted_and_preserves_completed_files(){let dir=tempfile::tempdir().unwrap();let now=Utc::now();let job=RenderJob{id:Uuid::new_v4(),project_id:Uuid::nil(),state:"rendering".into(),session_id:Uuid::new_v4(),created_at:now,updated_at:now,deadline_at:now,settings:json!({}),message:String::new(),error:None,artifacts:vec![],renderer:None};save(dir.path(),&job).unwrap();fs::write(dir.path().join("scene.blend"),b"saved").unwrap();let restored=load(dir.path()).unwrap();assert_eq!(restored.state,"interrupted");assert_eq!(fs::read(dir.path().join("scene.blend")).unwrap(),b"saved");}
     #[cfg(windows)]#[test]fn windows_job_drop_stops_the_owned_process_tree(){

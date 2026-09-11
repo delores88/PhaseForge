@@ -1,0 +1,9 @@
+.jobs{padding:6px 12px;max-height:220px;overflow:auto;flex-shrink:0}
+.jobs button{display:flex;width:100%;gap:9px;align-items:center;border:0;background:transparent;color:inherit;text-align:left;padding:7px 5px;border-radius:8px;cursor:pointer;font-size:11px}
+.jobs button:hover{background:rgba(65,140,255,.12)}
+.jobs button>span{overflow:hidden;text-overflow:ellipsis;white-space:nowrap;flex:1}
+.jobs small{display:block;color:#8296b7;font-size:10px;margin-top:2px}
+.spin{animation:jobspin 1.1s linear infinite;flex-shrink:0;color:#5aa5ff}
+.dot{display:inline-block;width:7px;height:7px;border-radius:50%;background:#3d93ff;flex-shrink:0;box-shadow:0 0 8px #398aff66}
+@keyframes jobspin{to{transform:rotate(360deg)}}
+@media(prefers-reduced-motion:reduce){.spin{animation:none}}

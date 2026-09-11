@@ -17,6 +17,9 @@ const MAX_ASSET: usize=8*1024*1024;
 const RCSB_SEARCH_DESCRIPTION:&str="Experimental structure archive search match; inspect its record and methods before drawing conclusions.";
 static INTAKE: tokio::sync::Semaphore=tokio::sync::Semaphore::const_new(2);
 
+/// Shared fixed-host URL admission for retained numerical source files.
+pub(crate) fn public_data_url(value:&str)->anyhow::Result<url::Url>{super::public_file::url(value)}
+
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
 #[serde(rename_all="snake_case")]
 pub enum Catalog { Rcsb, Literature, Nasa, PublicFile }

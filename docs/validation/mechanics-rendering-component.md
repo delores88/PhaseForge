@@ -1,0 +1,11 @@
+# Isolated mechanics rendering component check
+
+Source changes support isolated `newtonian_nbody` trajectories using declared L0/T0 units, per-body radii and identity colors, no periodic wrapping or box, and stable bounds merged from every retained chunk. Coordinates are recentered in double precision before transfer to GPU/Blender float32 storage. Existing OpenMM cell semantics remain covered separately.
+
+The real solver smoke at `.local/validation/mechanics-implementation-smoke-20260911-01/output` was copied immutably to `.local/render-acceptance/mechanics-source-01/source`. Its three states span only 0–0.002 T0. This is a pipeline component check, **not** a mechanics scientific-accuracy study or installed-app acceptance.
+
+`check_alignment.py` in the evidence directory independently reads the NPZ arrays, checks every JSON state against them exactly, verifies each stored chunk bound and digest, projects body centers from the saved numerical coordinates and authored perspective camera, and checks the actual Blender endpoint PNGs and actual Three.js final-state PNG. All six measured centers are within 0.474 pixels of the independent projection (one-pixel tolerance), with red left-body and blue right-body identities visible. The first hue-only measurement was rejected because cyan rim lighting excluded part of the silhouette; that failed measurement is retained in `failed-color-mask-check.json`. The passing check uses the complete illuminated silhouette for geometry and checks body hue separately.
+
+The MP4 is independently identified as H.264, 1280×720, 6 fps, three frames, 0.5 seconds, and the entire file decodes with standalone FFmpeg. Presentation playback duration is distinct from the 0.002 T0 physical interval. Blender uses retained states, with no force evaluation or solver rerun.
+
+Evidence: `.local/render-acceptance/mechanics-source-01/independent-check.json`, `output/result.json`, endpoint PNGs and MP4; `.local/viewer-acceptance/mechanics-final.png` and `mechanics-final.json`. The frontend production build passed. Thirteen viewer/data-contract tests, seventeen Python renderer-contract tests, and seven active Rust observation tests passed; the eighth Rust test requires opt-in real-render fixtures and was skipped in the default test run. No installer was rebuilt for this component check.

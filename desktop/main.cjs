@@ -4,6 +4,7 @@ const fs=require('node:fs');
 const path=require('node:path');
 const {startServer}=require('./server.cjs');
 const {installWorkbenchPermissions}=require('./permissions.cjs');
+const {installRendererDiagnostics}=require('./renderer-diagnostics.cjs');
 const {createBackendSecret,readBackendEndpoint,verifyBackendReady}=require('./backend-auth.cjs');
 let window,backend,backendEndpoint,ui,tray,quitting=false,restarts=0,backendReady=false,initialBackendReady=false;
 const VERSION=require('./package.json').version;
@@ -43,10 +44,17 @@ async function launchBackend(){
 function showWindow(){if(window&&!quitting){window.show();window.focus();}}
 function appIcon(){return app.isPackaged?path.join(process.resourcesPath,'ui',process.platform==='win32'?'icon.ico':'icon.png'):path.resolve(__dirname,'../frontend/public',process.platform==='win32'?'icon.ico':'icon.png');}
 function makeWindow(url){
-  window=new BrowserWindow({width:1540,height:980,minWidth:800,minHeight:600,title:'PhaseForge · Alpha research workbench',icon:appIcon(),backgroundColor:'#101417',autoHideMenuBar:true,show:false,webPreferences:{nodeIntegration:false,contextIsolation:true,sandbox:true,webSecurity:true}});
+  window=new BrowserWindow({width:1540,height:980,minWidth:800,minHeight:600,title:'PhaseForge · Scientific workbench',icon:appIcon(),backgroundColor:'#101417',autoHideMenuBar:true,show:false,webPreferences:{nodeIntegration:false,contextIsolation:true,sandbox:true,webSecurity:true}});
+  const diagnostics=installRendererDiagnostics(window.webContents,path.join(app.getPath('userData'),'logs'));
+  window.webContents.on('before-input-event',(event,input)=>{
+    if(input.type!=='keyDown'||!input.control||input.alt||input.meta)return;
+    const key=input.key.toLowerCase();
+    if(key==='r'&&!input.shift){event.preventDefault();window.webContents.reload();}
+    else if(key==='i'&&input.shift){event.preventDefault();window.webContents.toggleDevTools();}
+  });
   if(process.platform==='win32'){
     window.setAppDetails({appId:'science.phaseforge.desktop',appIconPath:appIcon(),appIconIndex:0,relaunchDisplayName:'PhaseForge',relaunchCommand:`"${process.execPath}"`});
-    window.setThumbnailToolTip('PhaseForge Alpha · Scientific research workbench');
+    window.setThumbnailToolTip('PhaseForge · Scientific workbench');
   }
   window.webContents.setWindowOpenHandler(({url:target})=>{if(/^https:\/\//.test(target))shell.openExternal(target);return {action:'deny'};});
   window.webContents.on('will-navigate',(event,target)=>{if(new URL(target).origin!==url){event.preventDefault();if(/^https:\/\//.test(target))shell.openExternal(target);}});
@@ -57,11 +65,11 @@ function makeWindow(url){
   const icon=nativeImage.createFromPath(png);
   if(!icon.isEmpty()){
     tray=new Tray(icon.resize({width:24,height:24}));tray.setToolTip('PhaseForge · research continues in the background');
-    tray.setContextMenu(Menu.buildFromTemplate([{label:'Open PhaseForge',click:showWindow},{label:'Research continues when the window is closed',enabled:false},{type:'separator'},{label:'About PhaseForge',click:()=>app.showAboutPanel()},{label:'Quit PhaseForge',click:()=>{quitting=true;app.quit();}}]));tray.on('double-click',showWindow);
+    tray.setContextMenu(Menu.buildFromTemplate([{label:'Open PhaseForge',click:showWindow},{label:'Research continues when the window is closed',enabled:false},{type:'separator'},{label:'Reload workbench view (jobs keep running)',click:()=>{showWindow();window.webContents.reload();}},{label:'Open interface diagnostic log',click:()=>shell.openPath(diagnostics.filename)},{label:'About PhaseForge',click:()=>app.showAboutPanel()},{label:'Quit PhaseForge',click:()=>{quitting=true;app.quit();}}]));tray.on('double-click',showWindow);
   }
 }
 if(process.platform==='win32')app.setAppUserModelId('science.phaseforge.desktop');
-app.setAboutPanelOptions({applicationName:'PhaseForge',applicationVersion:VERSION,version:VERSION,iconPath:app.isPackaged?path.join(process.resourcesPath,'ui','icon.png'):path.resolve(__dirname,'../frontend/public/icon.png'),credits:'Alpha research workbench. Free app; your selected OpenAI or Anthropic provider charges separately for API usage. More features are coming.',website:'https://github.com/delores88/PhaseForge'});
+app.setAboutPanelOptions({applicationName:'PhaseForge',applicationVersion:VERSION,version:VERSION,iconPath:app.isPackaged?path.join(process.resourcesPath,'ui','icon.png'):path.resolve(__dirname,'../frontend/public/icon.png'),credits:'Scientific workbench. Free app; your selected OpenAI or Anthropic provider charges separately for API usage.',website:'https://github.com/delores88/PhaseForge'});
 if(!app.requestSingleInstanceLock())app.quit();
 else{
   app.on('second-instance',showWindow);app.on('activate',showWindow);

@@ -8,6 +8,7 @@ import {ROOT,inside,inventory,readJSON,releaseTarget,sha256,writeJSON} from './c
 import {auditableDependencies,auditableSection} from './auditable.mjs';
 import {cryptoRuntimeIdentity} from './runtime-identity.mjs';
 import {frontendModuleEvidence} from './frontend-map.mjs';
+import {OPENMM_RESOURCE,verifyOpenmmSourceDelivery} from './openmm-sources.mjs';
 
 const {platform,architecture,folder:targetFolder}=releaseTarget();
 const folder=path.join(ROOT,'.local/marketplace',targetFolder),payload=path.join(folder,'payload');
@@ -67,6 +68,43 @@ const components=[
   component('v8',versions.v8,`pkg:generic/v8@${encodeURIComponent(versions.v8)}`,null),
   component('sqlite-backend',sqlite.version,`pkg:generic/sqlite@${sqlite.version}?consumer=phaseforge-backend`,`cpe:2.3:a:sqlite:sqlite:${sqlite.version}:*:*:*:*:*:*:*`,[{name:'sqlite:source-id',value:sqlite.source_id},{name:'phaseforge:evidence:scope',value:'Actual SELECT sqlite_version(), sqlite_source_id() from the packaged backend database connection.'}]),
 ];
+if(platform==='windows'){
+  const sourceMaterials=readJSON(path.join(resources,'runtime/third-party-source-materials.json'));
+  assert.equal(sourceMaterials.source_commit,installed.source_commit);assert.equal(sourceMaterials.backend_sha256,installed.backend.sha256);
+  const observedSources=await verifyOpenmmSourceDelivery(path.join(resources,OPENMM_RESOURCE));
+  assert.deepEqual(sourceMaterials,{source_commit:installed.source_commit,backend_sha256:installed.backend.sha256,...observedSources});
+  writeJSON(path.join(folder,'third-party-source-materials.json'),sourceMaterials);
+  const seedMaterials=readJSON(path.join(resources,'runtime/runtime-seed-materials.json'));
+  assert.equal(seedMaterials.source_commit,installed.source_commit);assert.equal(seedMaterials.backend_sha256,installed.backend.sha256);
+  const rebuiltPath=path.join(resources,'runtime/runtime-seed-build.json'),rebuilt=readJSON(rebuiltPath);
+  assert.equal(rebuilt.source_commit,installed.source_commit);assert.equal(await sha256(rebuiltPath),seedMaterials.archive_rebuild_receipt.sha256);
+  writeJSON(path.join(folder,'runtime-seed-build.json'),rebuilt);
+  const managed=readJSON(path.join(folder,'managed-runtime-materials.json'));
+  assert.equal(managed.source_commit,installed.source_commit);assert.equal(managed.delivery,'bundled_immutable_seeds');assert.equal(managed.integrity_valid,true);
+  for(const kind of ['science-v2','python-numpy-v2']){
+    const seed=path.join(resources,'runtime/runtime-seeds',kind),manifestPath=path.join(seed,'phaseforge-runtime-seed.json');
+    const manifest=readJSON(manifestPath),hash=await sha256(manifestPath);
+    assert.equal(hash,await sha256(path.join(ROOT,'tools/runtime-seeds',`${kind}.manifest.json`)));
+    assert.equal(hash,seedMaterials.seeds[kind].manifest_sha256);
+    assert.equal(hash,rebuilt.seeds[kind].manifest_sha256);assert.deepEqual(manifest.sources,rebuilt.seeds[kind].sources);
+    assert.equal(hash,managed.runtimes[kind].frozen_source_manifest.sha256);
+    assert.equal(managed.runtimes[kind].copy_comparison.valid,true);
+    const rows=(await inventory(seed)).files.filter(row=>row.path!=='phaseforge-runtime-seed.json');
+    assert.equal(rows.length,Object.keys(manifest.files).length);
+    for(const row of rows){assert.equal(row.sha256,manifest.files[row.path]);assert.equal(row.bytes,manifest.file_bytes[row.path]);}
+    const versions={python:manifest.python,numpy:manifest.numpy,...(kind==='science-v2'?{openmm:manifest.openmm,pillow:manifest.pillow}:{})};
+    for(const [name,version] of Object.entries(versions)){
+      assert.match(version,/^\d+\.\d+\.\d+$/);
+      const purl=name==='python'?`pkg:generic/cpython@${version}?consumer=${kind}`:`pkg:pypi/${name}@${version}?consumer=${kind}`;
+      components.push(component(name,version,purl,name==='python'?`cpe:2.3:a:python:python:${version}:*:*:*:*:*:*:*`:null,[
+        {name:'phaseforge:evidence:scope',value:'Pinned archive identity and exact bundled/native file hashes, independently compared to the managed app-data copy. Package file presence is not proof every module was loaded.'},
+        {name:'phaseforge:evidence:seed-kind',value:kind},{name:'phaseforge:evidence:seed-manifest-sha256',value:hash},
+        {name:'phaseforge:evidence:seed-materials',value:'runtime-seed-materials.json; managed-runtime-materials.json; laboratory acceptance receipts'},
+      ]));
+    }
+  }
+  writeJSON(path.join(folder,'runtime-seed-materials.json'),seedMaterials);
+}
 const cryptoIdentity=cryptoRuntimeIdentity(versions);
 if(cryptoIdentity.status==='observed_version')components.push(component('openssl',cryptoIdentity.version,`pkg:generic/openssl@${cryptoIdentity.version}`,`cpe:2.3:a:openssl:openssl:${cryptoIdentity.version}:*:*:*:*:*:*:*`));
 writeJSON(path.join(folder,'runtime-identity-gaps.json'),{source_commit:installed.source_commit,crypto:cryptoIdentity,gaps:cryptoIdentity.status==='unresolved'?[cryptoIdentity.gap]:[],scope:'Raw process.versions remain unchanged in the launch runtime receipt. This file does not assert a BoringSSL revision or waive missing coverage.'});

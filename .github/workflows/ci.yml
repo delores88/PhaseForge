@@ -81,6 +81,7 @@ jobs:
       - run: npm install -g typescript@5.8.3
       - run: node tests/experiment-ui.cjs
       - run: python tests/test_experiment_editor.py
+      - run: node --test tests/source-contracts.test.mjs
       - run: node scripts/release-audit.mjs
       - run: npm ci --no-audit --no-fund
         working-directory: frontend

@@ -47,6 +47,10 @@ def main():
         if scope in ('source','payload') and not document.get('components'):raise RuntimeError(f'Missing {scope} inventory coverage')
         if scope=='payload' and not any(item.get('name')=='rusqlite' for item in document.get('components',[])):
             raise RuntimeError('Syft did not detect compiled Rust rusqlite metadata in the actual installed backend')
+        if scope=='payload' and SYSTEM=='windows':
+            names={str(item.get('name','')).lower() for item in document.get('components',[])}
+            if not {'numpy','openmm','pillow'}.issubset(names):
+                raise RuntimeError('Payload inventory omitted bundled scientific package metadata; preserve raw evidence and resolve coverage before candidate assembly')
         if scope=='source' and not any(item.get('name')=='electron' for item in document.get('components',[])):
             raise RuntimeError('Source inventory omitted the Electron build input that becomes shipped runtime')
     grype_env={**os.environ,'GRYPE_DB_CACHE_DIR':str(FOLDER/'grype-db'),'GRYPE_CHECK_FOR_APP_UPDATE':'false','GRYPE_DB_VALIDATE_AGE':'true','GRYPE_DB_MAX_ALLOWED_BUILT_AGE':'120h'}

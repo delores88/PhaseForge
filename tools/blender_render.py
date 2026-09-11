@@ -90,6 +90,34 @@ def color(value, index=0):
     return PALETTE[index % len(PALETTE)]
 
 
+def dna_parameters(parameters, node_color=None):
+    """Resolve explicit illustrative geometry without silently ignoring its inputs."""
+    p = parameters or {}
+    def bounded(key, default, low, high, integer=False):
+        value = p.get(key)
+        value = default if value is None else value
+        if isinstance(value, bool) or not isinstance(value, (int, float)) or not math.isfinite(value) or not low <= value <= high or (integer and value != int(value)):
+            raise ValueError(f"DNA {key} must be {'an integer' if integer else 'finite'} in [{low}, {high}]")
+        return int(value) if integer else value
+    radius = bounded('radius', 1, 1e-8, 1e12)
+    turns = bounded('turns', 4, .5, 24)
+    length = bounded('length', radius * 7, 1e-8, 1e12)
+    thickness = bounded('thickness', radius * .16, radius * 1e-6, radius)
+    pairs = bounded('count', min(160, int(turns * 10)), 1, 160, True)
+    palette = p.get('colors')
+    if palette is not None:
+        if not isinstance(palette, list) or not 2 <= len(palette) <= 8 or any(not isinstance(value, str) or len(value) != 7 or not value.startswith('#') or any(c not in '0123456789abcdefABCDEF' for c in value[1:]) for value in palette):
+            raise ValueError('DNA colors must contain 2–8 #RRGGBB colors: two backbones, then repeating base-half colors')
+        strand_colors = palette[:2]
+        base_colors = palette[2:] or ['#EF537B', '#31CDBA', '#A879E3', '#F39540']
+    else:
+        strand_colors = [node_color or '#2878D0', '#E5B94C']
+        base_colors = ['#EF537B', '#31CDBA', '#A879E3', '#F39540']
+    return {'radius': radius, 'turns': turns, 'length': length, 'thickness': thickness,
+            'count': pairs, 'segments': min(4096, math.ceil(turns * 128)),
+            'strand_colors': strand_colors, 'base_colors': base_colors}
+
+
 def mesh(name, vertices, faces, mat):
     if len(vertices) > MAX_VERTICES:
         raise ValueError("The geometry exceeds the render vertex budget")
@@ -232,18 +260,27 @@ def conceptual(node, index, bound_structure=None, triangle_budget=1500000):
             raise ValueError(kind + " requires explicit sampled points for Blender rendering")
         curve(name, points, thickness, mat)
     elif kind == "dna":
-        turns = number(p.get("turns"), 4, .5, 24)
-        length = number(p.get("length"), radius*7, radius, radius*60)
-        count = min(768, int(turns*64))
-        for phase in (0, math.pi):
-            points = [(radius*math.cos(i/count*turns*2*math.pi+phase), radius*math.sin(i/count*turns*2*math.pi+phase), length*(i/count-.5)) for i in range(count+1)]
-            curve(name+" backbone", points, radius*.16, mat)
-        base_mat = material(name+" base pairs", PALETTE[(index+1)%len(PALETTE)])
-        for i in range(min(160, int(turns*10))):
-            t = i/max(1, int(turns*10)-1)
-            angle = t*turns*2*math.pi
+        dna = dna_parameters(p, node.get('color'))
+        radius, turns, length, segments = dna['radius'], dna['turns'], dna['length'], dna['segments']
+        for strand, phase in enumerate((0, math.pi)):
+            points = [(radius*math.cos(i/segments*turns*2*math.pi+phase), radius*math.sin(i/segments*turns*2*math.pi+phase), length*(i/segments-.5)) for i in range(segments+1)]
+            strand_mat = material(f'{name} backbone {strand+1}', color(dna['strand_colors'][strand]))
+            obj = curve(f'{name} backbone {strand+1}', points, dna['thickness'], strand_mat)
+            obj.data.bevel_resolution = 5
+            obj.data.use_fill_caps = True
+            obj['phaseforge_component_id'] = f'{node["id"]}/backbone-{strand+1}'
+            obj['illustration_backbone_radius'] = dna['thickness']
+            obj['illustration_base_pair_count'] = dna['count']
+        base_materials = [material(f'{name} base color {i+1}', color(value)) for i, value in enumerate(dna['base_colors'])]
+        for i in range(dna['count']):
+            t = i / (dna['count']-1) if dna['count'] > 1 else .5
+            angle, z = t*turns*2*math.pi, length*(t-.5)
             x, y = radius*math.cos(angle), radius*math.sin(angle)
-            curve(name+" rung", [(x,y,length*(t-.5)),(-x,-y,length*(t-.5))], radius*.055, base_mat)
+            for half, endpoint in enumerate(((x,y,z), (-x,-y,z))):
+                obj = curve(f'{name} base pair {i+1:03d} half {half+1}', [endpoint, (0,0,z)], dna['thickness']*.38, base_materials[(2*i+half)%len(base_materials)])
+                obj.data.use_fill_caps = True
+                obj['phaseforge_component_id'] = f'{node["id"]}/pair-{i+1:03d}/half-{half+1}'
+        WARNINGS.append('DNA primitive is an authored two-strand schematic with a declared pair count and illustrative colors; it is not atomistic or sequence-specific DNA geometry.')
     elif kind == "virus":
         obj = sphere(name+" lipid envelope", radius, mat, 6)
         obj.data.materials.append(material(name+" inner membrane",(.24,.30,.33)))
@@ -454,7 +491,20 @@ def frame_scene(request):
         raise ValueError("Camera position and target must be distinct at the scene scale")
     bpy.ops.object.camera_add(location=position)
     camera=bpy.context.object;camera.name="Research inspection camera"
-    camera.rotation_euler=(target-position).to_track_quat('-Z','Y').to_euler()
+    if authored and authored.get("up") is not None:
+        up=vector(authored["up"])
+        if up.length<1e-9:
+            raise ValueError("Camera up must be a nonzero finite source-coordinate direction")
+        back=(position-target).normalized()
+        right=up.normalized().cross(back)
+        if right.length<1e-8:
+            raise ValueError("Camera up must not be parallel to its viewing direction")
+        right.normalize()
+        vertical=back.cross(right).normalized()
+        camera.rotation_mode='QUATERNION'
+        camera.rotation_quaternion=Matrix((right,vertical,back)).transposed().to_quaternion()
+    else:
+        camera.rotation_euler=(target-position).to_track_quat('-Z','Y').to_euler()
     camera.data.lens=lens;camera.data.clip_end=max(1000,(position-target).length*4)
     camera.data.dof.use_dof=True;camera.data.dof.focus_distance=(position-target).length;camera.data.dof.aperture_fstop=12
     bpy.context.scene.camera=camera
@@ -509,21 +559,56 @@ def cycles_devices(scene, enabled=True):
     return {"backend":"CPU","devices":["Cycles CPU"],"fallback":"No compatible Cycles GPU device initialized","probes":probes}
 
 
+def apply_presentation(settings):
+    """Presentation-only revisions; source geometry and coordinates are retained."""
+    selected=set(str(value) for value in settings.get('selectedIds', []))
+    hidden=set(str(value) for value in settings.get('hiddenIds', []))
+    for obj in bpy.context.scene.objects:
+        if obj.type != 'MESH':
+            continue
+        identity=str(obj.get('phaseforge_node_id', obj.name))
+        obj.hide_render=identity in hidden
+        for slot in obj.material_slots:
+            if not slot.material or not slot.material.use_nodes:
+                continue
+            slot.material=slot.material.copy()
+            shader=slot.material.node_tree.nodes.get('Principled BSDF')
+            if shader is None:
+                continue
+            if identity in selected:
+                tint=color(settings.get('highlightColor', '#ffd45a'))
+            elif settings.get('color'):
+                tint=color(settings['color'])
+            else:
+                tint=tuple(shader.inputs['Base Color'].default_value[:3])
+            if selected and settings.get('dimOthers') and identity not in selected:
+                tint=tuple(value*.22 for value in tint)
+            contrast=number(settings.get('contrast'),1,.1,3)
+            tint=tuple(max(0,min(1,(value-.5)*contrast+.5)) for value in tint)
+            shader.inputs['Base Color'].default_value=(*tint,1)
+            shader.inputs['Alpha'].default_value=number(settings.get('opacity'),1,.05,1)
+            slot.material.diffuse_color=(*tint,shader.inputs['Alpha'].default_value)
+
+
 def main():
     global STYLE
     arguments=sys.argv[sys.argv.index("--")+1:]
     source,out=Path(arguments[0]).resolve(),Path(arguments[1]).resolve()
-    budget_seconds=max(1,int(arguments[2]));memory_budget=int(arguments[3])
+    budget_seconds=max(0,int(arguments[2]));memory_budget=int(arguments[3])
     if source.stat().st_size>48*1024*1024:
         raise ValueError("Input exceeds the render data budget")
     payload=json.loads(source.read_text(encoding="utf-8"));request=payload["request"]
     STYLE=request["style"]
-    threading.Thread(target=watchdog,args=(budget_seconds,int(payload["parent_pid"])),daemon=True).start()
+    # Zero is explicit timer-off under the host's process-tree supervisor.
+    if budget_seconds:
+        threading.Thread(target=watchdog,args=(budget_seconds,int(payload["parent_pid"])),daemon=True).start()
     bpy.ops.wm.read_factory_settings(use_empty=True)
     started=time.monotonic()
     provenance=build_geometry(payload)
     geometry=finalize_geometry()
     mapping=frame_scene(request)
+    appearance=payload.get('presentation') or {}
+    apply_presentation(appearance)
     scene=bpy.context.scene
     scene.render.engine="CYCLES"
     scene.cycles.samples=min(256,max(16,int(request["samples"])))
@@ -539,8 +624,11 @@ def main():
     scene.render.filepath=str(out/"render.png")
     world=bpy.data.worlds.new("Scientific darkroom");world.use_nodes=True
     world.node_tree.nodes["Background"].inputs["Color"].default_value=(.012,.022,.033,1)
+    if appearance.get('background'):
+        world.node_tree.nodes["Background"].inputs["Color"].default_value=(*color(appearance['background']),1)
     world.node_tree.nodes["Background"].inputs["Strength"].default_value=.3 if request["style"]=="microscopy" else .6
     scene.world=world
+    scene.view_settings.exposure=math.log2(number(appearance.get('exposure'),1,.05,8))
     try:
         scene.view_settings.view_transform="AgX"
     except TypeError:

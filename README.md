@@ -1,177 +1,111 @@
-# PhaseForge 0.8.0-alpha.1
+# PhaseForge 0.9.0
 
-PhaseForge is a local scientific research workbench: gather public evidence, build
-experiments, 3D scenes or engineering designs, run supported calculations and local
-renderers, inspect the results, and decide what to test next. It combines a Rust
-runtime, an Electron desktop app, a Next.js interface and Three.js graphics. The
-core and Three.js use MIT licenses; optional native engines have their own
-[licenses and notices](THIRD_PARTY.md).
+PhaseForge is a local Windows scientific workbench. Describe a study in ordinary
+chat, run a supported numerical experiment, inspect its saved measurements and
+rendered states, and ask the AI to compare the evidence with a hypothesis.
+Projects, conversations, job history and numerical artifacts stay on your machine.
 
-**Alpha:** PhaseForge is for anyone who wants to undertake serious scientific
-research, with or without a formal scientific background. More features are coming.
-The app is free: no trial, paid unlocks or mandatory developer credits. AI features
-need an **OpenAI or Anthropic API key**; you do not need both. Your selected provider
-charges separately for API usage. No additional paid AI service is required.
-Blender, CadQuery and KiCad are optional free tools installed separately.
+The current release target is **Windows x64**. The desktop includes the interface,
+Rust backend and pinned Python scientific runtimes. AI requests use your selected
+OpenAI or Anthropic API account; provider usage is billed separately. The project
+uses the MIT license, with dependency notices in [THIRD_PARTY.md](THIRD_PARTY.md).
 
-The first alpha targets Windows x64, Linux x64 AppImage and Apple Silicon macOS
-ARM64 DMG. Intel and universal macOS packages are excluded. Exact candidate
-installation, security review and marketplace acceptance are separate release gates;
-preparing an installer does not establish admission. The preceding 0.8.0 development
-build was installed and tested on an RTX 4090 Laptop GPU, and package builds passed
-for Windows and Linux x64/ARM64. Windows/Linux ARM64 remain outside this initial
-listing; macOS ARM64 requires its own native evidence before admission.
-See the [validation record](docs/RELEASE_VALIDATION.md) for those executed baseline
-checks, and [alpha notes](RELEASE_NOTES_0.8.0-alpha.1.md) for the current changes.
+## Start a study
 
-## Use the workbench
+1. Open a project and choose the provider, model and supported reasoning effort.
+   Set an explicit timer, or choose **Off** for a finite task without a wall-clock
+   deadline. Off does not remove API, memory or storage limits.
+2. Ask a question in chat. When you want computation, specify the experiment,
+   parameters, measurements and comparison. An explanation-only request should
+   remain a discussion; a picture or animation alone is not a numerical result.
+3. Follow the agent/tool activity and individual jobs. Inspect the saved inputs,
+   progress, measurements and artifacts, then play back retained states in the
+   laboratory viewer. Ask for an additional camera or numerical instrument when
+   it would help test the interpretation.
+4. Pause work when needed. Compatible solver checkpoints can resume; generated
+   computations use a new immutable attempt. Previous results and failed attempts
+   remain available. Source or runtime changes can require a fresh run.
 
-1. Create a project in **Laboratory** and choose a model from the per-turn picker.
-2. Describe the question and measurements needed. **Build experiment** saves a
-   validated setup; **Build & run** also authorizes one bounded numerical run.
-3. Orbit, pan, zoom and inspect the scene. Open **Results** for measurements,
-   constraints and falsification checks, or **Setup** for the exact model.
-4. Repeat the setup, refine its time step, or extend its horizon without a model
-   call. A changed experiment receives an immutable revision.
-5. Open **Agents** for a timed research session with specialist collaborators,
-   experiment building, simulation, evidence review and bounded follow-up cycles.
-6. Open **3D & fabrication** for a **3D scene**, **CAD / fabrication**, or **Circuit board**.
-   **Build design** saves a declarative artifact. Inspect it, then choose
-   **Render in Blender** or **Build engineering files** for local execution.
+The agent can inspect actual images rendered from saved numerical states and
+compare them with measurements. Visual observations supplement the numerical
+record; higher image resolution does not improve an experiment's physical model.
 
-The model picker orders account-visible OpenAI and Anthropic text models from fast
-to most capable, recommends stronger models for difficult simulation design, and
-offers supported reasoning controls. Changes apply to the next request; session
-settings can change on resume. Recommendations are maintained heuristics, not
-benchmark guarantees. Provider API access and charges are separate from the app.
-OpenAI is used for live development checks in this environment.
+## Implemented scientific workflows
 
-**Run saved setup** and the equation editor also work without AI. Existing notes,
-sources, molecular imports, batch campaigns, verification dossiers and exports
-remain available through the laboratory's additional tools. Older Discovery links
-redirect into the workbench.
+| Workflow | Current scope |
+|---|---|
+| Molecular dynamics | Real OpenMM dynamics for a periodic argon-like Lennard-Jones fluid, with temperature/density controls, energy, pressure, RDF and MSD measurements. |
+| Spatial diffusion | A two-dimensional periodic scalar field, retained numerical arrays, point/region instruments and fixed-scale field playback. |
+| Classical mechanics | Interacting Newtonian point masses in an isolated domain, with explicit scaled units, trajectories and conservation instruments. |
+| Generated instruments | Python standard library and NumPy calculations inside the Windows LPAC boundary, with project-scoped inputs and retained outputs. Network access is unavailable inside this boundary. |
+| Batched studies and ML | Durable solver sweeps and a scoped pressure-surrogate study with frozen data roles, held-out evaluation, uncertainty and direct-solver fallback. Useful acceleration must be demonstrated, not assumed. |
 
-## Public research and Studio
+The bundled runtimes contain CPython 3.13.15, NumPy 2.4.6, OpenMM 8.5.2 and
+Pillow 12.3.0; the generated-code runtime contains Python and NumPy only. They are
+verified and copied locally without finding a host Python or downloading packages
+at experiment startup. Generated code cannot add packages to the bundled runtime.
 
-Turn on **Research mode** to retrieve bounded public literature metadata, RCSB
-structures or NASA imagery relevant to the brief. It is off by default. Studio's
-**Public research & assets** also supports explicit searches and direct CSV, JSON,
-PDB, GLB, STL, PNG and JPEG imports from a fixed set of scientific/data hosts.
-Original bytes, source URLs and SHA-256 hashes stay with the project. Deposited
-coordinates can supply the actual geometry of a molecular render; source matches
-are evidence to assess, not an automatic validation of the researcher's hypothesis.
+These are specific numerical models, not a general-purpose biological laboratory.
+The molecular adapter does not simulate HIV infection, drug binding or treatment
+efficacy. A saved molecular structure or an attractive render does not establish
+that those processes were calculated or that a wet-lab experiment can be replaced.
+See [the molecular model and its limits](docs/validation/molecular-lab.md) and
+the study evidence below.
 
-Studio uses the selected model and the same usage controls as chat. Revisions retain
-the prior design and supplied failure report. A visual or engineering request has
-its own artifact workflow and does not need a numerical experiment. The interactive
-viewer opens supported GLB/STL files, molecular surfaces and procedural scenes with
-camera and object inspection controls.
+## Long work, saved state and rendering
 
-Optional native engines produce inspectable files:
+Jobs and solver artifacts have durable identities independent of the model's
+context window. Context compaction retains a working summary and references to
+saved evidence; the application can read the original artifacts again. A model's
+summary is not a substitute for an array, checkpoint or execution receipt.
+After an interruption, unfinished work is available for explicit continuation.
+Actual solver time, model usage and rendering time are separate costs.
 
-- **Blender Cycles:** local CPU or compatible GPU rendering, PNG images, editable
-  Blender projects and GLB models. The saved report identifies the device used.
-- **CadQuery/OpenCascade:** Boolean solids and polygon extrusions exported as STEP
-  and STL, with geometric validity, volume and bounds checks.
-- **KiCad:** editable boards and local footprint libraries, native DRC and previews.
-  A manufacturing archive is produced only when the native checks report no issues.
+The interactive viewer uses retained trajectories or fields. **Blender is an
+optional, separately installed renderer** for additional views and exports;
+installing it does not add a scientific solver. Standalone illustrations remain
+labeled separately from numerical studies. Existing Studio, molecular imports,
+public research and CAD/PCB tools remain available; see
+[rendering](docs/BLENDER_RENDERING.md),
+[public research and Studio](docs/public-research-and-studio.md), and
+[optional CAD/PCB engines](docs/CAD_PCB_ENGINES.md).
 
-Blender, CadQuery and KiCad are installed separately; they are not bundled in the
-desktop installer. They have been exercised on this Windows x64 development machine.
-That does not establish availability or acceptance on Linux or ARM64. See
-[public intake and Studio](docs/public-research-and-studio.md),
-[Blender rendering](docs/BLENDER_RENDERING.md), and
-[native CAD/PCB setup](docs/CAD_PCB_ENGINES.md).
+## Current evidence
 
-## Procedural scenes and scientific evidence
+The evidence ledger distinguishes component checks, observed installed studies
+and the acceptance of an exact release artifact:
 
-Agents can author molecular atoms and bonds, protein ribbons, DNA helices, membranes,
-planets and rings, curves, surfaces, supplied streamlines and indexed meshes.
-The viewport supports object inspection, camera presets, clipping, image capture,
-quality controls and scene/camera export. Scene snapshots belong to their immutable
-runs. See [scientific scenes](docs/SCIENTIFIC_SCENES.md).
+- [Molecular lab](docs/validation/molecular-lab.md),
+  [installed reviewer variant](docs/validation/reviewer-variant.md), and
+  [extended installed study](docs/validation/installed-extended-research.md): real
+  numerical execution, retained trajectories and documented observation/recovery checks.
+- [Installed diffusion study](docs/validation/installed-diffusion-lab.md): completed
+  controlled comparison checked against an independent reference, with failed
+  operational attempts preserved.
+- [Mechanics component results](docs/validation/mechanics-lab-results.md): the
+  independent component study passed. The
+  [installed mechanics gate](docs/validation/installed-mechanics-results.md) remains pending.
+- [Installed ML study](docs/validation/installed-ml-study.md): full installed
+  evaluation remains pending; implementation and pilot checks do not establish
+  predictive usefulness or acceleration.
+- [Bundled runtime checks](docs/validation/runtime-v2.md) and
+  [Windows isolation](docs/SCIENTIFIC_ISOLATION.md): actual copied-runtime physics,
+  NumPy execution, access-denial probes and service recovery checks.
 
-Rendering and numerical execution are separate. Geometry may illustrate a hypothesis
-or use supplied structural coordinates; moving geometry can bind to retained solver
-entities. A membrane, molecule or accretion disk does not itself execute molecular
-dynamics, drug binding, fluid dynamics or general relativity. Scene provenance and
-numerical results identify what was supplied, conceptual or calculated.
+These earlier checks do not certify a new installer automatically. Final 0.9.0
+installation checks and [marketplace admission](docs/validation/marketplace-release-handoff.md)
+are separate; marketplace acceptance is not claimed here.
 
-Likewise, a Cycles microscopy style is an illustration, a molecular surface is an
-approximation derived from coordinates, a valid CAD solid is not a tested physical
-part, and passing PCB DRC does not establish electrical function.
+## Install or develop
 
-The executable solvers are currently:
+Use the [Windows guide](README.windows.md) for the packaged app, building the
+required runtime seeds, local packaging and development mode. Quit the existing
+app before switching installations, and keep projects and credentials during an
+upgrade. Native build tools are required only when building from source.
 
-- **ODE systems:** CPU f64 Euler/RK4 integration with up to 128 states, seeded search,
-  observables, constraints and trajectory measurements. Compatible small systems
-  can score search candidates using GPU f32, followed by CPU f64 replay.
-- **Classical particles:** one to three dimensions and up to 2,048 particles per
-  candidate, with authored radial forces, boundaries and external acceleration.
-  Finite-range interactions use exact spatial neighbor cells on CPU.
-
-Declared exploratory assumptions are supported when the researcher permits them.
-Missing empirical inputs and unavailable solvers remain explicit. A visualization
-or completed computational session does not establish clinical efficacy or physical
-validity. Molecular intake, diagnostics and QM/MM planning are preserved; external
-engine discovery does not constitute an executing docking, MD or quantum adapter.
-Read the [scientific scope](docs/SCIENTIFIC_SCOPE.md).
-
-## Long work and recovery
-
-Research sessions support one minute to seven days, bounded cycle counts and up to
-three specialists sharing a clock and usage limits. Artifacts, experiments, runs
-and reviews are saved locally. Pause preserves completed stages; cancel stops the
-session. App restarts pause sessions before their owned simulations can dispatch.
-Explicit resume continues the saved workflow.
-
-The runtime samples CPU/RAM, initializes eligible GPUs, checks memory admission
-and bounds numerical batches. Standalone searches save completed-generation
-checkpoints, including random-generator state, and recover under the original
-deadline. Resource failures can reduce batches or fall back to CPU without changing
-equations, seeds or the scientific horizon. The desktop makes up to three attempts
-to restart its owned engine after an unexpected exit.
-
-These are bounded recovery mechanisms, not OS memory isolation. Interrupted
-generations and final replay can restart; arbitrary integrator-step resume is not
-implemented. NPU inventory does not imply an available NPU solver. Multi-GPU farms,
-DGX/cluster orchestration and local open-source LLM inference remain roadmap work,
-not part of the current execution architecture. See
-[sessions](docs/research-sessions.md) and [compute/recovery](docs/COMPUTE_AND_RECOVERY.md).
-
-## Run or package locally
-
-The desktop bundles the exported interface and native Rust engine; it does not need
-a separate browser or production Next.js server. When a tray icon is available,
-closing the window keeps research running; **Quit PhaseForge** exits the app and
-its owned engine. Projects remain in local SQLite and provider keys stay in the
-operating-system credential store.
-
-Use the [Windows guide](README.windows.md), [Linux guide](README.linux.md) or
-[Apple Silicon guide](README.macos.md) for
-source builds, local packaging, development mode and prerequisites. Packaging
-commands explicitly disable publication. Do not run two backends against the same
-data directory. Back up existing data before testing a new build; reinstalling the
-app is not a request to erase research data or credentials.
-
-The legacy root PowerShell text helpers and shell scripts remain source-development
-utilities. They are not the desktop installer workflow. Native build tools are
-needed to build from source, not to launch a packaged application.
-
-## Further documentation
-
-- [Architecture](docs/ARCHITECTURE.md), [roadmap](docs/ROADMAP.md),
-  [API](docs/API.md), [security](docs/SECURITY.md), [usage](docs/USAGE_AND_COST.md).
-- [Scientific model viewer](docs/SCIENTIFIC_MODEL_VIEWER.md),
-  [public research and Studio](docs/public-research-and-studio.md),
-  [local rendering](docs/BLENDER_RENDERING.md), [CAD/PCB engines](docs/CAD_PCB_ENGINES.md).
-- [Direct experiment workflow](docs/EXPERIMENT_WORKFLOW.md),
-  [findings](docs/FINDINGS_WORKFLOW.md), [research programmes](docs/RESEARCH_PROGRAMMES.md).
-- [Discovery campaigns](docs/DISCOVERY_CAMPAIGNS.md),
-  [verification methods](docs/VERIFICATION_METHODS.md),
-  [verification dossiers](docs/VERIFICATION_DOSSIERS.md), [exports](docs/RESEARCH_EXPORT.md).
-- [Marketplace template](docs/DELORES_MARKETPLACE_TEMPLATE.md): packaging guidance;
-  only the exact accepted artifacts may be represented as marketplace validated.
-
-Historical validation records remain under [docs/history](docs/history/). Their
-results are not counted as fresh executions for the alpha candidate.
+Further references: [architecture](docs/ARCHITECTURE.md),
+[API](docs/API.md), [security](docs/SECURITY.md), and
+[usage and cost](docs/USAGE_AND_COST.md). Older validation and platform guides are
+retained in [release history](docs/history/), [Linux notes](README.linux.md) and
+[macOS notes](README.macos.md); they are not release targets or acceptance evidence
+for this Windows scientific package.

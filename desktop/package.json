@@ -1,6 +1,6 @@
 {
   "name": "phaseforge-desktop",
-  "version": "0.8.0-alpha.1",
+  "version": "0.9.0",
   "description": "Local scientific research and simulation workbench",
   "homepage": "https://github.com/delores88/PhaseForge",
   "desktopName": "science.phaseforge.desktop",
@@ -25,6 +25,8 @@
     "appId": "science.phaseforge.desktop",
     "productName": "PhaseForge",
     "asar": true,
+    "beforePack": "./build/check-source-resources.cjs",
+    "afterPack": "./build/check-packed-sources.cjs",
     "toolsets": {
       "nsis": "1.2.1",
       "appimage": "1.0.3"
@@ -37,6 +39,7 @@
       "server.cjs",
       "permissions.cjs",
       "backend-auth.cjs",
+      "renderer-diagnostics.cjs",
       "package.json"
     ],
     "extraResources": [
@@ -64,6 +67,14 @@
       {
         "from": "../THIRD_PARTY.md",
         "to": "THIRD_PARTY.md"
+      },
+      {
+        "from": "../tools/third-party/openmm-8.5.2",
+        "to": "tools/third-party/openmm-8.5.2"
+      },
+      {
+        "from": "runtime/third-party-sources/openmm",
+        "to": "third-party-sources/openmm"
       },
       {
         "from": "../docs/CAD_PCB_ENGINES.md",

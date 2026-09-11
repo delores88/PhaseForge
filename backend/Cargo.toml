@@ -1,6 +1,6 @@
 [package]
 name = "phaseforge-backend"
-version = "0.8.0-alpha.1"
+version = "0.9.0"
 edition = "2021"
 rust-version = "1.88"
 authors = ["Ben Van Dorn"]
@@ -13,6 +13,7 @@ gpu = ["dep:wgpu", "dep:bytemuck"]
 
 [dependencies]
 anyhow = "1.0"
+base64 = "0.22"
 async-trait = "0.1"
 axum = { version = "0.7.9", features = ["json", "macros", "ws"] }
 bytemuck = { version = "1.16", features = ["derive"], optional = true }
@@ -30,7 +31,7 @@ rayon = "1.10"
 reqwest = { version = "0.12", default-features = false, features = ["json", "rustls-tls"] }
 rusqlite = { version = "0.40.2", features = ["bundled"] }
 serde = { version = "1.0", features = ["derive"] }
-serde_json = "1.0"
+serde_json = { version = "1.0", features = ["float_roundtrip"] }
 sha2 = "0.10"
 sysinfo = "0.30"
 thiserror = "1.0"
@@ -43,6 +44,9 @@ tracing-subscriber = { version = "0.3", features = ["env-filter", "fmt"] }
 url = "2.5"
 uuid = { version = "1.8", features = ["serde", "v4"] }
 wgpu = { version = "0.19.4", features = ["wgsl"], optional = true }
+
+[target.'cfg(windows)'.dependencies]
+windows-sys = { version = "0.61", features = ["Win32_Foundation", "Win32_System_JobObjects", "Win32_System_Threading", "Win32_System_Diagnostics_ToolHelp", "Win32_Security", "Win32_Security_Isolation", "Win32_Security_Authorization", "Win32_Storage_FileSystem"] }
 
 [dev-dependencies]
 approx = "0.5"

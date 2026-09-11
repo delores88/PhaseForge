@@ -35,7 +35,7 @@ export function sourceIdentity(expected=process.env.GITHUB_SHA){
 }
 export function releaseTarget(platform=process.platform,architecture=process.arch){
   const name=({win32:'windows',linux:'linux',darwin:'macos'})[platform];
-  if(!name||(platform==='darwin'?architecture!=='arm64':architecture!=='x64'))throw Error('This ALPHA admits Windows/Linux x64 and macOS Apple Silicon arm64 only');
+  if(!name||(platform==='darwin'?architecture!=='arm64':architecture!=='x64'))throw Error('Native helper requires Windows/Linux x64 or macOS Apple Silicon arm64; the current release workflow builds Windows only');
   return {platform:name,architecture,folder:`${name}-${architecture}`};
 }
 export function hostedWorkspace(){

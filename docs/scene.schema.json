@@ -160,6 +160,7 @@
                     ]
                   },
                   "thickness": {
+                    "description": "For DNA, the exact backbone tube radius in scene units (default 0.16 times radius), from 0.000001 times radius through radius. Base halves use 0.38 times this tube radius.",
                     "anyOf": [
                       {
                         "type": "number"
@@ -170,6 +171,7 @@
                     ]
                   },
                   "turns": {
+                    "description": "For DNA, the number of helical turns, 0.5 through 24; default 4. DNA is a conceptual illustration, never sequence-specific or atomistic evidence.",
                     "anyOf": [
                       {
                         "type": "number"
@@ -180,6 +182,7 @@
                     ]
                   },
                   "count": {
+                    "description": "For DNA, the exact integer number of base pairs, 1 through 160. Each pair has two colored halves. Default floor(10 times turns), capped at 160. This is independent of smooth display tessellation.",
                     "anyOf": [
                       {
                         "type": "number"
@@ -280,6 +283,7 @@
                     ]
                   },
                   "colors": {
+                    "description": "For DNA, supply 2–8 #RRGGBB colors. The first two set the separate backbone colors and take precedence over node.color. Remaining colors repeat across successive base halves; if absent, contrasting default base colors are used. Without colors, node.color colors the first backbone, the second is gold, and four default base colors alternate.",
                     "anyOf": [
                       {
                         "type": "array",

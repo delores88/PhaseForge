@@ -2,11 +2,15 @@ import {useEffect,useMemo,useState} from 'react';
 import Link from 'next/link';
 import {CheckCircle2,FlaskConical,Play,Plus,RefreshCw,Search,ShieldAlert,Square,GitBranch} from 'lucide-react';
 import {api} from '@/lib/api';
+import {useModelSelection} from '@/lib/modelSelection';
 import {fmt} from '@/lib/discovery';
 import {initialVerification,validateVerification,terminalVerification,displayStatus,externalMeasurements,taskProgress} from '@/lib/verification';
 import ChatMarkdown from '@/components/workspace/ChatMarkdown';
 
 export default function VerificationLab({study}) {
+  const {getSelection,getSelectionError}=useModelSelection();
+  const modelError=getSelectionError(study.project_id);
+  const requestAdvisory=async id=>{const problem=getSelectionError(study.project_id);if(problem)throw Error(problem);const selection={...getSelection(study.project_id)};return api.verificationAgentReview(id,selection);};
   const candidates=useMemo(()=>study.trials.filter(t=>t.phase==='explore'&&t.eligible),[study.trials]);
   const [candidateId,setCandidateId]=useState(study.finalist_ids[0]||candidates[0]?.id||'');
   const selected=candidates.find(t=>t.id===candidateId)||candidates[0];
@@ -63,7 +67,7 @@ export default function VerificationLab({study}) {
         {mode==='evidence'&&<VerificationEvidence dossier={d}/>}
         {mode==='prior'&&<PriorWork dossier={d} assessment={a} onChanged={bump} onError={setError}/>}
         {mode==='review'&&<HumanReview dossier={d} assessment={a} onChanged={bump} onError={setError}/>}
-        {mode==='review'&&<section className="discoveryCard"><h3>Ask the Falsifier to review the gaps</h3><p>Optional metered advisory, grounded in this dossier. It cannot certify novelty or approve another experiment. Your existing Usage & cost controls and Stop all agents apply.</p><div className="discActions"><button className="button button--secondary" disabled={!!busy||live} onClick={()=>act('agent',async()=>setAdvisory((await api.verificationAgentReview(d.id)).response))}>Request metered AI review</button><Link href="/usage/">Usage & stopping controls</Link></div>{advisory&&<ChatMarkdown>{advisory.assistant_message?.content||advisory.notice}</ChatMarkdown>}<p className="discCaption">The research ZIP in the Publish tab now includes these frozen inputs, worker outputs, controls, comparison records, searches and human reviews.</p></section>}
+        {mode==='review'&&<section className="discoveryCard"><h3>Ask the Falsifier to review the gaps</h3><p>Optional metered advisory, grounded in this dossier. It cannot certify novelty or approve another experiment. Your existing Usage & cost controls and Stop all agents apply.</p><div className="discActions"><button className="button button--secondary" disabled={!!busy||live||!!modelError} onClick={()=>act('agent',async()=>setAdvisory((await requestAdvisory(d.id)).response))}>Request metered AI review</button>{modelError&&<span>{modelError} <Link href={`/?project=${study.project_id}`}>Choose in chat</Link></span>}<Link href="/usage/">Usage & stopping controls</Link></div>{advisory&&<ChatMarkdown>{advisory.assistant_message?.content||advisory.notice}</ChatMarkdown>}<p className="discCaption">The research ZIP in the Publish tab now includes these frozen inputs, worker outputs, controls, comparison records, searches and human reviews.</p></section>}
       </>}</>}
     </>}
   </section>;

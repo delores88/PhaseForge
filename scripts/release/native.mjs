@@ -8,6 +8,7 @@ import {_electron} from 'playwright-core';
 import {ROOT,command,copyEvidenceTree,hostedWorkspace,inside,inventory,machine,readJSON,releaseTarget,sha256,sleep,writeJSON} from './common.mjs';
 import {startInertListeners} from './legacy-listeners.mjs';
 import {installMacDmg,payloadLayout,removeMacApp} from './native-platform.mjs';
+import {createLaboratoryAcceptance} from './native-laboratory.mjs';
 
 const version=readJSON(path.join(ROOT,'desktop/package.json')).version;
 const {platform,architecture,folder:targetFolder}=releaseTarget();
@@ -112,7 +113,7 @@ async function session(executable,workspace,index,fixture){
   const environment={...process.env,PHASEFORGE_DATA_DIR:workspace,PHASEFORGE_DISABLE_GPU:'1'};
   for(const key of ['OPENAI_API_KEY','ANTHROPIC_API_KEY','GH_TOKEN','GITHUB_TOKEN','ACTIONS_ID_TOKEN_REQUEST_TOKEN','ACTIONS_ID_TOKEN_REQUEST_URL','NODE_OPTIONS','ELECTRON_RUN_AS_NODE'])delete environment[key];
   for(const key of Object.keys(environment))if(/(?:TOKEN|SECRET|API_KEY|PASSWORD|CREDENTIAL)/i.test(key))delete environment[key];
-  const known=new Map(),owners=new Map(),errors=[],requests=[],began=Date.now();let electronApp,appPID;
+  const known=new Map(),owners=new Map(),errors=[],requests=[],began=Date.now();let electronApp,appPID,peakRSS=0,peakSample=null;
   const identities=path.join(folder,'owned-processes.json');
   const trackOwner=pid=>{
     const records=probe('snapshot',['--pid',String(pid)]),owner=records.find(record=>record.pid===pid);
@@ -127,7 +128,9 @@ async function session(executable,workspace,index,fixture){
         const key=`${record.pid}:${record.created}`;known.set(key,record);sample.set(key,record);
       }
     }
-    writeJSON(identities,[...known.values()]);return [...sample.values()];
+    const rows=[...sample.values()],rss=rows.reduce((sum,item)=>sum+item.rss_bytes,0);
+    if(rss>peakRSS){peakRSS=rss;peakSample={at:new Date().toISOString(),rss_bytes:rss,processes:rows};writeJSON(path.join(folder,'peak-process-sample.json'),peakSample);}
+    writeJSON(identities,[...known.values()]);return rows;
   };
   try{
     electronApp=await _electron.launch({executablePath:executable,args:[`--user-data-dir=${path.join(workspace,'electron-profile')}`],env:environment,cwd:path.dirname(executable),chromiumSandbox:true,timeout:90000});
@@ -138,7 +141,7 @@ async function session(executable,workspace,index,fixture){
     const page=await electronApp.firstWindow({timeout:90000});
     page.on('pageerror',error=>errors.push(error.message));
     page.on('request',request=>{const url=new URL(request.url());if(['http:','https:'].includes(url.protocol)&&url.hostname!=='127.0.0.1')requests.push(url.origin);});
-    await page.waitForLoadState('domcontentloaded');await page.getByRole('link',{name:'PhaseForge · Alpha research workbench',exact:true}).waitFor({state:'visible',timeout:30000});
+    await page.waitForLoadState('domcontentloaded');await page.locator('a.primaryBrand').waitFor({state:'visible',timeout:30000});
     const appearance=()=>page.evaluate(()=>({theme:document.documentElement.dataset.theme,stored_theme:localStorage.getItem('phaseforge.theme'),prefers_light:matchMedia('(prefers-color-scheme: light)').matches}));
     const initialAppearance=await appearance();
     if(freshProfile){assert.equal(initialAppearance.stored_theme,null,'A fresh profile must have no seeded theme preference');assert.equal(initialAppearance.theme,'dark','The untouched fresh installation must default to dark mode');}
@@ -146,7 +149,7 @@ async function session(executable,workspace,index,fixture){
     writeJSON(path.join(folder,'initial-appearance.json'),{fresh_profile:freshProfile,...initialAppearance});
     if(index===1){
       await page.emulateMedia({colorScheme:'light'});await page.reload({waitUntil:'domcontentloaded'});
-      await page.getByRole('link',{name:'PhaseForge · Alpha research workbench',exact:true}).waitFor({state:'visible'});
+      await page.locator('a.primaryBrand').waitFor({state:'visible'});
       const underLightPreference=await appearance();
       assert.equal(underLightPreference.prefers_light,true);assert.equal(underLightPreference.stored_theme,null);assert.equal(underLightPreference.theme,'dark','An OS light preference must not replace the fresh dark default');
       writeJSON(path.join(folder,'default-under-light-preference.json'),{passed:true,...underLightPreference,scope:'The actual packaged entry page reloaded with Playwright renderer prefers-color-scheme: light emulation; no theme storage or DOM override, and no native operating-system setting change.'});
@@ -159,7 +162,7 @@ async function session(executable,workspace,index,fixture){
     assert.match(health.sqlite?.version||'',/^\d+\.\d+\.\d+$/,'Actual backend SQLite version is required');
     assert.ok(Number.isInteger(health.sqlite.version_number));assert.match(health.sqlite.source_id,/^[0-9-]+ [0-9:]+ [a-f0-9]+$/);
     assert.equal(health.sqlite.linkage,'bundled');
-    assert.equal(health.sqlite.version,'3.53.2','This ALPHA requires its reviewed SQLite baseline');assert.equal(health.sqlite.version_number,3053002);
+    assert.equal(health.sqlite.version,'3.53.2','This candidate requires its reviewed SQLite baseline');assert.equal(health.sqlite.version_number,3053002);
     assert.equal(runtime.versions.electron,readJSON(path.join(ROOT,'desktop/package.json')).devDependencies.electron,'Observed Electron differs from the locked package input');
     assert.equal(health.endpoint?.address,'127.0.0.1');
     const backendPort=health.endpoint.port;assert.ok(Number.isInteger(backendPort)&&backendPort>0&&backendPort<=65535);
@@ -184,11 +187,12 @@ async function session(executable,workspace,index,fixture){
       assert.ok(rows.some(row=>row.id===fixture.project.id),'Reopened installed app lost its fixture project');
       const retained=await call(page,`/api/runs/${fixture.run_id}`);assert.equal(retained.status,'completed');assert.equal(retained.result.metrics.final_x,fixture.final_x);
     }
+    const laboratory=platform==='windows'?createLaboratoryAcceptance({page,call,remember,observedProcesses:()=>[...known.values()],workspace,output,projectId:fixture.project.id,sourceCommit:process.env.GITHUB_SHA,version,backendSha256:await sha256(backend)}):null;
+    if(laboratory){if(index===1)await laboratory.firstLaunch();else await laboratory.reopen(index);}
     await page.goto(`http://127.0.0.1:7332/?project=${fixture.project.id}&run=${fixture.run_id}`,{waitUntil:'domcontentloaded'});
     await page.getByRole('button',{name:'Results',exact:true}).click({timeout:30000});
     await page.getByText('What we can say now',{exact:true}).waitFor({timeout:30000});
     writeJSON(path.join(folder,'findings-report.json'),await call(page,`/api/runs/${fixture.run_id}/findings`));
-    let peakRSS=0;
     for(let i=0;i<6;i++){const records=remember();peakRSS=Math.max(peakRSS,records.reduce((sum,item)=>sum+item.rss_bytes,0));assert.equal((await call(page,'/api/health')).status,'ok');await sleep(2000);}
     assert.deepEqual(requests,[],'Native fixture unexpectedly requested an external website');
     assert.deepEqual(errors,[],'Packaged page reported an uncaught JavaScript error');
@@ -201,6 +205,7 @@ async function session(executable,workspace,index,fixture){
     }
     writeJSON(path.join(folder,'saved-theme-before-quit.json'),await appearance());
     assert.deepEqual(requests,[]);assert.deepEqual(errors,[]);
+    if(laboratory&&index===1)await laboratory.beforeQuit();
     remember();const closed=electronApp.waitForEvent('close',{timeout:30000});
     const launcher=electronApp.process();
     const nativeExit=launcher.exitCode!==null||launcher.signalCode!==null?Promise.resolve({code:launcher.exitCode,signal:launcher.signalCode}):new Promise(resolve=>launcher.once('exit',(code,signal)=>resolve({code,signal})));
@@ -252,6 +257,13 @@ async function main(){
     assert.equal(host.machine,'arm64');host.macos_version=command('/usr/bin/sw_vers',['-productVersion']);host.macos_build=command('/usr/bin/sw_vers',['-buildVersion']);
   }
   const fixture=await session(executable,workspace,1,null);await session(executable,workspace,2,fixture);
+  if(platform==='windows'){
+    const observed=readJSON(path.join(output,'installed-payload.json'));
+    const args=['-B',path.join(ROOT,'scripts/release/managed_runtime.py'),'--workspace',workspace,'--seed-root',path.join(observed.runtime.resourcesPath,'runtime/runtime-seeds'),'--source-commit',process.env.GITHUB_SHA,'--output',path.join(output,'managed-runtime-materials.json')];
+    if(process.env.PHASEFORGE_SCIENCE_BOOTSTRAP_PYTHON)args.push('--bootstrap-python',process.env.PHASEFORGE_SCIENCE_BOOTSTRAP_PYTHON);
+    command(python,args,{timeout:180000,maxBuffer:1024*1024});
+    assert.equal(readJSON(path.join(output,'managed-runtime-materials.json')).integrity_valid,true);
+  }
   const backup=inside(root,path.join(root,'closed-data-backup')),restored=inside(root,path.join(root,'restored-data'));
   // All SQLite connections are closed before this file-level backup. Include any WAL/SHM files.
   copyEvidenceTree(workspace,backup,{filter:source=>path.relative(workspace,source).split(path.sep)[0]!=='electron-profile'});
@@ -272,12 +284,18 @@ async function main(){
   const legacyPorts=legacyListeners.receipts();
   writeJSON(path.join(output,'occupied-legacy-ports.json'),legacyPorts);
   assert.ok(legacyPorts.every(row=>row.connections===0&&row.received_bytes===0),'The packaged application probed an occupied legacy port');
-  const receipt={schema:'phaseforge.native-acceptance.v1',passed:true,source_commit:process.env.GITHUB_SHA,version,platform,architecture,host,artifact:{name:path.basename(artifact),bytes:fs.statSync(artifact).size,sha256:await sha256(artifact)},fresh_install:true,same_workspace_restart:true,offline_numerical_engine:true,normal_quit:true,uninstall:true,fixture_data_preserved:true,closed_database_backup_restore:true,fixture,retained_fixture:before,observed_at:new Date().toISOString(),limits:['No bundled local LLM or optional Blender/CAD engine was exercised.','Runner RAM and sampled RSS are recorded; they do not establish a minimum-RAM certification.','No prior-version upgrade/downgrade test.',process.platform==='darwin'?'macOS installation means copying PhaseForge.app from the read-only DMG into an isolated application directory; removal deletes only that app bundle. Direct instrumented launch does not certify quarantined Finder/Gatekeeper download handling.':'AppImage installation means copying the distributed portable executable to a new application directory; removal deletes that executable.']};
+  const receipt={schema:'phaseforge.native-acceptance.v1',passed:true,source_commit:process.env.GITHUB_SHA,version,platform,architecture,host,artifact:{name:path.basename(artifact),bytes:fs.statSync(artifact).size,sha256:await sha256(artifact)},fresh_install:true,same_workspace_restart:true,offline_numerical_engine:true,normal_quit:true,uninstall:true,fixture_data_preserved:true,closed_database_backup_restore:true,fixture,retained_fixture:before,observed_at:new Date().toISOString(),limits:['No bundled local LLM or optional Blender/CAD engine was exercised.','Runner RAM and sampled RSS are recorded; they do not establish a minimum-RAM certification.','No prior-version upgrade/downgrade test.',process.platform==='win32'?'Windows installation means running the exact NSIS installer into a fresh per-user directory; normal NSIS uninstall removes the application while fixture data and retained scientific outputs are checked separately.':process.platform==='darwin'?'macOS installation means copying PhaseForge.app from the read-only DMG into an isolated application directory; removal deletes only that app bundle. Direct instrumented launch does not certify quarantined Finder/Gatekeeper download handling.':'AppImage installation means copying the distributed portable executable to a new application directory; removal deletes that executable.']};
   if(macInstallation)receipt.macos_installation=macInstallation.receipt;
   receipt.occupied_legacy_ports=legacyPorts;
   receipt.dark_mode_original_color_branding=true;
   receipt.explicit_light_preference_survives_restart=true;
   receipt.branding_evidence='launch-*/initial-appearance.json, branding.json, window.png and window-compact.png';
+  if(platform==='windows'){
+    const laboratory=readJSON(path.join(output,'LABORATORY_ACCEPTANCE.json'));
+    assert.equal(laboratory.passed,true);assert.equal(laboratory.source_commit,process.env.GITHUB_SHA);
+    receipt.laboratory_evidence={path:'LABORATORY_ACCEPTANCE.json',sha256:await sha256(path.join(output,'LABORATORY_ACCEPTANCE.json'))};
+    receipt.managed_runtime_evidence={path:'managed-runtime-materials.json',sha256:await sha256(path.join(output,'managed-runtime-materials.json')),delivery:'bundled_immutable_seeds'};
+  }
   writeJSON(path.join(output,'NATIVE_ACCEPTANCE.json'),receipt);console.log(JSON.stringify({passed:true,platform,version,artifact:receipt.artifact.name}));
 }
 main().catch(error=>{writeJSON(path.join(output,'NATIVE_FAILURE.json'),{passed:false,error:String(error.stack||error),source_commit:process.env.GITHUB_SHA,recorded_at:new Date().toISOString()});console.error(error);process.exitCode=1;}).finally(async()=>{if(legacyListeners){writeJSON(path.join(output,'occupied-legacy-ports.json'),legacyListeners.receipts());await legacyListeners.close();}});

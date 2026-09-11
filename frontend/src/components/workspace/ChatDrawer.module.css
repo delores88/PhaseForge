@@ -1,0 +1,15 @@
+/* Width belongs to this resizable component, including wide desktop windows.
+   These rules supersede legacy page-level 40%/34% responsive clamps. */
+.drawer:global(.researchChat){width:var(--chat-width)!important;flex-basis:var(--chat-width)!important;max-width:60%!important;min-width:0!important;}
+.drawer:global(.researchChat--dragging){user-select:none;}
+.drawer :global(.researchHeaderTools){flex-wrap:wrap;}
+.drawer .composerToolbar{flex-wrap:nowrap;align-items:flex-end;gap:8px;}
+.drawer .composerToolbar>.composerTools{flex:1 1 auto;min-width:0;flex-direction:row;align-items:center;flex-wrap:wrap;}
+.drawer .composerToolbar>.sendActions{display:flex;flex:0 0 auto;margin-left:auto;align-self:flex-end;justify-content:flex-end;align-items:center;flex-direction:row;gap:6px;flex-wrap:nowrap;}
+.drawer .sendActions .composerAction{width:38px;height:38px;min-width:38px;border-radius:50%;cursor:pointer;}
+.drawer .sendActions .composerAction:global(.researchSend--stop){background:var(--danger-soft);border:1px solid var(--danger);color:var(--danger);}
+.drawer .sendActions .composerAction:disabled{cursor:default;}
+.drawer .sendActions .composerAction:focus-visible{outline:2px solid var(--text);outline-offset:3px;}
+.duration{display:flex;align-items:center;gap:8px;font-size:11px;color:var(--muted);}.duration select{max-width:125px!important;color:var(--text);}
+.duration input{width:72px;min-width:0;padding:5px 6px;border:1px solid var(--border);border-radius:5px;background:var(--panel);color:var(--text);}.steeringNote{margin:7px 4px;color:var(--muted);font-size:11px;line-height:1.5;}
+@media(max-width:720px){.drawer:global(.researchChat){position:relative;width:100%!important;flex-basis:auto!important;max-width:100%!important;min-height:500px;height:65dvh;}.drawer :global(.researchChatResize){display:none;}}

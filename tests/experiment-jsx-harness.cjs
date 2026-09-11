@@ -33,7 +33,12 @@ function harness(){
    if(id==='@/lib/api')return{api:{}};
    // These workflow tests exercise local button handlers, not provider catalog
    // requests or persistence of the global model-selection context.
-   if(id==='@/lib/modelSelection')return{useModelSelection:()=>({selection:{provider:'open_ai',model:'',reasoning_effort:null},setSelection:()=>{}})};
+   if(id==='@/lib/modelSelection')return{useModelSelection:()=>({selection:{provider:'open_ai',model:'fixture-model',reasoning_effort:null},getSelection:()=>({provider:'open_ai',model:'fixture-model',reasoning_effort:null}),getSelectionError:()=>null,setSelection:()=>{}})};
+   // These action tests do not render Markdown, apply CSS, or poll live jobs.
+   // Their real browser/rendering coverage lives in the separate frontend suites.
+   if(id.endsWith('ChatMarkdown'))return{__esModule:true,default:p=>React.createElement('div',{className:'fixtureMarkdown'},p.children)};
+   if(id.endsWith('.module.css'))return{__esModule:true,default:new Proxy({}, {get:(_,name)=>String(name)})};
+   if(id==='@/lib/liveRuntime')return{useLiveRuntime:()=>({telemetry:null,workflow:null,laboratoryJobs:[],error:null,receivedAt:0})};
    if(id==='@/lib/theme')return{ThemeToggle:()=>React.createElement('button',{'aria-label':'Theme fixture'},'◐')};
    if(id.includes('GenericViewport'))return{__esModule:true,default:p=>React.createElement('section',{className:'viewportPanel fixtureViewport','aria-label':'Viewport placeholder'},React.createElement('strong',null,p.run?'Recorded scene area':'Simulation will appear here'),React.createElement('small',null,'Viewport placeholder: this test does not execute WebGL.'))};
    if(id.includes('CommandPalette'))return{__esModule:true,default:()=>null};

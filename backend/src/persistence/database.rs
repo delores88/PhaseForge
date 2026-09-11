@@ -17,6 +17,25 @@ pub struct Database {
 }
 
 impl Database {
+    pub fn put_lab_record(&self, value: &crate::laboratory::LabJob) -> anyhow::Result<()> {
+        self.put("laboratory_job", &value.id.to_string(), value)
+    }
+    pub fn put_lab_record_with_message(&self,job:&crate::laboratory::LabJob,message:Option<&ConversationMessage>)->anyhow::Result<()>{
+        let mut connection=self.connection.lock();let transaction=connection.transaction()?;
+        transaction.execute("INSERT OR REPLACE INTO objects(kind,id,json) VALUES ('laboratory_job',?1,?2)",params![job.id.to_string(),serde_json::to_string(job)?])?;
+        if let Some(message)=message{
+            let saved:Option<String>=transaction.query_row("SELECT json FROM objects WHERE kind='message' AND id=?1",params![message.id.to_string()],|row|row.get(0)).optional()?;
+            if let Some(saved)=saved{let saved:ConversationMessage=serde_json::from_str(&saved)?;anyhow::ensure!(saved.project_id==message.project_id&&saved.role==message.role&&saved.content==message.content&&saved.metadata["laboratory_session_id"]==message.metadata["laboratory_session_id"],"Message identity is already bound to different content or a different conversation");}
+            transaction.execute("INSERT OR REPLACE INTO objects(kind,id,json) VALUES ('message',?1,?2)",params![message.id.to_string(),serde_json::to_string(message)?])?;
+        }
+        transaction.commit()?;Ok(())
+    }
+    pub fn lab_record(&self, id: Uuid) -> anyhow::Result<Option<crate::laboratory::LabJob>> {
+        self.get("laboratory_job", &id.to_string())
+    }
+    pub fn lab_records(&self) -> anyhow::Result<Vec<crate::laboratory::LabJob>> {
+        self.list("laboratory_job", 10000)
+    }
     /// Identify the linked database engine for packaged runtime evidence.
     pub fn sqlite_runtime(&self) -> anyhow::Result<serde_json::Value> {
         let (version, source_id): (String, String) = self.connection.lock().query_row(

@@ -6,9 +6,12 @@ import crypto from 'node:crypto';
 import assert from 'node:assert/strict';
 import {machine} from './release/common.mjs';
 import {auditableDependencies,auditableSection} from './release/auditable.mjs';
+import {stageSeeds} from './release/stage-seeds.mjs';
+import {stageOpenmmSources} from './release/openmm-sources.mjs';
 const root=path.resolve(path.dirname(fileURLToPath(import.meta.url)),'..');
 const arch=process.arch,os=process.platform==='win32'?'win':process.platform==='darwin'?'mac':process.platform;
 if(!['win','linux','mac'].includes(os)||!['x64','arm64'].includes(arch)||(os==='mac'&&arch!=='arm64'))throw Error('Build natively on Windows/Linux x64 or ARM64, or Apple Silicon macOS. Cross-labelled native binaries are not accepted.');
+if(os==='win'&&arch!=='x64')throw Error('This Windows scientific release bundles amd64 Python wheels and supports Windows x64 only.');
 const binary=path.join(root,'backend','target','release',os==='win'?'phaseforge-backend.exe':'phaseforge-backend');
 const identity=machine(binary);assert.equal(identity.architecture,arch,'Native backend architecture differs from its stage target');assert.equal(identity.format,({win:'pe',linux:'elf',mac:'macho'})[os]);
 const version=JSON.parse(fs.readFileSync(path.join(root,'desktop/package.json'),'utf8')).version;
@@ -16,6 +19,12 @@ const actual=execFileSync(binary,['--version'],{encoding:'utf8'}).trim();
 if(actual!==`PhaseForge ${version}`)throw Error(`Rebuild the native engine: expected ${version}, got ${actual}`);
 if(!fs.existsSync(path.join(root,'frontend/out/index.html')))throw Error('Build the frontend before packaging.');
 const dest=path.join(root,'desktop','runtime',os,arch);fs.mkdirSync(dest,{recursive:true});fs.copyFileSync(binary,path.join(dest,path.basename(binary)));
+if(os==='win'){
+  const sourceRoot=process.env.PHASEFORGE_RUNTIME_SEED_ROOT;
+  if(!sourceRoot)throw Error('Set PHASEFORGE_RUNTIME_SEED_ROOT to the verified build_seeds.py output before staging Windows. The scientific runtime must be bundled.');
+  await stageSeeds({sourceRoot,destination:dest,manifestRoot:path.join(root,'tools/runtime-seeds')});
+  await stageOpenmmSources();
+}
 if(os==='mac'){
   // Bind compiler output before signing, then preserve these staged signed bytes
   // with mac.signIgnore. Changing resource metadata after the outer seal is invalid.

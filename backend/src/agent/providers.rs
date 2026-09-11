@@ -53,6 +53,53 @@ pub struct ProviderClient {
 }
 
 impl ProviderClient {
+    /// Native tool calling and image inputs. Full provider receipts are retained by the caller.
+    pub async fn request_tool_turn(&self, input: &[Value], tools: &[Value], instructions: &str, max_tokens:u32) -> anyhow::Result<ProviderResponse> {
+        let (endpoint, mut body) = match self.provider {
+            ProviderKind::OpenAi => (endpoint(&self.base_url,"responses"),json!({
+                "model":self.model,"instructions":instructions,"input":input,"tools":tools,
+                "max_output_tokens":max_tokens,"store":false,"background":true,"include":["reasoning.encrypted_content"]
+            })),
+            ProviderKind::Anthropic => {
+                let mut messages:Vec<Value>=vec![];
+                for item in input {
+                    let (role, content)=match item["type"].as_str() {
+                        Some("function_call") => ("assistant",json!([{"type":"tool_use","id":item["call_id"],"name":item["name"],"input":serde_json::from_str::<Value>(item["arguments"].as_str().unwrap_or("{}")).unwrap_or(json!({}))}])),
+                        Some("function_call_output") => ("user",json!([{"type":"tool_result","tool_use_id":item["call_id"],"content":item["output"].as_str().unwrap_or("")}])),
+                        Some("reasoning") => continue,
+                        _ => {
+                            let role=item["role"].as_str().unwrap_or("user");
+                            let content=if let Some(text)=item["content"].as_str(){json!([{"type":"text","text":text}])}else{
+                                Value::Array(item["content"].as_array().into_iter().flatten().filter_map(|part|{
+                                    if let Some(text)=part["text"].as_str(){Some(json!({"type":"text","text":text}))}
+                                    else if let Some(url)=part["image_url"].as_str(){
+                                        url.strip_prefix("data:image/png;base64,").map(|data|json!({"type":"image","source":{"type":"base64","media_type":"image/png","data":data}}))
+                                    }else{None}
+                                }).collect())
+                            };(role,content)
+                        }
+                    };
+                    if let Some(last)=messages.last_mut().filter(|m|m["role"]==role){last["content"].as_array_mut().unwrap().extend(content.as_array().unwrap().iter().cloned());}
+                    else{messages.push(json!({"role":role,"content":content}));}
+                }
+                let definitions:Vec<Value>=tools.iter().map(|tool|json!({"name":tool["name"],"description":tool["description"],"input_schema":tool["parameters"]})).collect();
+                (endpoint(&self.base_url,"messages"),json!({"model":self.model,"system":instructions,"messages":messages,"tools":definitions,"max_tokens":max_tokens}))
+            }
+        };
+        if let Some(effort)=&self.reasoning_effort {
+            match self.provider {
+                ProviderKind::OpenAi=>{body["reasoning"]=json!({"effort":effort});},
+                ProviderKind::Anthropic=>{body["thinking"]=json!({"type":"adaptive"});body["output_config"]=json!({"effort":effort});},
+            }
+        }
+        let mut request=self.client.post(endpoint).json(&body);
+        match self.provider {
+            ProviderKind::OpenAi=>request=request.header(AUTHORIZATION,self.secret_header(true)?),
+            ProviderKind::Anthropic=>request=request.header("x-api-key",self.secret_header(false)?).header("anthropic-version","2023-06-01"),
+        }
+        let response=request.send().await.map_err(|error|self.request_error("Provider tool request failed",error))?;
+        self.read_response(response,"Provider returned an unreadable tool response").await
+    }
     fn secret_header(&self, bearer: bool) -> anyhow::Result<HeaderValue> {
         let value = if bearer { format!("Bearer {}", self.api_key) } else { self.api_key.clone() };
         let mut header = HeaderValue::from_str(&value).context("Invalid API key header")?;

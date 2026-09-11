@@ -3,7 +3,21 @@ use std::collections::BTreeMap;
 use chrono::{DateTime, Utc};
 use serde::{Deserialize, Serialize};
 use uuid::Uuid;
-use crate::domain::{ExperimentManifest, ObjectiveGoal, SearchVariableSpec};
+use crate::domain::{ExperimentManifest, ObjectiveGoal, SearchVariableSpec, ProviderKind};
+
+/// Captured at request admission; delayed work never inherits another conversation's defaults.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct StudyModelSelection {
+    pub provider: ProviderKind,
+    pub model: String,
+    pub reasoning_effort: Option<String>,
+}
+impl StudyModelSelection {
+    pub fn validate(&self)->anyhow::Result<()> {
+        if self.model.trim().is_empty(){anyhow::bail!("Choose a conversation model before requesting an AI review");}
+        Ok(())
+    }
+}
 
 #[derive(Debug, Clone, Copy, Serialize, Deserialize, PartialEq, Eq)]
 #[serde(rename_all="snake_case")]
@@ -32,6 +46,8 @@ pub struct StudyRecipe {
     pub relative_tolerance: f64,
     #[serde(default)]
     pub auto_review: bool,
+    #[serde(default,skip_serializing_if="Option::is_none")]
+    pub review_model: Option<StudyModelSelection>,
 }
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct Trial {

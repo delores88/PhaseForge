@@ -16,3 +16,4 @@ pub mod discovery;
 
 pub mod assurance;
 pub mod studio;
+pub mod laboratory;

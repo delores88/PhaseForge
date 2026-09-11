@@ -66,7 +66,9 @@ async fn search(State(state):State<Arc<AppState>>,Path(id):Path<Uuid>,Json(q):Js
     Ok(Json(json!({"search":record})))
 }
 async fn review(State(state):State<Arc<AppState>>,Path(id):Path<Uuid>,Json(r):Json<ReviewRequest>)->Result<Json<Value>,Error>{Ok(Json(json!({"review":state.assurance.save_review(id,r)?})))}
-async fn agent_review(State(state):State<Arc<AppState>>,Path(id):Path<Uuid>)->Result<Json<Value>,Error>{
+#[derive(Deserialize)]struct AgentReviewSelection{provider:crate::domain::ProviderKind,model:String,reasoning_effort:Option<String>}
+async fn agent_review(State(state):State<Arc<AppState>>,Path(id):Path<Uuid>,Json(selection):Json<AgentReviewSelection>)->Result<Json<Value>,Error>{
+    if selection.model.trim().is_empty(){return Err(missing("Choose a conversation model before requesting an AI review"));}
     let d=state.assurance.get(id)?;
     if matches!(d.state.as_str(),"running"|"stopping"){return Err(missing("stop or finish verification before an evidence review"));}
     let assessment=state.assurance.assessment(&d)?;
@@ -82,7 +84,7 @@ async fn agent_review(State(state):State<Arc<AppState>>,Path(id):Path<Uuid>)->Re
     let compact=json!({"dossier_id":d.id,"evidence_hash":assessment["evidence_hash"],"independent_numerical_evidence":numerical,"frozen_refinement":d.frozen_refinement,"recorded_signal_diagnostics":signals,"protocol":d.protocol,"source_run_hash":d.source_run_hash,"state":d.state,"gaps":assessment["gaps"],"catalog":assessment["catalog"],
         "within_study":d.within_study,"independent_agreement":assessment["independent_agreement"],"robustness":assessment["robustness"],"controls_passed":assessment["controls_passed"],
         "searches":assessment["searches"],"reviews":assessment["reviews"]});
-    let response=state.agent.review_verification(d.project_id,d.source_run.id,Uuid::new_v4(),compact).await?;
+    let response=state.agent.review_verification(d.project_id,d.source_run.id,Uuid::new_v4(),compact,Some(selection.provider),Some(selection.model),selection.reasoning_effort).await?;
     Ok(Json(json!({"response":response,"notice":"Metered advisory stored in project chat; no new experiment approved or scientific claim certified."})))
 }
 #[derive(Deserialize)]struct WindowQuery{

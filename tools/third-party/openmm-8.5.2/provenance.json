@@ -1,0 +1,138 @@
+{
+  "schema": "phaseforge.openmm-notices.v1",
+  "recorded_date": "2026-09-11",
+  "version": "8.5.2",
+  "commit": "36a30cbca54e727b216b606f3c011b67201eb8b4",
+  "wheel_sha256": "289c870e28c946b03992215f1f01f0b7d870f84a6f4c0a57e103bd8d62712b46",
+  "wheel_git_revision_matches_source": true,
+  "notice_files": [
+    {
+      "path": "Licenses.txt",
+      "bytes": 9305,
+      "sha256": "437b7168cc997abea3b5f2a9e0fb6894f96de77b9c69be428ccfcfe9bed58293",
+      "source_url": "https://raw.githubusercontent.com/openmm/openmm/36a30cbca54e727b216b606f3c011b67201eb8b4/docs-source/licenses/Licenses.txt",
+      "git_blob": "e87905a0f3a46cc8a3c3b2cd0cba6405b5ae5516",
+      "unchanged_upstream_file": true
+    },
+    {
+      "path": "LGPL.txt",
+      "bytes": 7637,
+      "sha256": "9ccf26cfe845e0eb8bb58053e47366e7ab6b697ae010f7650978d4b71b7d1fc1",
+      "source_url": "https://raw.githubusercontent.com/openmm/openmm/36a30cbca54e727b216b606f3c011b67201eb8b4/docs-source/licenses/LGPL.txt",
+      "git_blob": "cca7fc278f5c81ce23a2687208f0d63a6ea44009",
+      "unchanged_upstream_file": true
+    },
+    {
+      "path": "GPL.txt",
+      "bytes": 35147,
+      "sha256": "8ceb4b9ee5adedde47b31e975c1d90c73ad27b6b165a1dcd80c7c545eb65b903",
+      "source_url": "https://raw.githubusercontent.com/openmm/openmm/36a30cbca54e727b216b606f3c011b67201eb8b4/docs-source/licenses/GPL.txt",
+      "git_blob": "94a9ed024d3859793618152ea559a168bbcbb5e2",
+      "unchanged_upstream_file": true
+    },
+    {
+      "path": "XTC-NOTICES.txt",
+      "bytes": 3629,
+      "sha256": "03fd46aa85574440a934abbe87a0389e5dc50002f81f205ec68d23ec4076e312",
+      "extracted_blocks": [
+        {
+          "source_url": "https://raw.githubusercontent.com/openmm/openmm/36a30cbca54e727b216b606f3c011b67201eb8b4/wrappers/python/openmm/app/internal/xtc_utils/src/xdrfile.cpp",
+          "git_blob": "e69f5eba89812f5149826cf4616820dad7dd170b",
+          "notice_blocks": 2
+        },
+        {
+          "source_url": "https://raw.githubusercontent.com/openmm/openmm/36a30cbca54e727b216b606f3c011b67201eb8b4/wrappers/python/openmm/app/internal/xtc_utils/src/xtc.cpp",
+          "git_blob": "de65c83fef87d5cf7b5150d73ba0b5c56f248080",
+          "notice_blocks": 1
+        }
+      ]
+    }
+  ],
+  "native_files": {
+    "OpenMM.libs/lib/OpenMM.dll": {
+      "sha256": "4d9c81f238eb2b60d406eb4524d7a497eb842f08d7742fd9daa684c45a9e5c67",
+      "terms": "MIT + applicable OpenMM component terms"
+    },
+    "OpenMM.libs/lib/OpenMMAmoeba.dll": {
+      "sha256": "196df52fdbf5d9615b472d402d92b79e3303587b11faa7ba1be9f41cba244d33",
+      "terms": "MIT + applicable OpenMM component terms"
+    },
+    "OpenMM.libs/lib/OpenMMDrude.dll": {
+      "sha256": "bb7c8e6db6d8a56e4541cea13ce9bc6539e9d9588612f5db7d293a2234a1e12b",
+      "terms": "MIT + applicable OpenMM component terms"
+    },
+    "OpenMM.libs/lib/OpenMMRPMD.dll": {
+      "sha256": "679c81a43fd8a081c28ddefe9278ab6d5ff4c10a521fc038075d7c4615b26077",
+      "terms": "MIT + applicable OpenMM component terms"
+    },
+    "OpenMM.libs/lib/plugins/OpenMMAmoebaOpenCL.dll": {
+      "sha256": "355c21ff41efc8beabea0faf5dc16a7ed4350f681be04fc14d5ee32813ba7342",
+      "terms": "LGPL-3.0-or-later + applicable OpenMM component terms"
+    },
+    "OpenMM.libs/lib/plugins/OpenMMAmoebaReference.dll": {
+      "sha256": "f14971f7d0a6742f5bc6f889d34556a41114441075b38c1b81d29e15fcb59174",
+      "terms": "MIT + applicable OpenMM component terms"
+    },
+    "OpenMM.libs/lib/plugins/OpenMMCPU.dll": {
+      "sha256": "178e511e8d945721ab1a1390448e999847b446930ec7fe0a12cdb52d96b74aa8",
+      "terms": "MIT + applicable OpenMM component terms"
+    },
+    "OpenMM.libs/lib/plugins/OpenMMDrudeOpenCL.dll": {
+      "sha256": "15fc45bbb631fab926dbf005211c34d37ba90cc2c5946fc3cfee3162aeba0d20",
+      "terms": "LGPL-3.0-or-later + applicable OpenMM component terms"
+    },
+    "OpenMM.libs/lib/plugins/OpenMMDrudeReference.dll": {
+      "sha256": "adf11c22c4fad56bc93c30dfe618891b1ce83f78f370328c1c2c0ee3e2438997",
+      "terms": "MIT + applicable OpenMM component terms"
+    },
+    "OpenMM.libs/lib/plugins/OpenMMOpenCL.dll": {
+      "sha256": "5da5a51c0258787b0a804550218bcb4fcf1816a76dbae488ad103b0813074ed4",
+      "terms": "LGPL-3.0-or-later + applicable OpenMM component terms"
+    },
+    "OpenMM.libs/lib/plugins/OpenMMPME.dll": {
+      "sha256": "b82a47c198afe100aae01cc7d8e83f1749b4b1373556bbaf0c995afac5d00888",
+      "terms": "MIT + applicable OpenMM component terms"
+    },
+    "OpenMM.libs/lib/plugins/OpenMMRPMDOpenCL.dll": {
+      "sha256": "77ecbae81d10806fadc3e449ef4e7a6582d67e461df9e4c05ed542754f8d8591",
+      "terms": "LGPL-3.0-or-later + applicable OpenMM component terms"
+    },
+    "OpenMM.libs/lib/plugins/OpenMMRPMDReference.dll": {
+      "sha256": "c3d3a88b961eaf07ca2db1e6ab340ff19b9bcdbf3f2d76a2a56dfb2736b9494d",
+      "terms": "MIT + applicable OpenMM component terms"
+    },
+    "openmm/_openmm.cp313-win_amd64.pyd": {
+      "sha256": "8a4a9f583b94fd3c25c3eb8897e4a5994f0dd5eb4ea1e03c072c590f1c39dd11",
+      "terms": "MIT + applicable OpenMM component terms"
+    },
+    "openmm/app/internal/compiled.cp313-win_amd64.pyd": {
+      "sha256": "cabec7d379f95f208197f2d649ee495573056a648dada1562ecfaaf50aa7df17",
+      "terms": "MIT + applicable OpenMM component terms"
+    },
+    "openmm/app/internal/xtc_utils.cp313-win_amd64.pyd": {
+      "sha256": "5073e11f059d8e2271a34ee98fb962f240ed23b16ce6c768af87a10cb544b1d8",
+      "terms": "LGPL-3.0-or-later (XDR), MIT (Accellera), Sun RPC terms"
+    }
+  },
+  "source": {
+    "schema_version": 1,
+    "upstream_version": "8.5.2",
+    "commit": "36a30cbca54e727b216b606f3c011b67201eb8b4",
+    "source_url": "https://codeload.github.com/openmm/openmm/zip/36a30cbca54e727b216b606f3c011b67201eb8b4",
+    "source_archive": "openmm-8.5.2-36a30cbca54e727b216b606f3c011b67201eb8b4.zip",
+    "bytes": 23152521,
+    "sha256": "c6c604a769d6ceced546cb2d0d8af36a784a0506d51495023170d9fe3c6ccf1f",
+    "git_tree_api": "https://api.github.com/repos/openmm/openmm/git/trees/36a30cbca54e727b216b606f3c011b67201eb8b4?recursive=1",
+    "verified_git_blobs": 2255,
+    "submodules": 0,
+    "all_git_blob_ids_match": true,
+    "wheel_reported_git_revision": "36a30cbca54e727b216b606f3c011b67201eb8b4",
+    "wheel_sha256": "289c870e28c946b03992215f1f01f0b7d870f84a6f4c0a57e103bd8d62712b46",
+    "source_executed": false,
+    "source_rebuilt": false
+  },
+  "seed_manifest_sha256": "fcc53f3bc276e6c0101bdcc1f2d256b9f89942c9a6426b241d2a0aa4bb478aba",
+  "seed_bytes_changed": false,
+  "source_or_relink_build_executed": false,
+  "redistribution_acceptance": "pending corresponding PhaseForge source capture, source delivery, and owner review of rebuild materials"
+}

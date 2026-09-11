@@ -15,6 +15,12 @@ const MAX_ATOMS: usize = 100_000;
 const MAX_INFERRED_BOND_ATOMS: usize = 12_000;
 
 pub fn import_structure(request: ImportStructureRequest) -> anyhow::Result<MolecularStructure> {
+    import_structure_bounded(request, usize::MAX)
+}
+
+/// Reuse the same parser and coordinate policy while bounding inferred or
+/// supplied connectivity before diagnostics and serialized result expansion.
+pub(crate) fn import_structure_bounded(request: ImportStructureRequest, max_bonds: usize) -> anyhow::Result<MolecularStructure> {
     let name = request.name.trim();
     if name.is_empty() {
         bail!("structure name is required");
@@ -39,10 +45,13 @@ pub fn import_structure(request: ImportStructureRequest) -> anyhow::Result<Molec
     if atoms.len() > MAX_ATOMS {
         bail!("structure contains more than {MAX_ATOMS} atoms");
     }
+    if bonds.len() > max_bonds {
+        bail!("structure connectivity exceeds the {max_bonds}-bond import limit");
+    }
 
     if bonds.is_empty() {
         if atoms.len() <= MAX_INFERRED_BOND_ATOMS {
-            bonds = infer_bonds(&atoms);
+            bonds = infer_bonds(&atoms, max_bonds)?;
             warnings.push(
                 "Connectivity was absent, so bonds were inferred from geometry. Confirm bond orders and coordination before quantitative chemistry."
                     .to_owned(),
@@ -660,7 +669,7 @@ fn parse_xyz(content: &str) -> anyhow::Result<(Vec<MolecularAtom>, Vec<Molecular
     ))
 }
 
-fn infer_bonds(atoms: &[MolecularAtom]) -> Vec<MolecularBond> {
+fn infer_bonds(atoms: &[MolecularAtom], max_bonds: usize) -> anyhow::Result<Vec<MolecularBond>> {
     let mut bonds = Vec::new();
     for left_index in 0..atoms.len() {
         for right_index in left_index + 1..atoms.len() {
@@ -674,6 +683,9 @@ fn infer_bonds(atoms: &[MolecularAtom]) -> Vec<MolecularBond> {
                 (1.25 * (covalent_radius(&left.element) + covalent_radius(&right.element)))
                     .clamp(0.7, 2.35);
             if distance >= 0.35 && distance <= threshold {
+                if bonds.len() >= max_bonds {
+                    bail!("inferred connectivity exceeds the {max_bonds}-bond import limit; no truncated chemistry was substituted");
+                }
                 bonds.push(MolecularBond {
                     atom_a: left.id,
                     atom_b: right.id,
@@ -683,7 +695,7 @@ fn infer_bonds(atoms: &[MolecularAtom]) -> Vec<MolecularBond> {
             }
         }
     }
-    bonds
+    Ok(bonds)
 }
 
 fn deduplicate_bonds(bonds: &mut Vec<MolecularBond>) {

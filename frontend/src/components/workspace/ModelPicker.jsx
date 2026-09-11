@@ -1,49 +1,86 @@
-import {useEffect, useMemo, useState} from 'react';
+import {useEffect,useId,useMemo,useRef,useState} from 'react';
 import {createPortal} from 'react-dom';
-import {ChevronDown, Sparkles, RefreshCw, Globe2} from 'lucide-react';
-import {api} from '@/lib/api';
+import {ChevronDown,Sparkles,RefreshCw,Globe2,X} from 'lucide-react';
 import {useModelSelection} from '@/lib/modelSelection';
+import {eligibleModels,selectModel,shortlistModels} from '@/lib/modelChoices.mjs';
+import {invalidateModelCatalog,loadModelCatalog} from '@/lib/modelCatalog.mjs';
+import styles from './ModelPicker.module.css';
 
-const cache = new Map();
-export default function ModelPicker({providers=[], disabled=false, compact=false}) {
-  const {selection,setSelection}=useModelSelection();
-  const [position,setPosition]=useState({top:16,left:16}),[open,setOpen]=useState(false), [models,setModels]=useState([]), [error,setError]=useState(''), [loading,setLoading]=useState(false), [revision,setRevision]=useState(0);
-  const configured=providers.filter(p=>p.key_configured || p.configured);
-  const provider=configured.find(p=>p.provider===selection.provider) || configured.find(p=>p.provider==='open_ai') || configured[0];
+const providerName=id=>id==='open_ai'?'OpenAI':id==='anthropic'?'Anthropic':id;
+export default function ModelPicker({providers=[],disabled=false,compact=false}) {
+  const {selection,setSelection,setModelCatalog,selectionError,selectionReady}=useModelSelection();
+  const [open,setOpen]=useState(false),[models,setModels]=useState([]),[error,setError]=useState(''),[loading,setLoading]=useState(false),[revision,setRevision]=useState(0);
+  const [position,setPosition]=useState({top:16,left:16});
+  const trigger=useRef(null),panel=useRef(null),headingId=useId();
+  const configured=providers.filter(item=>item.key_configured||item.configured);
+  const provider=configured.find(item=>item.provider===selection.provider);
   useEffect(()=>{
-    if(!provider)return;
-    let alive=true;setLoading(true);setError('');
-    const key=provider.provider;
-    const promise=cache.get(key)||api.providerModels(key);
-    cache.set(key,promise);
-    promise.then(r=>{if(alive)setModels(r.models||[]);}).catch(e=>{cache.delete(key);if(alive){setModels([]);setError(e.message);}}).finally(()=>{if(alive)setLoading(false);});
+    const changed=()=>{invalidateModelCatalog();setRevision(value=>value+1);};
+    window.addEventListener('phaseforge:providers-changed',changed);
+    return()=>window.removeEventListener('phaseforge:providers-changed',changed);
+  },[]);
+  useEffect(()=>{
+    setModels([]);setError('');
+    if(!provider){setLoading(false);setModelCatalog(selection.provider,[],'Connect the selected provider in Settings, or choose another account.');return;}
+    let alive=true;setLoading(true);
+    const promise=loadModelCatalog(provider.provider,provider.base_url);
+    promise.then(response=>{
+      if(!alive)return;
+      const catalog=response.models||[];setModels(catalog);setModelCatalog(provider.provider,catalog);
+    }).catch(value=>{
+      if(alive){setError(value.message);setModelCatalog(provider.provider,[],value.message);}
+    }).finally(()=>{if(alive)setLoading(false);});
     return()=>{alive=false;};
-  },[provider?.provider,revision]);
-  const choices=useMemo(()=>[...models].sort((a,b)=>(a.capability_rank||0)-(b.capability_rank||0)||a.id.localeCompare(b.id)),[models]);
-  const sliderChoices=useMemo(()=>choices.filter(m=>!choices.some(base=>base.id!==m.id&&m.id.startsWith(base.id+'-')&&/^\d{4}-\d{2}-\d{2}$/.test(m.id.slice(base.id.length+1)))),[choices]);
-  const selected=choices.find(m=>m.id===(selection.model||provider?.model));
-  const recommended=choices.find(m=>m.recommended);
-  const label=selected?.display_name || selection.model || provider?.model || 'Choose a model';
-  const choose=m=>setSelection(v=>({...v,provider:provider.provider,model:m.id,reasoning_effort:m.recommended_reasoning||null}));
+  },[provider?.provider,provider?.base_url,selection.provider,revision,setModelCatalog]);
+  const choices=useMemo(()=>shortlistModels(models),[models]);
+  const selected=useMemo(()=>eligibleModels(models).find(model=>model.id===selection.model),[models,selection.model]);
+  const selectedIndex=choices.findIndex(model=>model.id===selection.model);
+  const label=selected?.display_name||selection.model||'Choose a model';
+  const effort=selection.reasoning_effort||'Provider default';
+  const close=()=>{setOpen(false);trigger.current?.focus();};
   useEffect(()=>{
-    if(provider&&provider.provider!==selection.provider)setSelection(v=>({...v,provider:provider.provider,model:provider.model||'',reasoning_effort:null}));
-  },[provider?.provider,selection.provider,setSelection]);
-  return <div className={`modelPicker ${compact?'modelPicker--compact':''}`}>
-    <button type="button" className="modelPickerTrigger" disabled={disabled} onClick={e=>{const r=e.currentTarget.getBoundingClientRect();setPosition({top:Math.max(16,Math.min(r.bottom+8,window.innerHeight-456)),left:Math.max(16,Math.min(r.left,window.innerWidth-326))});setOpen(v=>!v);}} aria-expanded={open} aria-label="Choose model for this turn"><Sparkles size={14}/><span>{label}</span><ChevronDown size={13}/></button>
-    <button type="button" className={`researchModeToggle ${selection.research_mode?'active':''}`} disabled={disabled} aria-pressed={!!selection.research_mode} title="Research mode sends this request to public scientific catalogs and saves retrieved sources and assets" onClick={()=>setSelection(v=>({...v,research_mode:!v.research_mode}))}><Globe2 size={14}/>{selection.research_mode?'Research on':'Research off'}</button>
-    {open&&createPortal(<div className="modelPickerPanel modelPickerPanel--floating" style={position} role="dialog" aria-label="Model selection">
-      <header><strong>Intelligence for this turn</strong><button type="button" aria-label="Refresh available models" onClick={()=>{cache.delete(provider?.provider);setRevision(v=>v+1);}} disabled={loading}><RefreshCw size={13}/></button></header>
-      <div className="modelProviderTabs">{configured.map(p=><button type="button" key={p.provider} className={provider?.provider===p.provider?'active':''} onClick={()=>setSelection(v=>({...v,provider:p.provider,model:p.model||'',reasoning_effort:null}))}>{p.provider==='open_ai'?'OpenAI':'Anthropic'}</button>)}</div>
-      {loading?<p>Loading your available models…</p>:choices.length>0?<>
-        <div className="modelRangeLabels"><span>Fast & economical</span><span>Most capable</span></div>
-        <input type="range" aria-label="Model capability" min="0" max={Math.max(0,sliderChoices.length-1)} value={Math.max(0,sliderChoices.findIndex(m=>m.id===selected?.id||selected?.id.startsWith(m.id+'-')))} onChange={e=>choose(sliderChoices[Number(e.target.value)])}/>
-        <label className="modelSelectLabel">Model<select aria-label="Model for this turn" value={selected?.id||''} onChange={e=>choose(choices.find(m=>m.id===e.target.value))}>{!selected&&<option value="">Select model</option>}{choices.map(m=><option key={m.id} value={m.id}>{m.display_name}{m.recommended?' · Recommended':''}</option>)}</select></label>
-        {selected?.description&&<p>{selected.description}</p>}
-        {selected?.reasoning_efforts?.length>0&&<label className="modelSelectLabel">Reasoning effort<select aria-label="Reasoning effort" value={selection.reasoning_effort||selected.recommended_reasoning||''} onChange={e=>setSelection(v=>({...v,reasoning_effort:e.target.value||null}))}>{selected.reasoning_efforts.map(e=><option key={e} value={e}>{e.charAt(0).toUpperCase()+e.slice(1)}</option>)}</select></label>}
-        {recommended&&<button type="button" className="modelRecommendation" onClick={()=>choose(recommended)}><Sparkles size={14}/><span>For complex simulations<strong>{recommended.display_name}{recommended.recommended_reasoning?` · ${recommended.recommended_reasoning}`:''}</strong></span></button>}
-      </>:<p>{error||'Add a provider key in Settings to discover models.'}{provider?.model&&' Your saved model is still selected.'}</p>}
-      <small>Changes apply to the next request. Provider API charges apply.</small>
-      <button type="button" className="button button--secondary" onClick={()=>setOpen(false)}>Done</button>
-    </div>,document.body)}
+    if(!open)return;
+    const key=event=>{
+      if(event.key==='Escape'){event.preventDefault();setOpen(false);trigger.current?.focus();}
+      if(event.key==='Tab'){
+        const items=Array.from(panel.current?.querySelectorAll('button:not(:disabled),input:not(:disabled),select:not(:disabled),a[href]')||[]);
+        if(!items.length)return;
+        if(event.shiftKey&&document.activeElement===items[0]){event.preventDefault();items.at(-1).focus();}
+        else if(!event.shiftKey&&document.activeElement===items.at(-1)){event.preventDefault();items[0].focus();}
+      }
+    };
+    panel.current?.querySelector('input[type="range"],button')?.focus();
+    window.addEventListener('keydown',key);
+    return()=>window.removeEventListener('keydown',key);
+  },[open]);
+  const choose=model=>{if(model&&provider)setSelection(value=>selectModel(value,provider.provider,model));};
+  function toggle(){
+    const bounds=trigger.current?.getBoundingClientRect();
+    setPosition({top:Math.max(12,Math.min((bounds?.bottom||8)+8,window.innerHeight-510)),left:Math.max(12,Math.min(bounds?.left||12,window.innerWidth-376))});
+    setOpen(value=>!value);
+  }
+  return <div className={`${styles.root} ${compact?styles.compact:''}`}>
+    <button ref={trigger} type="button" className={styles.trigger} disabled={disabled||!selectionReady} onClick={toggle} aria-expanded={open} aria-haspopup="dialog" aria-label={`Choose model for this conversation: ${label}; reasoning ${effort}`}><Sparkles size={14}/><span>{label}<small>{selection.model?effort:'For this conversation'}</small></span><ChevronDown size={13}/></button>
+    <button type="button" className={`${styles.research} ${selection.research_mode?styles.active:''}`} disabled={disabled} aria-pressed={!!selection.research_mode} title="Retrieve public scientific sources for this request" onClick={()=>setSelection(value=>({...value,research_mode:!value.research_mode}))}><Globe2 size={14}/><span>Research {selection.research_mode?'on':'off'}</span></button>
+    {open&&createPortal(<><div className={styles.backdrop} onClick={close}/><section ref={panel} className={styles.panel} style={position} role="dialog" aria-modal="true" aria-labelledby={headingId}>
+      <header><strong id={headingId}>Model for this conversation</strong><button type="button" onClick={close} aria-label="Close model selection"><X size={17}/></button></header>
+      <div className={styles.providers} aria-label="AI provider">{configured.map(item=><button type="button" key={item.provider} aria-pressed={item.provider===selection.provider} onClick={()=>{if(item.provider!==selection.provider)setSelection(value=>({...value,provider:item.provider,model:'',reasoning_effort:null}));}}>{providerName(item.provider)}</button>)}</div>
+      {!configured.length?<p>Save a provider key in Settings to discover your account’s models.</p>:!provider?<p>Your selected provider is unavailable. Choose a connected provider above.</p>:<>
+        <div className={styles.modelLabel}><strong>{label}</strong><span>{selection.model?effort:'Select a position below'}</span></div>
+        {loading?<p role="status">Checking available models…</p>:choices.length>0?<>
+          <div className={styles.sliderShell}>
+            <div className={styles.stops} aria-hidden="true" style={{gridTemplateColumns:`repeat(${choices.length},1fr)`}}>{choices.map(model=><i key={model.id}/>)}</div>
+            <input className={styles.slider} type="range" min="0" max={Math.max(0,choices.length-1)} step="1" value={Math.max(0,selectedIndex)} onChange={event=>choose(choices[Number(event.target.value)])} aria-label="Model capability" aria-valuetext={selectedIndex>=0?`${selectedIndex+1} of ${choices.length}: ${label}, reasoning ${effort}`:`Choose one of ${choices.length} available models`} disabled={disabled||choices.length===1}/>
+          </div>
+          <div className={styles.scale}><span>Fast & economical</span><span>Most capable</span></div>
+          <div className={styles.modelChoices}>{choices.map((model,index)=><button type="button" key={model.id} onClick={()=>choose(model)} aria-pressed={model.id===selection.model} title={model.id}><span>{index+1}</span><strong>{model.display_name||model.id}</strong></button>)}</div>
+          {selected&&<label className={styles.effort}>Reasoning effort<select value={selection.reasoning_effort||''} onChange={event=>setSelection(value=>({...value,reasoning_effort:event.target.value||null}))} disabled={disabled}><option value="">Provider default</option>{(selected.reasoning_efforts||[]).map(value=><option value={value} key={value}>{value.charAt(0).toUpperCase()+value.slice(1)}</option>)}</select></label>}
+          {selected?.description&&<p>{selected.description}</p>}
+          {selected&&selectedIndex<0&&<p>Your saved model is still available. The slider shows the current strongest {choices.length} choices; it has not replaced your selection.</p>}
+        </>:<p>{error||'No eligible research models were returned by this account.'}</p>}
+        {!!selectionError&&!loading&&<p className={styles.error} role="status">{selectionError}</p>}
+        <footer><span>{choices.length} eligible choices · future requests only</span><button type="button" onClick={()=>{invalidateModelCatalog();setRevision(value=>value+1);}} disabled={loading} aria-label="Refresh account models"><RefreshCw size={14}/>Refresh</button></footer>
+      </>}
+    </section></>,document.body)}
   </div>;
 }

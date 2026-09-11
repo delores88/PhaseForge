@@ -1,5 +1,6 @@
 // Source/contract audit only. Native compilation and provider tests are separate gates.
 import fs from 'node:fs';import path from 'node:path';import {fileURLToPath} from 'node:url';import {execFileSync} from 'node:child_process';
+import {credentialSaveContract,cannedPhysicsMarkers} from './source-contracts.mjs';
 const root=path.resolve(path.dirname(fileURLToPath(import.meta.url)),'..');
 const read=p=>fs.readFileSync(path.join(root,p),'utf8');let passed=0,failed=0;
 function check(name,ok){console.log(`${ok?'PASS':'FAIL'} ${name}`);ok?passed++:failed++;}
@@ -65,7 +66,7 @@ tokens('Admission is serialized and occurs before network',usage+agent,['gate: A
 tokens('No guessed rates; current and historical unpriced calls block cost enforcement',usage,['rates: Vec::new()','model has no rate card','historical calls are unpriced']);
 tokens('Model/key setup still independent',api+frontApi,['/api/providers/:provider/key','/api/providers/:provider/model','providerModels','saveProviderKey','saveProviderModel']);
 const settings=read('frontend/src/components/settings/SettingsView.jsx');
-check('Key save button not gated on model',settings.includes('!form.apiKey?.trim()')||settings.includes('!form.api_key?.trim()'));
+check('Key save button requires a nonblank key and idle request, independently of model',credentialSaveContract(settings));
 tokens('Actual live model discovery retained',providers,['list_models','openai_models','anthropic_models']);
 const shell=read('frontend/src/components/shared/AppShell.jsx'),workbench=read('frontend/src/components/workspace/ResearchWorkbench.jsx'),chat=read('frontend/src/components/workspace/ChatDrawer.jsx');
 check('Exactly one navigation aside', (shell.match(/<aside\b/g)||[]).length===1&&!shell.includes('activityRail')&&!shell.includes('contextSidebar'));
@@ -90,7 +91,7 @@ for(const file of frontendFiles){for(const m of read(rel(file)).matchAll(/(?:\bf
 }}
 check('Frontend relative/alias imports resolve',!unresolved.length);if(unresolved.length)console.error(unresolved.join('\n'));
 const runtime=files.filter(p=>/\.(rs|jsx|[cm]?js)$/.test(p)&&(rel(p).startsWith('backend/src/')||rel(p).startsWith('frontend/'))).map(p=>fs.readFileSync(p,'utf8')).join('\n');
-check('No named canned scientific cases added',!/(three[-_ ]body|figure[-_ ]eight|electron[-_ ]collapse|known[-_ ]answer[-_ ]seed)/i.test(runtime));
+check('No named canned scientific cases added',cannedPhysicsMarkers(runtime).length===0);
 const secretHits=files.filter(f=>/\.(rs|[cm]?js|jsx|json|toml|md|txt|sh|css|ya?ml)$/.test(f)).filter(f=>/sk-(?:ant-)?[a-zA-Z0-9_-]{24,}|-----BEGIN (?:RSA |EC |OPENSSH )?PRIVATE KEY-----/.test(fs.readFileSync(f,'utf8')));
 check('No embedded credentials detected',secretHits.length===0);
 const state=files.filter(f=>/\.(?:sqlite3|db)(?:-wal|-shm)?$|(?:^|[/\\])\.env(?:$|\.(?!example$))|\.pyc$/.test(f));check('No runtime databases or local secret files',state.length===0);

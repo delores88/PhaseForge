@@ -1,25 +1,29 @@
 import {useEffect,useRef,useState} from 'react';
 import {Box,Camera,Focus,Layers3,Maximize,Rotate3D,Upload,X} from 'lucide-react';
 import styles from './ScientificModelViewer.module.css';
+import CameraControls from './CameraControls';
 
 const EMPTY=[];
-export default function ScientificModelViewer({url,file,structure,title,style='microscopy',representation,onInspect,onCameraChange,selectedAtomIds=EMPTY,provenance,className=''}) {
+export default function ScientificModelViewer({url,file,structure,title,style='microscopy',representation,onInspect,onCameraChange,selectedAtomIds=EMPTY,provenance,displayPresentation,coordinateMapping,sourceUnits,onEngineReady,className=''}) {
   const host=useRef(null),panel=useRef(null),input=useRef(null),engine=useRef(null),options=useRef({});
   const [localFile,setLocalFile]=useState(null),[presentation,setPresentation]=useState(style),[mode,setMode]=useState('surface'),[quality,setQuality]=useState('balanced'),[ao,setAo]=useState(true),[cut,setCut]=useState(1);
   const [progress,setProgress]=useState(0),[loading,setLoading]=useState(false),[metadata,setMetadata]=useState(null),[selection,setSelection]=useState(null),[error,setError]=useState(''),[retry,setRetry]=useState(0),[settings,setSettings]=useState(false);
   const sourceFile=localFile||file,activeStructure=sourceFile||url?null:structure,hasInput=!!(sourceFile||url||activeStructure),displayRepresentation=representation||mode;
-  options.current={style:presentation,ao,cut,selectedAtomIds,onInspect,onCameraChange};
+  options.current={style:presentation,ao,cut,selectedAtomIds,onInspect,onCameraChange,displayPresentation};
+  const applyingCamera=useRef(false);
+  options.current.onCameraChange=value=>{if(!applyingCamera.current)onCameraChange?.(value);};
+  useEffect(()=>{if(displayPresentation?.camera&&engine.current){applyingCamera.current=true;try{engine.current.setCamera(displayPresentation.camera);}finally{applyingCamera.current=false;}}},[displayPresentation?.camera]);
   useEffect(()=>{setPresentation(style);},[style]);
   useEffect(()=>{setLocalFile(null);},[url,file]);
   useEffect(()=>{
     const controller=new AbortController();let current=null;
-    setSelection(null);setMetadata(null);setError('');setProgress(0);setLoading(hasInput);
+    setSelection(null);setMetadata(null);setError('');setProgress(0);setLoading(hasInput);applyingCamera.current=true;
     if(!hasInput){engine.current=null;return()=>controller.abort();}
     async function mount(){
       try{
         const {createScientificModelViewer}=await import('@/lib/model-viewer.mjs');if(controller.signal.aborted)return;
-        current=await createScientificModelViewer(host.current,{url:sourceFile||activeStructure?null:url,file:sourceFile,structure:activeStructure,representation:displayRepresentation,quality,signal:controller.signal,provenance,options:()=>options.current,onProgress:value=>{if(!controller.signal.aborted)setProgress(value);},onSelection:setSelection,onError:setError,onLoaded:meta=>{if(!controller.signal.aborted){setMetadata(meta);setLoading(false);}}});
-        if(controller.signal.aborted)current?.dispose();else engine.current=current;
+        current=await createScientificModelViewer(host.current,{url:sourceFile||activeStructure?null:url,file:sourceFile,structure:activeStructure,representation:displayRepresentation,quality,signal:controller.signal,provenance,coordinateMapping,sourceUnits,options:()=>options.current,onProgress:value=>{if(!controller.signal.aborted)setProgress(value);},onSelection:setSelection,onError:setError,onLoaded:meta=>{if(!controller.signal.aborted){setMetadata(meta);setLoading(false);}}});
+        if(controller.signal.aborted)current?.dispose();else{engine.current=current;onEngineReady?.(current);applyingCamera.current=false;}
       }catch(value){if(!controller.signal.aborted){setError(value.message||'This model could not be displayed.');setLoading(false);}}
     }
     mount();return()=>{controller.abort();current?.dispose();if(engine.current===current)engine.current=null;};
@@ -35,6 +39,6 @@ export default function ScientificModelViewer({url,file,structure,title,style='m
     {settings&&<aside className={styles.settings}><strong>Preview presentation</strong><label>Lighting<select value={presentation} onChange={e=>setPresentation(e.target.value)}><option value="microscopy">Microscopy</option><option value="studio">Studio</option></select></label>{activeStructure&&!representation&&<label>Representation<select value={mode} onChange={e=>setMode(e.target.value)}><option value="surface">Molecular surface</option><option value="space_filling">Atomic volumes</option><option value="ball_and_stick">Atoms and bonds</option></select></label>}<label>Detail<select value={quality} onChange={e=>setQuality(e.target.value)}><option value="low">Economy</option><option value="balanced">Balanced</option><option value="high">High</option></select></label><label>Ambient occlusion<input type="checkbox" checked={ao} onChange={e=>setAo(e.target.checked)} disabled={quality==='low'}/></label><label>Section cut<input aria-label="Model section cut" type="range" min="0" max="1" step=".01" value={cut} onChange={e=>setCut(Number(e.target.value))}/></label><label>Camera<select defaultValue="perspective" onChange={e=>engine.current?.fit(e.target.value)}><option value="perspective">Perspective</option><option value="xy">Front</option><option value="xz">Top</option><option value="yz">Side</option></select></label></aside>}
     {selection&&<aside className={styles.inspection}><button type="button" aria-label="Close model inspection" onClick={()=>{setSelection(null);engine.current?.clearSelection();}}><X size={14}/></button><span className={styles.eyebrow}>{selection.atom?'NEAREST ATOM':'SURFACE INSPECTION'}</span><strong>{selection.atom?`${selection.atom.element} · ${selection.atom.name||selection.atom.id}`:selection.name}</strong>{selection.atom&&<p>{selection.atom.residue_name} {selection.atom.residue_id}{selection.atom.chain_id?` · chain ${selection.atom.chain_id}`:''}</p>}<code>{(selection.atom?.position||selection.world_position).map(v=>Number(v).toPrecision(5)).join(' · ')}</code><small>{selection.units}{selection.atom&&displayRepresentation==='surface'?' · nearest coordinate to picked surface point':''}</small></aside>}
     {error&&<div className={styles.error} role="alert"><strong>{error}</strong><button type="button" onClick={()=>{setQuality('low');setRetry(v=>v+1);}}>Retry with Economy detail</button><button type="button" onClick={()=>input.current?.click()}>Choose another model</button></div>}
-    {hasInput&&<footer className={styles.footer}><span><Rotate3D size={13}/>Drag to orbit · right-drag to pan · scroll to zoom</span><div><button type="button" onClick={()=>input.current?.click()}><Upload size={12}/>Open GLB / STL</button><details><summary>Source & representation</summary><p>{explanation||'Source geometry is shown as supplied. Surface detail is not independent scientific evidence.'}{metadata?.spacing&&<small>Surface grid spacing: {metadata.spacing.toPrecision(3)} {metadata.units}. The source coordinates are unchanged.</small>}</p></details></div></footer>}
+    {hasInput&&<footer className={styles.footer}><span><Rotate3D size={13}/>Drag to orbit · right-drag to pan · scroll to zoom</span><div><CameraControls engineRef={engine} storageKey={url||activeStructure?.id||sourceFile?.name||"model"} selection={!!selection}/><button type="button" onClick={()=>input.current?.click()}><Upload size={12}/>Open GLB / STL</button><details><summary>Source & representation</summary><p>{explanation||'Source geometry is shown as supplied. Surface detail is not independent scientific evidence.'}{metadata?.spacing&&<small>Surface grid spacing: {metadata.spacing.toPrecision(3)} {metadata.units}. The source coordinates are unchanged.</small>}</p></details></div></footer>}
   </section>;
 }

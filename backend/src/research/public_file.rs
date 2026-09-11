@@ -3,7 +3,7 @@
 use anyhow::{bail,Context};
 use serde_json::{json,Value};
 
-const HOSTS:&[&str]=&["raw.githubusercontent.com","zenodo.org","www.ebi.ac.uk","ftp.ebi.ac.uk","files.rcsb.org","data.eso.org","www.eso.org"];
+const HOSTS:&[&str]=&["raw.githubusercontent.com","zenodo.org","www.ebi.ac.uk","ftp.ebi.ac.uk","files.rcsb.org","data.eso.org","www.eso.org","archive.ics.uci.edu","physionet.org","data.nist.gov","srdata.nist.gov","data.nasa.gov"];
 const EXTENSIONS:&[&str]=&["csv","json","pdb","stl","glb","png","jpg","jpeg"];
 pub(super) fn url(value:&str)->anyhow::Result<url::Url> {
     if value.len()>2048 || value.chars().any(char::is_control){bail!("Public file URL must be bounded HTTPS text without control characters");}

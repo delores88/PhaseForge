@@ -88,7 +88,7 @@ impl AgentService {
         }
         let provider=self.choose_provider(request.provider,request.model.as_deref())?.context("Configure an AI provider and active model")?;
         let status=self.provider_status(provider)?;
-        let model=request.model.clone().filter(|model|!model.trim().is_empty()).unwrap_or(status.model);
+        let model=request.model.clone().filter(|model|!model.trim().is_empty()).context("Choose a conversation model before building a design")?;
         let client=ProviderClient::new(provider,self.provider_key(provider)?.context("Provider key missing")?,model.clone(),status.base_url,self.client.clone())
             .with_reasoning(request.reasoning_effort.as_deref())?.with_schema(design_schema());
         let request_id=request.request_id.unwrap_or_else(Uuid::new_v4);

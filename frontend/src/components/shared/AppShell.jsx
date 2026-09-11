@@ -1,11 +1,13 @@
 import {version as appVersion} from "../../../package.json";
 import Link from "next/link";
 import { useRouter } from "next/router";
-import { Activity, Command, Cpu, Gauge, House, PanelLeftClose, PanelLeftOpen, Settings, Wallet, Plus, Folder } from "lucide-react";
+import { Activity, Command, Cpu, Gauge, House, PanelLeftClose, PanelLeftOpen, Settings, Wallet, Plus, Folder, LoaderCircle, CircleAlert } from "lucide-react";
 import { useEffect, useState } from "react";
 import CommandPalette from "./CommandPalette";
 import { ThemeToggle } from "@/lib/theme";
 import {api} from '@/lib/api';
+import {useLiveRuntime} from '@/lib/liveRuntime';
+import jobStyles from './SidebarJobs.module.css';
 const navigation = [
   { href:"/", label:"Laboratory", icon:House }, { href:"/runs/", label:"Runs", icon:Activity },
   { href:"/hardware/", label:"Compute", icon:Cpu }, { href:"/usage/", label:"Usage & cost", icon:Wallet },
@@ -13,6 +15,13 @@ const navigation = [
 ];
 export default function AppShell({ backend, hardware, eventState, title, subtitle, actions, children }) {
   const router = useRouter();
+  const {laboratoryJobs=[]}=useLiveRuntime();
+  const jobActive=job=>['queued','running','provisioning','waiting'].includes(job.state);
+  const jobUnread=job=>job.state==='completed'&&(!job.seen_at||Date.parse(job.seen_at)<Date.parse(job.completed_at||job.events?.findLast(e=>e.kind==='completed')?.at||job.updated_at));
+  const openJob=job=>{
+    if(router.pathname==='/')window.dispatchEvent(new CustomEvent('phaseforge:open-job',{detail:{job}}));
+    else router.push({pathname:'/',query:{project:job.project_id,lab_job:job.id}});
+  };
   const [collapsed, setCollapsed] = useState(false);
   const [paletteOpen, setPaletteOpen] = useState(false);
   const [projects,setProjects]=useState([]), [activeProject,setActiveProject]=useState(null);
@@ -44,12 +53,12 @@ export default function AppShell({ backend, hardware, eventState, title, subtitl
   const gpu = hardware?.adapters?.find((adapter) => adapter.selected);
   return <div className={`appFrame ${collapsed ? "appFrame--compact" : ""}`}>
     <aside className="primarySidebar" aria-label="Primary navigation">
-      <Link href="/" className="primaryBrand" title="PhaseForge · Alpha research workbench" aria-label="PhaseForge · Alpha research workbench">
+      <Link href="/" className="primaryBrand" title="PhaseForge · Scientific workbench" aria-label="PhaseForge · Scientific workbench">
         <img className="primaryBrandImage brandDark" src="/brand/phaseforge-horizontal-dark.svg?v=1.1" alt="" />
         <img className="primaryBrandImage brandLight" src="/brand/phaseforge-horizontal-light.svg?v=1.1" alt="" />
         <img className="primaryBrandSymbol brandDark" src="/brand/phaseforge-symbol-dark.svg?v=1.1" alt="" />
         <img className="primaryBrandSymbol brandLight" src="/brand/phaseforge-symbol-light.svg?v=1.1" alt="" />
-        <span><small>ALPHA · {appVersion}</small></span>
+        <span><small>SCIENTIFIC WORKBENCH</small></span>
       </Link>
       <button type="button" className="sidebarNew" onClick={newProject} title="New research project"><Plus size={16}/><span>New research</span></button>
       <div className="navSectionLabel">WORKSPACE</div>
@@ -58,7 +67,11 @@ export default function AppShell({ backend, hardware, eventState, title, subtitl
         return <Link key={href} href={href} title={label} aria-label={label} aria-current={active ? "page" : undefined} className={`primaryNavItem ${active ? "active" : ""}`}><Icon size={19} /><span>{label}</span></Link>;
       })}</nav>
       <div className="navSectionLabel">YOUR PROJECTS <span>{projects.length||''}</span></div>
-      <div className="sidebarProjects">{projects.map(p=><button type="button" key={p.id} title={p.name} className={`sidebarProject ${activeProject===p.id?'active':''}`} onClick={()=>chooseProject(p.id)}><Folder size={14}/><span>{p.name}</span></button>)}{!projects.length&&<p className="sidebarProjectEmpty">Your experiments and conversations live here.</p>}</div>
+      <div className="sidebarProjects">{projects.map(p=>{
+        const jobs=laboratoryJobs.filter(j=>j.project_id===p.id),working=jobs.some(jobActive),unread=jobs.some(jobUnread);
+        return <button type="button" key={p.id} title={p.name} className={`sidebarProject ${activeProject===p.id?'active':''}`} onClick={()=>chooseProject(p.id)}>{working?<LoaderCircle className={jobStyles.spin} size={14} aria-label="Work running"/>:<Folder size={14}/>}<span>{p.name}</span>{!working&&unread&&<i className={jobStyles.dot} aria-label="Unread completed work"/>}</button>;
+      })}{!projects.length&&<p className="sidebarProjectEmpty">Your experiments and conversations live here.</p>}</div>
+      {!!laboratoryJobs.length&&<div className={jobStyles.jobs} aria-label="Background jobs"><div className="navSectionLabel">JOBS</div>{[...laboratoryJobs].sort((a,b)=>Number(jobActive(b))-Number(jobActive(a))||Date.parse(b.created_at)-Date.parse(a.created_at)).slice(0,5).map(job=><button key={job.id} onClick={()=>openJob(job)} title={`${job.title} · ${job.state}`}>{jobActive(job)?<LoaderCircle size={14} className={jobStyles.spin}/>:jobUnread(job)?<i className={jobStyles.dot}/>:<Activity size={14}/>}<span>{job.title}<small>{job.state.replaceAll('_',' ')}</small></span></button>)}</div>}
       <div className="navBottom">
         <div className="navCompute" title={gpu?.name || "CPU fallback"}><Gauge size={16} /><span><small>DETECTED ACCELERATOR</small><strong>{gpu?.name || "CPU fallback"}</strong><em>{gpu ? `${gpu.vendor} · ${gpu.backend}` : `${hardware?.cpu?.logical_cores || "—"} CPU cores`}</em></span></div>
         <button type="button" className="navCollapse" onClick={toggle} aria-label={collapsed ? "Expand navigation" : "Collapse navigation"} title={collapsed ? "Expand navigation" : "Collapse navigation"}>

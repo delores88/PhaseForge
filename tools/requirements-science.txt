@@ -1,0 +1,5 @@
+# Exact runtime versions for the trusted OpenMM worker. A venv is dependency
+# isolation, not a security sandbox. The desktop launches only the shipped worker.
+openmm==8.5.2
+numpy==2.4.6
+pillow==12.3.0

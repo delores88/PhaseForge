@@ -29,6 +29,13 @@ function json(method, payload = {}) {
 }
 
 export const api = {
+  labJobs: (projectId,signal)=>request(`/api/laboratory/jobs${projectId ? `?project_id=${projectId}` : ""}`,{signal}),
+  labJob: (id,signal)=>request(`/api/laboratory/jobs/${id}`,{signal}),
+  labChat: (projectId,payload)=>request(`/api/projects/${projectId}/laboratory/chat`,json("POST",payload)),
+  labSteer: (id,payload)=>request(`/api/laboratory/jobs/${id}/steer`,json("POST",payload)),
+  labControl: (id,action,options={})=>request(`/api/laboratory/jobs/${id}/control`,json("POST",{action,...options})),
+  labSeen: id=>request(`/api/laboratory/jobs/${id}/seen`,json("POST")),
+  labObserve: (id,payload)=>request(`/api/laboratory/jobs/${id}/observations`,json("POST",payload)),
   studio: (path, payload, signal) => request(`/api/${path}`, {...(payload===undefined?{}:json('POST',payload)),signal}),
   tasks: (projectId, signal) => request(`/api/projects/${projectId}/tasks`, {signal}),
   task: (id, signal) => request(`/api/tasks/${id}`, {signal}),
@@ -46,8 +53,8 @@ export const api = {
   startStudy: id => request(`/api/discovery/studies/${id}/start`, json("POST")),
   pauseStudy: id => request(`/api/discovery/studies/${id}/pause`, json("POST")),
   cancelStudy: id => request(`/api/discovery/studies/${id}/cancel`, json("POST")),
-  nextStudyProposal: id => request(`/api/discovery/studies/${id}/next-proposal`, json("POST")),
-  reviewStudy: id => request(`/api/discovery/studies/${id}/review`, json("POST")),
+  nextStudyProposal: (id,selection) => request(`/api/discovery/studies/${id}/next-proposal`, json("POST",selection)),
+  reviewStudy: (id,selection) => request(`/api/discovery/studies/${id}/review`, json("POST",selection)),
   forkStudy: id => request(`/api/discovery/studies/${id}/fork`, json("POST")),
   notebook: (id, signal) => request(`/api/research/notebooks/${id}`, {signal}),
   saveNotebook: (id, value) => request(`/api/research/notebooks/${id}`, json("PUT", value)),
@@ -78,7 +85,7 @@ export const api = {
   addVerificationReference: payload => request("/api/verification/catalog",json("POST",payload)),
   verificationSearch: (id, query, consent) => request(`/api/verification/dossiers/${id}/search`,json("POST",{query,allow_public_query:consent})),
   saveVerificationReview: (id, payload) => request(`/api/verification/dossiers/${id}/review`,json("POST",payload)),
-  verificationAgentReview: id => request(`/api/verification/dossiers/${id}/agent-review`,json("POST")),
+  verificationAgentReview: (id,selection) => request(`/api/verification/dossiers/${id}/agent-review`,json("POST",selection)),
   evidenceWindow: (id, {series,start,end,max_points=512}={}, signal) => {
     const q=new URLSearchParams({max_points:String(max_points)});
     if(series)q.set("series",series);if(Number.isFinite(start))q.set("start",String(start));if(Number.isFinite(end))q.set("end",String(end));

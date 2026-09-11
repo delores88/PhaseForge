@@ -8,7 +8,7 @@ fn study()->Study {
     let base=ExperimentManifest::from_draft(Uuid::new_v4(),None,1,draft,"test only");let now=Utc::now();
     Study{id:Uuid::new_v4(),project_id:base.project_id,recipe:StudyRecipe{title:"Contract test".into(),hypothesis:"No scientific claim".into(),base_manifest_id:base.id,strategy:Strategy::MapElites,
         parameters:vec![SearchVariableSpec{name:"p".into(),target:"initial:x".into(),minimum:0.0,maximum:1.0}],objectives:vec![MetricGoal{metric:"state".into(),goal:ObjectiveGoal::Minimize}],
-        descriptors:vec![Descriptor{metric:"behavior".into(),minimum:0.0,maximum:1.0,bins:4}],exploration_trials:16,validation_finalists:2,wall_seconds:60,per_trial_seconds:10,seed:17,absolute_tolerance:1e-8,relative_tolerance:1e-3,auto_review:false},
+        descriptors:vec![Descriptor{metric:"behavior".into(),minimum:0.0,maximum:1.0,bins:4}],exploration_trials:16,validation_finalists:2,wall_seconds:60,per_trial_seconds:10,seed:17,absolute_tolerance:1e-8,relative_tolerance:1e-3,auto_review:false,review_model:None},
         recipe_hash:"fixture".into(),base_manifest:base,state:"draft".into(),stage:"".into(),trials:vec![],finalist_ids:vec![],finalists_frozen:false,elapsed_seconds:0.0,review_count:0,events:vec![],created_at:now,updated_at:now}
 }
 fn trial(s:&Study,index:usize,score:f64,behavior:f64)->Trial {

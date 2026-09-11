@@ -1,0 +1,19 @@
+# Active-session updates and custom time limits
+
+Source validation on 2026-09-11 uses temporary databases and local mock providers. This note does not claim an installed-app or live-provider demonstration.
+
+Chat can send an update while the current project has an active parent session. The update has its own stable request identity and stores its original text and retained file references. The user message and update event commit in one database transaction. A retry with the same identity and content returns the saved receipt; conflicting content or an existing unrelated message identity fails without changing the session.
+
+Updates preserve the original request, selected model/effort, absolute deadline and existing numerical inputs. They enter the durable journal at the next action boundary. Outstanding proposed tool calls are superseded before further execution; already recorded targets remain available for inspection, and an uncertain prepared receipt is explicitly uncertain. Completed tool receipts remain unchanged. Tool results precede the new user content so native tool protocol ordering is retained. A crash after the journal write can redeliver the missing timeline acknowledgement without duplicating context.
+
+An in-flight model answer is retained under its earlier assumptions. An atomic completion check prevents that answer from finishing a session with an unanswered saved update. The agent then addresses the update using the same captured model and remaining deadline. Solver, specialist-result and scheduled monitor waits yield to a new update without silently modifying or stopping the running calculation. A yielded monitor does not claim that its event was absent; it can be re-armed under the updated objective.
+
+The next-session time selector accepts the presets, Timer off, or custom whole minutes from 1 through 10,080. Numeric custom values and Off persist per project. Changing this selector or the model picker does not extend or alter the active session. Invalid custom drafts do not become an unlimited timer. If a session finishes just before an update arrives, only the explicit `session_finished` response starts a new session with the next choice captured at Send; uncertain network failures do not initiate duplicate work. Retained files from that race are reused by reference.
+
+Focused validation:
+
+- `cargo test --lib agent::laboratory::steering::tests -- --nocapture`: **6 passed**. Model/deadline/input preservation, duplicate updates, superseded actions, recovery acknowledgement, an in-flight visual proposal blocked before its side effect, stale final-answer completion, solver-wait yield and atomic message-identity rollback.
+- `cargo test --lib laboratory -- --nocapture`: **71 successful test results**, including all steering, receipt, compaction, team and intake tests; seven environment-gated Python/Blender/isolation checks printed skips. These skipped checks do not establish installed runtime behavior.
+- `node --test tests/chatDuration.test.mjs tests/labMessageDispatch.test.mjs tests/attachmentIntake.test.mjs tests/modelChoices.test.mjs tests/chatPresentation.test.mjs tests/markdown.test.mjs tests/workbenchRequests.test.mjs`: **26 passed**. Includes captured future selection, finish-race reuse, project isolation, no new work on uncertain failures, custom/Off persistence, source-byte intake, safe Markdown and navigation guards.
+
+Remaining installed checks are to send an update during a real provider turn and solver wait, navigate away and back, verify the saved acknowledgement and earlier artifact inputs, and inspect custom-limit/Off persistence through an app restart. Provider-slot waiting or an already active tool may delay the next action boundary; a saved update is not a claim that an in-flight computation was interrupted immediately.

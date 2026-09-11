@@ -1,8 +1,11 @@
+import {illustrationCoordinates,illustrationNodeId} from './illustration-coordinates.mjs';
 import {MODEL_LIMITS,readModelAsset} from './model-assets.mjs';
 import {enforceSafeModelMaterials} from './model-assets-shaders.mjs';
 import {createMolecularSurface,createMolecularBackbone,prepareMolecularCoordinates,DISPLAY_RADII_ANGSTROM} from './molecular-surface.mjs';
 import {ELEMENT_COLORS} from './scene.mjs';
 import {releaseRenderer,disposeObjectTree as disposeTree} from './viewer-resources.mjs';
+import {installCameraNavigation} from './viewer-camera.mjs';
+import {advanceRenderClock} from './viewer-cadence.mjs';
 
 async function loadModel(THREE,config) {
   if(config.structure){
@@ -35,9 +38,10 @@ async function loadModel(THREE,config) {
 }
 
 export async function createScientificModelViewer(host,config) {
-  const THREE=await import('three');let model=null,renderer=null,scene=null,controls=null,observer=null,composer=null,environment=null,raf=0,disposed=false;
-  const passes=[],listeners=[],auxiliary=[],originalMaterials=new Map();
-  const dispose=()=>{if(disposed)return;disposed=true;config.signal.removeEventListener('abort',dispose);cancelAnimationFrame(raf);observer?.disconnect();controls?.dispose();for(const [type,handler] of listeners)renderer?.domElement.removeEventListener(type,handler);passes.forEach(p=>p.dispose?.());composer?.dispose();environment?.dispose();disposeTree(model?.root);for(const o of auxiliary)disposeTree(o);releaseRenderer(renderer);};
+  const THREE=await import('three');let model=null,renderer=null,scene=null,controls=null,navigation=null,observer=null,composer=null,environment=null,raf=0,disposed=false;
+  const passes=[],listeners=[],auxiliary=[],originalMaterials=new Map(),contrastUniform={value:1};
+  const coordinates=illustrationCoordinates(config.coordinateMapping);
+  const dispose=()=>{if(disposed)return;disposed=true;config.signal.removeEventListener('abort',dispose);cancelAnimationFrame(raf);observer?.disconnect();navigation?.dispose();controls?.dispose();for(const [type,handler] of listeners)renderer?.domElement.removeEventListener(type,handler);passes.forEach(p=>p.dispose?.());composer?.dispose();environment?.dispose();disposeTree(model?.root);for(const o of auxiliary)disposeTree(o);releaseRenderer(renderer);};
   if(config.signal.aborted)return null;
   config.signal.addEventListener('abort',dispose,{once:true});
   try{
@@ -45,7 +49,7 @@ export async function createScientificModelViewer(host,config) {
     // Includes material arrays and line/point objects, before renderer creation.
     enforceSafeModelMaterials(model.root);
     config.onProgress?.(.94);
-    let triangles=0,meshes=0;const pickables=[];
+    let triangles=0,meshes=0;const pickables=[],sourceMaterials=new Set();
     model.root.traverse(object=>{
       if(object.isLight||object.isCamera){object.visible=false;return;}
       if(!object.isMesh)return;meshes++;const p=object.geometry?.attributes.position;if(!p)return;
@@ -53,8 +57,10 @@ export async function createScientificModelViewer(host,config) {
       if(triangles>MODEL_LIMITS.triangles*2||meshes>MODEL_LIMITS.nodes)throw new Error('Expanded model geometry exceeds the interactive drawing budget.');
       for(let i=0;i<p.array.length;i++)if(!Number.isFinite(p.array[i])||Math.abs(p.array[i])>1e15)throw new Error('The model contains invalid or out-of-range vertex coordinates.');
       object.castShadow=true;object.receiveShadow=true;pickables.push(object);
-      for(const material of Array.isArray(object.material)?object.material:[object.material])if(material){originalMaterials.set(material,{roughness:material.roughness,metalness:material.metalness});material.envMapIntensity=.35;}
+      const isolated=(Array.isArray(object.material)?object.material:[object.material]).map(material=>{if(!material)return material;sourceMaterials.add(material);return material.clone();});object.material=Array.isArray(object.material)?isolated:isolated[0];
+      for(const material of Array.isArray(object.material)?object.material:[object.material])if(material){originalMaterials.set(material,{roughness:material.roughness,metalness:material.metalness,color:material.color?.clone(),nodeId:illustrationNodeId(object)});material.envMapIntensity=.35;material.onBeforeCompile=shader=>{shader.uniforms.phaseforgeContrast=contrastUniform;shader.fragmentShader='uniform float phaseforgeContrast;\n'+shader.fragmentShader;shader.fragmentShader=shader.fragmentShader.replace('#include <colorspace_fragment>','#include <colorspace_fragment>\ngl_FragColor.rgb=clamp((gl_FragColor.rgb-0.5)*phaseforgeContrast+0.5,0.0,1.0);');};}
     });
+    sourceMaterials.forEach(material=>material.dispose());
     const bounds=new THREE.Box3().setFromObject(model.root);if(bounds.isEmpty()||!meshes)throw new Error('The file contains no visible triangle surface.');
     const center=bounds.getCenter(new THREE.Vector3()),size=bounds.getSize(new THREE.Vector3()),span=Math.max(size.x,size.y,size.z,1e-15),normalization=4/span;
     renderer=new THREE.WebGLRenderer({antialias:true,powerPreference:'high-performance'});renderer.setPixelRatio(Math.min(window.devicePixelRatio||1,config.quality==='low'?1:1.6));renderer.outputColorSpace=THREE.SRGBColorSpace;renderer.toneMapping=THREE.ACESFilmicToneMapping;renderer.toneMappingExposure=1.15;renderer.shadowMap.enabled=config.quality!=='low';renderer.shadowMap.type=THREE.PCFSoftShadowMap;renderer.localClippingEnabled=true;host.replaceChildren(renderer.domElement);
@@ -75,38 +81,45 @@ export async function createScientificModelViewer(host,config) {
     }
     const clipped=new THREE.Plane(new THREE.Vector3(-1,0,0),3),box=new THREE.Box3Helper(new THREE.Box3(),'#d6e9aa');box.visible=false;scene.add(box);auxiliary.push(box);
     const selectedGeometry=new THREE.SphereGeometry(1,12,8),selectedMaterial=new THREE.MeshBasicMaterial({color:'#f4d58b',transparent:true,opacity:.75,depthTest:false}),markers=new THREE.InstancedMesh(selectedGeometry,selectedMaterial,Math.min(2000,Math.max(model.atoms?.length||1,1)));markers.count=0;markers.renderOrder=10;origin.add(markers);auxiliary.push(markers);
-    let dirty=true,lastInteraction=performance.now(),lastTick=0,dragging=false,down=null,settingsStamp='',selectedObject=null;
-    const cameraState=()=>({position:camera.position.clone().divideScalar(normalization).add(center).toArray(),target:controls.target.clone().divideScalar(normalization).add(center).toArray(),units:model.meta.units||'source asset units'});
-    controls.addEventListener('start',()=>{dragging=true;lastInteraction=performance.now();});controls.addEventListener('change',()=>{dirty=true;lastInteraction=performance.now();});controls.addEventListener('end',()=>{dragging=false;config.options().onCameraChange?.(cameraState());});
+    let dirty=true,lastInteraction=performance.now(),lastTick=0,dragging=false,down=null,settingsStamp='',selectedObject=null,selectedPoint=null;
+    const cameraKey=`phaseforge.model.camera.${config.url||config.structure?.id||config.file?.name||config.structure?.name||'model'}`;
+    let savedCamera=null;try{savedCamera=JSON.parse(sessionStorage.getItem(cameraKey)||'null');}catch{}
+    const cameraState=()=>({position:coordinates.toSource(camera.position.clone().divideScalar(normalization).add(center).toArray()),target:coordinates.toSource(controls.target.clone().divideScalar(normalization).add(center).toArray()),up:coordinates.directionToSource(camera.up.toArray()),focal_length_mm:camera.getFocalLength(),units:config.sourceUnits||model.meta.units||'source asset units'});
+    const reportCamera=()=>{dirty=true;const value=cameraState();try{sessionStorage.setItem(cameraKey,JSON.stringify(value));}catch{}config.options().onCameraChange?.(value);};
+    controls.addEventListener('start',()=>{dragging=true;lastInteraction=performance.now();});controls.addEventListener('change',()=>{dirty=true;lastInteraction=performance.now();});controls.addEventListener('end',()=>{dragging=false;reportCamera();});
     const resize=()=>{const width=Math.max(1,host.clientWidth),height=Math.max(1,host.clientHeight);renderer.setSize(width,height,false);composer?.setSize(width,height);camera.aspect=width/height;camera.updateProjectionMatrix();dirty=true;};observer=new ResizeObserver(resize);observer.observe(host);resize();
-    function fit(view='perspective'){
-      controls.target.set(0,0,0);const distance=4/(2*Math.tan(THREE.MathUtils.degToRad(camera.fov)/2))*1.27/Math.min(camera.aspect,1),direction=view==='xy'?new THREE.Vector3(0,0,1):view==='xz'?new THREE.Vector3(0,1,.0001):view==='yz'?new THREE.Vector3(1,0,0):new THREE.Vector3(.65,.28,1).normalize();camera.position.copy(direction.multiplyScalar(distance));controls.update();dirty=true;config.options().onCameraChange?.(cameraState());
+    function fit(view='perspective',selection=false){
+      controls.target.set(0,0,0);let extent=4;if(selection&&selectedPoint){controls.target.copy(selectedPoint);extent=.65;}camera.up.set(0,1,0);const distance=extent/(2*Math.tan(THREE.MathUtils.degToRad(camera.fov)/2))*1.27/Math.min(camera.aspect,1),direction=view==='xy'?new THREE.Vector3(0,0,1):view==='xz'?new THREE.Vector3(0,1,.0001):view==='yz'?new THREE.Vector3(1,0,0):new THREE.Vector3(.65,.28,1).normalize();camera.position.copy(controls.target).addScaledVector(direction,distance);controls.update();reportCamera();
     }
-    fit();
+    function setCamera(value){if(!value)return;for(const key of ['position','target','up'])if(value[key]&&(!Array.isArray(value[key])||value[key].length!==3||!value[key].every(Number.isFinite)))return;if(value.position)camera.position.set(...coordinates.toAsset(value.position)).sub(center).multiplyScalar(normalization);if(value.target)controls.target.set(...coordinates.toAsset(value.target)).sub(center).multiplyScalar(normalization);if(value.up)camera.up.set(...coordinates.directionToAsset(value.up)).normalize();if(Number.isFinite(value.focal_length_mm))camera.setFocalLength(Math.max(20,Math.min(120,value.focal_length_mm)));controls.update();reportCamera();}
+    navigation=installCameraNavigation(THREE,{camera,controls,element:renderer.domElement,span:4,onChange:reportCamera,fit});
+    fit();setCamera(config.options().displayPresentation?.camera||savedCamera);
     const listen=(type,handler)=>{renderer.domElement.addEventListener(type,handler);listeners.push([type,handler]);};
     const ray=new THREE.Raycaster(),pointer=new THREE.Vector2();
     listen('pointerdown',e=>{down=[e.clientX,e.clientY];});
     listen('pointerup',e=>{
-      if(!down||Math.hypot(e.clientX-down[0],e.clientY-down[1])>5)return;down=null;const rect=renderer.domElement.getBoundingClientRect();pointer.set((e.clientX-rect.left)/rect.width*2-1,-(e.clientY-rect.top)/rect.height*2+1);ray.setFromCamera(pointer,camera);const hit=ray.intersectObjects(pickables,false).find(h=>config.options().cut>=1||h.point.x<=clipped.constant);if(!hit)return;
+      if(!down||Math.hypot(e.clientX-down[0],e.clientY-down[1])>5)return;down=null;const rect=renderer.domElement.getBoundingClientRect();pointer.set((e.clientX-rect.left)/rect.width*2-1,-(e.clientY-rect.top)/rect.height*2+1);ray.setFromCamera(pointer,camera);const hit=ray.intersectObjects(pickables,false).find(h=>h.object.visible&&(config.options().cut>=1||h.point.x<=clipped.constant));if(!hit)return;
       const worldPoint=hit.point.clone().divideScalar(normalization).add(center);let atom=hit.object.userData.atomRecords?.[hit.instanceId]||null;
       if(!atom&&model.atoms?.length){let best=Infinity;for(const a of model.atoms){const distance=worldPoint.distanceToSquared(new THREE.Vector3(...a.position));if(distance<best){atom=a;best=distance;}}}
-      selectedObject=atom?null:hit.object;world.updateMatrixWorld(true);box.visible=!!selectedObject;if(selectedObject)box.box.setFromObject(selectedObject);dirty=true;
-      const inspection={name:hit.object.name||hit.object.parent?.name||'Model surface',mesh_uuid:hit.object.uuid,atom,world_position:worldPoint.toArray(),units:model.meta.units||'source asset units',provenance:config.provenance||model.meta.description,camera:cameraState()};config.onSelection?.(inspection);config.options().onInspect?.(inspection);
+      selectedPoint=hit.point.clone();selectedObject=atom?null:hit.object;world.updateMatrixWorld(true);box.visible=!!selectedObject;if(selectedObject)box.box.setFromObject(selectedObject);dirty=true;
+      const inspection={name:hit.object.name||hit.object.parent?.name||'Model surface',mesh_uuid:hit.object.uuid,entity_id:illustrationNodeId(hit.object),atom,world_position:coordinates.toSource(worldPoint.toArray()),units:config.sourceUnits||model.meta.units||'source asset units',provenance:config.provenance||model.meta.description,camera:cameraState()};config.onSelection?.(inspection);config.options().onInspect?.(inspection);
     });
     listen('webglcontextlost',e=>{e.preventDefault();cancelAnimationFrame(raf);config.onError?.('Graphics memory was interrupted. Restore the model with Economy detail.');});
     function applySettings(){
-      const opts=config.options(),stamp=`${opts.style}|${opts.cut}|${opts.ao}|${opts.selectedAtomIds?.join(',')}`;if(stamp===settingsStamp)return;settingsStamp=stamp;dirty=true;
-      const microscopy=opts.style==='microscopy';scene.background=new THREE.Color(microscopy?'#101a22':'#d6dcdf');hemisphere.intensity=microscopy?.4:.65;renderer.toneMappingExposure=microscopy?.9:1.03;floor.material.opacity=microscopy?.28:.2;
-      for(const [material,base] of originalMaterials){if(base.roughness!==undefined)material.roughness=microscopy?Math.max(.6,base.roughness):base.roughness;if(base.metalness!==undefined)material.metalness=microscopy?Math.min(.08,base.metalness):base.metalness;}
+      const opts=config.options(),display=opts.displayPresentation||{},stamp=JSON.stringify([opts.style,opts.cut,opts.ao,opts.selectedAtomIds,display]);if(stamp===settingsStamp)return;settingsStamp=stamp;dirty=true;
+      const microscopy=opts.style==='microscopy';scene.background=new THREE.Color(display.background||(microscopy?'#101a22':'#d6dcdf'));hemisphere.intensity=microscopy?.4:.65;renderer.toneMappingExposure=Number.isFinite(display.exposure)?Math.max(.15,Math.min(3,display.exposure)):(microscopy?.9:1.03);contrastUniform.value=Number.isFinite(display.contrast)?Math.max(.5,Math.min(2,display.contrast)):1;floor.material.opacity=microscopy?.28:.2;
+      const selectedNodes=new Set((display.selectedIds||[]).map(String)),hiddenNodes=new Set((display.hiddenIds||[]).map(String));
+      for(const [material,base] of originalMaterials){if(base.color){material.color.copy(selectedNodes.has(base.nodeId)?new THREE.Color(display.highlightColor||'#ffd45a'):display.color?new THREE.Color(display.color):base.color);if(selectedNodes.size&&display.dimOthers&&!selectedNodes.has(base.nodeId))material.color.multiplyScalar(.22);}if(base.roughness!==undefined)material.roughness=microscopy?Math.max(.6,base.roughness):base.roughness;if(base.metalness!==undefined)material.metalness=microscopy?Math.min(.08,base.metalness):base.metalness;}
+      let selectedBounds=null;world.updateMatrixWorld(true);for(const object of pickables){const id=illustrationNodeId(object);object.visible=!hiddenNodes.has(id);if(object.visible&&selectedNodes.has(id)){const bounds=new THREE.Box3().setFromObject(object);if(selectedBounds)selectedBounds.union(bounds);else selectedBounds=bounds;}}if(selectedBounds){box.box.copy(selectedBounds);box.visible=true;selectedPoint=selectedBounds.getCenter(new THREE.Vector3());}else if(!selectedObject)box.visible=false;
       if(ao)ao.enabled=opts.ao!==false;clipped.constant=(opts.cut-.5)*5;renderer.clippingPlanes=opts.cut<1?[clipped]:[];
       const selected=new Set((opts.selectedAtomIds||[]).map(String)),atoms=(model.atoms||[]).filter(a=>selected.has(a.id)).slice(0,2000),matrix=new THREE.Matrix4();markers.count=atoms.length;
       const unitScale=model.meta.unitScale||1;
       atoms.forEach((atom,i)=>{const radius=(DISPLAY_RADII_ANGSTROM[atom.element]||1.7)*unitScale*.42;matrix.makeScale(radius,radius,radius);matrix.setPosition(...atom.position);markers.setMatrixAt(i,matrix);});markers.instanceMatrix.needsUpdate=true;
     }
     const render=()=>{applySettings();controls.update();if(composer)composer.render();else renderer.render(scene,camera);dirty=false;};
-    const draw=now=>{if(disposed)return;raf=requestAnimationFrame(draw);if(document.hidden)return;const interval=1000/((dragging||now-lastInteraction<700)?60:15);if(now-lastTick<interval)return;lastTick=now;applySettings();controls.update();if(dirty)render();};
+    const draw=now=>{if(disposed)return;raf=requestAnimationFrame(draw);if(document.hidden)return;const interval=1000/((dragging||now-lastInteraction<700)?60:15),clock=advanceRenderClock(now,lastTick,interval);if(clock===null)return;lastTick=clock;applySettings();controls.update();if(dirty)render();};
     render();raf=requestAnimationFrame(draw);config.onProgress?.(1);config.onLoaded?.({...model.meta,triangles:Math.round(triangles),meshes});
     if(config.signal.aborted){dispose();return null;}
-    return {dispose,fit,cameraState,clearSelection:()=>{box.visible=false;dirty=true;},capture:()=>{render();const link=document.createElement('a');link.download='phaseforge-model.png';link.href=renderer.domElement.toDataURL('image/png');link.click();}};
+    return {dispose,fit,cameraState,setCamera,navigate:navigation.command,focusSelection:()=>fit('perspective',true),clearSelection:()=>{box.visible=false;selectedPoint=null;dirty=true;},captureFrame:()=>{render();return {dataUrl:renderer.domElement.toDataURL('image/png'),camera:cameraState(),provenance:config.provenance||model.meta.description};},capture:()=>{render();const link=document.createElement('a');link.download='phaseforge-model.png';link.href=renderer.domElement.toDataURL('image/png');link.click();}};
   }catch(error){dispose();throw error;}
 }

@@ -1939,12 +1939,13 @@ checksum = "9b4f627cb1b25917193a259e49bdad08f671f8d9708acfd5fe0a8c1455d87220"
 
 [[package]]
 name = "phaseforge-backend"
-version = "0.8.0-alpha.1"
+version = "0.9.0"
 dependencies = [
  "anyhow",
  "approx",
  "async-trait",
  "axum",
+ "base64",
  "bytemuck",
  "chrono",
  "directories",
@@ -1974,6 +1975,7 @@ dependencies = [
  "url",
  "uuid",
  "wgpu",
+ "windows-sys 0.61.2",
 ]
 
 [[package]]

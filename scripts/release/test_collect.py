@@ -4,7 +4,7 @@ from unittest.mock import patch
 import collect
 
 COMMIT='1234567890abcdef1234567890abcdef12345678'
-VERSION='0.8.0-alpha.1'
+VERSION='0.8.0'
 
 class CandidateCollectionTests(unittest.TestCase):
     def setUp(self):
@@ -48,6 +48,22 @@ class CandidateCollectionTests(unittest.TestCase):
 
     def validate(self):return collect.validated_inputs(self.folder,self.target,VERSION,COMMIT)
 
+    def laboratory_fixture(self):
+        # These are deliberately tiny synthetic receipts, never a native pass.
+        evidence=self.folder/'laboratory/fixture.json';self.write(evidence,{'synthetic_fixture':True})
+        lab={'schema':'phaseforge.native-laboratory.v1','passed':True,'source_commit':COMMIT,'version':VERSION,'backend_sha256':'b'*64,'provider_tokens':0,
+             'checks':{key:True for key in ('openmm','diffusion','lpac','cancel','quit_recovery','backup_restore')},
+             'evidence_files':[{'path':'laboratory/fixture.json','bytes':evidence.stat().st_size,'sha256':collect.digest(evidence)}]}
+        runtimes={}
+        for kind in ('science-v2','python-numpy-v2'):
+            frozen=self.root/'tools/runtime-seeds'/f'{kind}.manifest.json';self.write(frozen,{'synthetic_fixture':kind})
+            runtimes[kind]={'seed_pin_verification':{'valid':True},'copy_pin_verification':{'valid':True},'copy_comparison':{'valid':True},'frozen_source_manifest':{'matches_installed_seed_manifest':True,'sha256':collect.digest(frozen)}}
+        managed={'source_commit':COMMIT,'delivery':'bundled_immutable_seeds','integrity_valid':True,'runtimes':runtimes}
+        for key,name,value in [('laboratory_evidence','LABORATORY_ACCEPTANCE.json',lab),('managed_runtime_evidence','managed-runtime-materials.json',managed)]:
+            self.write(self.folder/name,value);self.acceptance[key]={'path':name,'sha256':collect.digest(self.folder/name)}
+        self.write(self.folder/'NATIVE_ACCEPTANCE.json',self.acceptance)
+        return lab,managed
+
     def test_native_target_mapping_rejects_cross_labeling_and_unsupported_hosts(self):
         self.assertEqual(collect.release_target('Windows','AMD64')['folder'],'windows-x64')
         self.assertEqual(collect.release_target('Linux','x86_64')['folder'],'linux-x64')
@@ -60,8 +76,8 @@ class CandidateCollectionTests(unittest.TestCase):
         final=self.folder/'candidate';prefix=f'PhaseForge_{VERSION}_macos_arm64'
         manifest=collect.load(final/f'{prefix}_BUILD_MANIFEST.json')
         self.assertEqual((manifest['platform'],manifest['architecture'],manifest['installer_format']),('macos','arm64','macos-dmg'))
-        self.assertEqual(manifest['channel'],'beta') # Required marketplace enum, even for alpha prerelease versions.
-        self.assertEqual(manifest['version'],VERSION);self.assertTrue(manifest['intended_prerelease'])
+        self.assertEqual(manifest['channel'],'stable')
+        self.assertEqual(manifest['version'],VERSION);self.assertFalse(manifest['intended_prerelease'])
         self.assertEqual(manifest['source_commit'],COMMIT);self.assertEqual(manifest['workflow']['commit'],COMMIT)
         self.assertEqual(manifest['observed_native_host'],self.acceptance['host'])
         signing=manifest['macos_code_signing'];self.assertTrue(signing['ad_hoc_code_integrity_verified'])
@@ -108,6 +124,7 @@ class CandidateCollectionTests(unittest.TestCase):
         component={'type':'library','name':'7-Zip','version':'19.00','properties':[{'name':'phaseforge:installer-member','value':'members/$PLUGINSDIR/nsis7z.dll'}]}
         self.write(self.folder/'checks/installer-wrapper.cdx.json',{'components':[]})
         self.write(self.folder/'installer-native.cdx.json',{'components':[component]})
+        self.laboratory_fixture()
         with patch.object(collect,'release_target',return_value=self.target),contextlib.redirect_stdout(io.StringIO()):collect.main()
         final=self.folder/'candidate';prefix=f'PhaseForge_{VERSION}_windows_x64';manifest=collect.load(final/f'{prefix}_BUILD_MANIFEST.json')
         self.assertEqual(manifest['security']['unreviewed_high_critical_count'],1)
@@ -116,6 +133,26 @@ class CandidateCollectionTests(unittest.TestCase):
         with zipfile.ZipFile(final/f'{prefix}_checks.zip') as archive:
             self.assertIn('evidence/installer-wrapper.json',archive.namelist());self.assertIn('evidence/installer-native.cdx.json',archive.namelist())
             self.assertEqual(json.loads(archive.read('evidence/checks/grype-installer-native.stdout'))['matches'],[row])
+            self.assertIn('evidence/laboratory/fixture.json',archive.namelist())
+
+    def test_old_profile_or_changed_laboratory_artifact_cannot_be_relabeled(self):
+        validate=lambda:collect.validate_laboratory_inputs(self.folder,VERSION,COMMIT,'b'*64,self.acceptance)
+        with self.assertRaises(FileNotFoundError):validate()
+        self.laboratory_fixture();validate()
+        (self.folder/'laboratory/fixture.json').write_bytes(b'changed')
+        with self.assertRaisesRegex(ValueError,'evidence changed'):validate()
+        self.laboratory_fixture()
+        file=self.root/'tools/runtime-seeds/science-v2.manifest.json';file.write_bytes(b'other source seed')
+        with self.assertRaisesRegex(ValueError,'frozen source'):validate()
+
+    def test_omitted_native_phase_and_prerelease_versions_block_final_assembly(self):
+        lab,_=self.laboratory_fixture();lab['checks']['quit_recovery']=False
+        file=self.folder/'LABORATORY_ACCEPTANCE.json';self.write(file,lab)
+        self.acceptance['laboratory_evidence']['sha256']=collect.digest(file)
+        with self.assertRaisesRegex(ValueError,'quit_recovery'):
+            collect.validate_laboratory_inputs(self.folder,VERSION,COMMIT,'b'*64,self.acceptance)
+        with self.assertRaisesRegex(ValueError,'prerelease suffix'):
+            collect.validated_inputs(self.folder,self.target,'0.8.0-alpha.1',COMMIT)
 
     def test_rejects_changed_materials_wrong_observed_architecture_and_traversal(self):
         for rel,change in [('installed-payload.json',lambda r:r.update(resources_relative='resources')),

@@ -1,9 +1,9 @@
 # Third-party software
 
-PhaseForge uses open-source components, including optional separately installed
-scientific and rendering engines with their own licenses.
-The authoritative license for each dependency is the license shipped by that
-project and resolved by Cargo or npm.
+PhaseForge uses open-source components, including bundled scientific runtimes and
+optional separately installed rendering and engineering engines. Dependencies
+retain their upstream licenses, including the notices shipped in Python wheels,
+CPython distributions, Cargo dependencies, and npm packages.
 
 Core components include Rust, Cargo, Tokio, Axum, Tower HTTP, wgpu, WGSL,
 SQLite through rusqlite, React, Next.js, Three.js, and Lucide.
@@ -37,6 +37,53 @@ Blender's license applies to Blender software and does not impose engine royalti
 or that software license on rendered artwork and `.blend` output, as explained
 in [Blender's license statement](https://www.blender.org/about/license/). Source
 datasets and imported assets retain their respective provenance and licenses.
+
+## Bundled Windows scientific runtimes
+
+The Windows 0.9 package includes CPython 3.13.15 and NumPy 2.4.6 in
+`resources/runtime/runtime-seeds/science-v2` and `python-numpy-v2`. The science
+seed also contains OpenMM 8.5.2 and Pillow 12.3.0. These components are copied
+into managed environments without changing their binary or license files.
+The matching CPython source standard library replaces embedded bytecode, as
+recorded in each seed's manifest. Generated-code isolation is a separate Windows
+process boundary and does not change these licenses.
+
+| Component | License and included notice location, relative to its seed |
+| --- | --- |
+| CPython 3.13.15 | PSF/Python license and bundled component terms: `LICENSE.txt`; matching source notices: `licenses/CPython-source-LICENSE.txt` |
+| NumPy 2.4.6 | BSD-3-Clause and bundled component terms: `numpy-2.4.6.dist-info/licenses/LICENSE.txt`, plus all nested notices in that directory |
+| OpenMM 8.5.2 | MIT for core, Reference/CPU and application layers; LGPL-3.0-or-later for bundled OpenCL platforms and XTC/XDR code, with additional component terms. Exact upstream notices accompany the application under `resources/tools/third-party/openmm-8.5.2/`, outside the frozen seed. |
+| Pillow 12.3.0 | MIT-CMU and bundled image/font/codec terms: `pillow-12.3.0.dist-info/licenses/LICENSE` |
+
+NumPy's aggregate notice includes OpenBLAS, LAPACK, and the GCC runtime's GPLv3
+license with GCC Runtime Library Exception 3.1. CPython's aggregate notices
+cover its bundled native dependencies. Pillow's aggregate notice retains its
+image and font dependency notices. This software is based in part on the work
+of the [FreeType Team](https://freetype.org/) and the
+[Independent JPEG Group](https://ijg.org/).
+
+OpenMM: portions copyright 2008–2026 Stanford University and the Authors.
+Hilbert Curve implementation copyright 1998, Rice University.
+OpenMM incorporates John Westbrook's PDBx/mmCIF reader under
+[CC BY 3.0](https://creativecommons.org/licenses/by/3.0/), relocated by OpenMM
+into `openmm.app.internal`. XTC/XDR code includes work by Erik Lindahl,
+David van der Spoel, Frans van Hoesel, Accellera, and Sun Microsystems; its
+copyright and license notices are retained in
+[XTC-NOTICES.txt](tools/third-party/openmm-8.5.2/XTC-NOTICES.txt).
+
+The [OpenMM notice and source record](tools/third-party/openmm-8.5.2/README.md)
+maps the included native files to their upstream terms and identifies the
+exact corresponding source commit. The matching source ZIP, notices and rebuild
+instructions are required installer resources under
+`resources/third-party-sources/openmm/`, outside ASAR. Full [OpenMM component notices](tools/third-party/openmm-8.5.2/Licenses.txt),
+[LGPLv3](tools/third-party/openmm-8.5.2/LGPL.txt), and
+[GPLv3](tools/third-party/openmm-8.5.2/GPL.txt) accompany the application.
+The wheel's short metadata license field does not replace these component
+licenses. OpenMM's LGPL components and their use remain covered by those terms;
+PhaseForge does not restrict modification or reverse engineering for debugging
+such modifications. A source rebuild may establish different runtime pins;
+the shipped integrity checks are not a restriction on rights granted by a
+dependency's license.
 
 ## Optional native CAD and PCB dependencies
 

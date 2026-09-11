@@ -1,145 +1,141 @@
-# PhaseForge 0.8.0-alpha.1 on Windows
+# PhaseForge 0.9.0 on Windows
 
-PhaseForge bundles the native Rust engine and interface in a local desktop app.
-The first alpha targets Windows x64. The preceding development build passed local
-acceptance, including numerical GPU execution on an RTX 4090 Laptop GPU; Windows
-ARM64 packaging passed CI but is outside the initial alpha listing. Each alpha
-installer still requires its own native acceptance and marketplace review. Consult
-the [validation record](docs/RELEASE_VALIDATION.md) for completed baseline checks.
+The current scientific package targets **Windows x64**. It bundles the desktop
+interface, Rust backend, and verified scientific Python runtimes. Running the
+packaged app does not require Rust, Node.js, a separate Python installation or a
+browser. Current execution evidence was collected on Windows 11 x64; each final
+installer still needs its own installation checks and marketplace review.
 
-## Packaged application
+## Use the packaged application
 
-Local packaging produces `desktop/dist/PhaseForge_0.8.0-alpha.1_x64-setup.exe` on x64, or
-the corresponding ARM64 installer when built on ARM64. Launch the installer,
-choose the installation folder, and open PhaseForge. A packaged install includes
-the core Rust engine; Rust, Node.js and a separate browser are unnecessary to run it.
-Blender, CadQuery and KiCad are optional, separately installed Studio engines and
-are not included in this installer.
+The local package command produces
+`desktop/dist/PhaseForge_0.9.0_x64-setup.exe`. Install it, open PhaseForge, and add
+your OpenAI or Anthropic API key in **Settings**. Choose the provider, model and
+reasoning effort for the next chat request. API usage is charged by that provider.
 
-When the tray icon is available, closing the window keeps research running. Use
-the tray menu's **Quit PhaseForge** to exit. The desktop attempts at most three
-engine restarts after unexpected exits. Interrupted research sessions return
-paused, with saved work available for explicit resume.
+Start in ordinary project chat. Set a timer or choose **Off**, then describe a
+finite study, its measurements and the comparison you want. Follow individual
+agent/tool and solver jobs, inspect the saved results and play back the numerical
+states. Pause/Resume uses durable job records and compatible checkpoints; source
+changes can require a fresh attempt. See the [workflow and scientific scope](README.md).
 
-The packaged engine binds an available loopback port assigned by Windows and
-announces it through its private parent connection. The desktop authenticates
-that owned child before allowing requests, including after a crash restart.
-It does not probe or use development port 3000 or the old engine port 7331.
-The desktop interface retains dedicated loopback port 7332 to preserve browser
-preferences; it fails clearly if that port is occupied, without attaching to the
-other service. Source-development helpers keep their separate 7331/3000 defaults.
-Keep existing data and credentials; an app upgrade does not require deleting them.
-Run only one backend against a given database.
+The first scientific use verifies and copies the bundled runtimes into the app's
+managed environment. The supported stack is CPython 3.13.15, NumPy 2.4.6,
+OpenMM 8.5.2 and Pillow 12.3.0. Generated instruments run with Python and NumPy
+inside the Windows LPAC boundary. A missing or changed runtime is reported;
+PhaseForge does not substitute a host Python or install dependencies online.
 
-## Build from source
+When a tray icon is available, closing the window can leave work running. Use
+**Quit PhaseForge** to exit before upgrading or switching builds. Interrupted work
+returns paused for explicit continuation. Keep the existing data and credentials;
+reinstallation is not a request to erase research history.
 
-Use native tools for the intended architecture:
+The backend uses an assigned loopback port and the desktop authenticates its owned
+child. The desktop interface uses port 7332. Do not run two backends against the
+same database or attach a development client to an unidentified service.
 
-- Git and current stable Rust/Cargo; the crate declares Rust 1.88 as its minimum.
-- Visual Studio C++ Build Tools with the MSVC compiler and Windows SDK.
-- Node.js 22 and npm 10 or newer. The CI package workflow uses Node 22.
-- Current graphics drivers for GPU computation and rendering.
+## Build the required runtime seeds
 
-From the repository root in PowerShell:
+Source builds need Git, Rust/Cargo (minimum Rust 1.88), Visual Studio C++ Build
+Tools with the Windows SDK, Node.js 22/npm, and a host Python build tool. Python
+3.13 is suitable for the seed builder; it is not the interpreter shipped by
+copying your local installation.
+
+From the repository root in PowerShell, create a **new** seed output directory:
 
 ```powershell
-cargo test --manifest-path backend/Cargo.toml --locked --all-targets
+python -I -B scripts/release/build_seeds.py --output .local/runtime-seeds-v2 --cache .local/runtime-seed-cache
+$env:PHASEFORGE_RUNTIME_SEED_ROOT = (Resolve-Path .local/runtime-seeds-v2).Path
+```
+
+The builder obtains pinned upstream archives, checks their hashes and reconstructs
+the exact committed manifests under `tools/runtime-seeds/`. Use `--offline` when
+the verified archives are already cached. It refuses an existing output directory
+or a mismatch; ordinary builds do not use `--freeze` to accept different bytes.
+These downloads happen during package preparation, not experiment execution.
+
+The same explicit seed root is needed by development-mode runtime provisioning
+and Windows desktop staging. The staged installer contains both seeds; release
+binaries use their packaged resources rather than this development override.
+
+## Build and package locally
+
+With the seed root set in the same PowerShell session:
+
+```powershell
+cargo test --manifest-path backend/Cargo.toml --locked --no-default-features
 cargo build --manifest-path backend/Cargo.toml --locked --release
 npm --prefix frontend ci --no-audit --no-fund
 npm --prefix frontend run build
 npm --prefix desktop ci --no-audit --no-fund
 npm --prefix desktop test
 node scripts/stage-desktop.mjs
-npm --prefix desktop start
-```
-
-The staging script checks the engine version and frontend export, then copies the
-native binary into the matching runtime directory. Run it from a Git checkout
-with a commit; its build record includes that source commit. x64 and ARM64 builds
-require matching tools and binaries; renaming an x64 executable is not ARM64 support.
-
-To create a local installer after staging:
-
-```powershell
 npm --prefix desktop run package:win:x64
 ```
 
-On an ARM64 build machine use `package:win:arm64`. These commands use
-`--publish never`. The manually dispatched
-[desktop CI workflow](.github/workflows/desktop.yml) uploads build artifacts and
-does not create a GitHub release.
+Staging verifies the backend version, exported interface and both runtime seed
+inventories. It requires a Git checkout with a commit for its build record.
+Packaging uses `--publish never`; producing an installer does not publish it or
+establish marketplace acceptance. See [release evidence tooling](scripts/release/README.md)
+for the additional source/materials and exact-artifact checks.
+
+Real scientific, isolation and rendering acceptance tests have their own explicit
+fixtures and opt-in settings. The normal test suite does not replace those checks;
+see the [runtime validation record](docs/validation/runtime-v2.md).
+
+To run the staged desktop against a separate development store:
+
+```powershell
+$env:PHASEFORGE_DATA_DIR = Join-Path (Get-Location).Path '.local/desktop-dev-data'
+npm --prefix desktop start
+```
+
+Keep the installed app closed while using its desktop port. Do not use your live
+research database for parallel development instances.
 
 ## Browser development mode
 
-Run these in separate terminals from the repository root:
+In the backend terminal, retain the explicit seed root and choose a development
+store:
 
 ```powershell
+$env:PHASEFORGE_RUNTIME_SEED_ROOT = (Resolve-Path .local/runtime-seeds-v2).Path
+$env:PHASEFORGE_DATA_DIR = Join-Path (Get-Location).Path '.local/browser-dev-data'
 cargo run --manifest-path backend/Cargo.toml
 ```
+
+In another terminal:
 
 ```powershell
 npm --prefix frontend run dev -- --hostname 127.0.0.1 --port 3000
 ```
 
-Open [the browser client](http://127.0.0.1:3000).
-[Backend health](http://127.0.0.1:7331/api/health) identifies the engine.
-This is separate from the packaged app. Legacy `INSTALL_ALL.txt` and component
-text helpers remain available for source setup; read their contents before use.
+Open [the development client](http://127.0.0.1:3000).
+[Development backend health](http://127.0.0.1:7331/api/health) identifies that
+backend. These addresses are separate from the packaged desktop's assigned
+backend port.
 
-## Models, compute and saved data
+## Optional rendering and saved data
 
-Save a provider API key in **Settings**, load the account's models and choose a
-default. The workbench picker can override provider, model and supported reasoning
-for each request. Session choices apply to its calls and can change on resume.
-Provider API charges apply independently of the app. OpenAI is the live-test
-provider for this development environment.
+Blender is installed separately for additional views, images and video exports.
+The numerical OpenMM, diffusion and mechanics workers run without Blender.
+`BLENDER_PATH` can select an installed executable; see
+[Blender setup](docs/BLENDER_RENDERING.md). Existing CAD/PCB workflows also have
+separate optional dependencies described in [their setup guide](docs/CAD_PCB_ENGINES.md).
+An engine-discovery badge alone is not proof of scientific execution.
 
-Windows GPU inventory uses wgpu; eligible ODE search scoring can use DX12 or Vulkan.
-Particle integration and final ODE replay use CPU f64. Procedural 3D geometry is a
-visual representation, not proof that a matching scientific solver executed.
-NPU devices may be inventoried, but no NPU numerical backend, local LLM inference
-pool or cluster orchestrator is installed.
+The default research store on this Windows setup is
+`%LOCALAPPDATA%\PhaseForge\PhaseForge\data`; `PHASEFORGE_DATA_DIR` selects another
+store. Provider keys stay separately in the OS credential store. The app also
+keeps desktop engine logs under its user-data directory. Preserve data, logs and
+custom configuration when diagnosing failures or upgrading.
 
-The default data location is resolved by the Rust application's platform directory
-configuration. `PHASEFORGE_DATA_DIR` selects a different store. Keys are kept
-separately by the OS credential service. Engine logs are written to
-`logs/engine.log` under Electron's application user-data directory. Preserve these
-locations and any custom configuration during upgrades.
+For a port conflict, use normal Quit on the identified older app. For a runtime
+inventory error, retain the error and restore the matching package rather than
+editing the managed environment. An unavailable optional renderer does not mean
+the numerical solver failed. Check each job's execution receipt and saved error.
 
-The engine supports `--config PATH`, `--cpu-only`, `--version` and `--help`.
-Use [the example configuration](configs/phaseforge.example.toml).
-For a desktop launch, `PHASEFORGE_CONFIG` and `PHASEFORGE_DISABLE_GPU=1` are
-inherited by the child engine.
-
-## Optional tools and troubleshooting
-
-Studio can run local Blender Cycles renders and native CAD/PCB exports. Install
-[Blender](https://www.blender.org/download/) and
-[KiCad](https://www.kicad.org/download/), and set up the isolated CAD Python runtime
-using [the pinned native-engine guide](docs/CAD_PCB_ENGINES.md). This development
-machine has local Windows x64 installations; installing PhaseForge on another
-machine does not install these engines automatically.
-
-`BLENDER_PATH`, `PHASEFORGE_CAD_PYTHON` and `KICAD_CLI` can point to the respective
-executables. Set them in the environment that starts PhaseForge and restart the
-app after changing them. Discovery also checks supported local installation paths.
-Studio's engine badges indicate discovery; each completed job records actual
-execution and checks. Blender selects a compatible Cycles device independently
-of the core wgpu numerical backend. See [render setup and limits](docs/BLENDER_RENDERING.md).
-
-Molecular files can be imported without external chemistry software. OpenMM,
-GROMACS, CP2K, xTB, LAMMPS and Open Babel can be inventoried when available in the
-engine's environment. Discovery alone does not execute their scientific workflows.
-The independent ODE verifier requires Python 3.10+ and uses the standard library;
-`INSTALL_VERIFIER.txt` remains its optional setup helper.
-
-For a port conflict, stop the identified older app before retrying. For unavailable
-GPU computation, inspect Hardware and the engine log; CPU execution remains
-supported. After exhausted engine restart attempts, inspect the log and saved run
-error before restarting. Source build failures should be diagnosed from the first
-compiler or frontend error rather than by deleting saved data.
-
-See [compute/recovery](docs/COMPUTE_AND_RECOVERY.md),
-[sessions](docs/research-sessions.md), [scenes](docs/SCIENTIFIC_SCENES.md),
-[scientific scope](docs/SCIENTIFIC_SCOPE.md), and
-[verification methods](docs/VERIFICATION_METHODS.md).
+The [main evidence ledger](README.md#current-evidence) links the completed scoped
+studies and the pending installed mechanics/ML gates. Older
+[0.8.0 validation](docs/RELEASE_VALIDATION.md) remains historical evidence, not
+acceptance of the 0.9.0 installer.

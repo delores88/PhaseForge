@@ -5,6 +5,8 @@
 *.cjs text eol=lf
 *.rs text eol=lf
 *.py text eol=lf
+# Upstream notice hashes must survive Windows Git checkouts unchanged.
+tools/third-party/openmm-8.5.2/*.txt text eol=lf
 *.png binary
 *.jpg binary
 *.ico binary
