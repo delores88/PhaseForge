@@ -14,6 +14,7 @@ test('progress only reports actual computation fraction and never elapsed budget
   assert.equal(labElapsed(job,Date.parse('2026-01-01T00:10:00Z')),120);
   assert.equal(labJobPresentation({...job,state:'timed_out'}).resumable,true);
   assert.equal(labJobPresentation({...job,state:'cancelled'}).resumable,false);
+  assert.equal(labJobPresentation({...job,kind:'published_simulation',state:'paused'}).resumable,false);
 });
 test('viewing or updating presentation after completion does not re-create unread results or add runtime',()=>{
   const completed_at=job.updated_at;

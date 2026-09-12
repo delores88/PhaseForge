@@ -1,4 +1,4 @@
-# PhaseForge 0.9.1
+# PhaseForge 0.10.0
 
 PhaseForge is a local Windows scientific workbench. Describe a study in ordinary
 chat, run a supported numerical experiment, inspect its saved measurements and
@@ -36,6 +36,8 @@ record; higher image resolution does not improve an experiment's physical model.
 |---|---|
 | Molecular dynamics | Real OpenMM dynamics for a periodic argon-like Lennard-Jones fluid, with temperature/density controls, energy, pressure, RDF and MSD measurements. |
 | Spatial diffusion | A two-dimensional periodic scalar field, retained numerical arrays, point/region instruments and fixed-scale field playback. |
+| Heat conduction | Constant-property periodic 2D heat conduction in SI units, retained temperature and heat-flux fields, energy measurements and compatible checkpoints. |
+| Incompressible flow | Unforced periodic 2D viscous Newtonian flow, with velocity, vorticity, pressure, divergence, energy and enstrophy measurements. No arbitrary walls, compressible shocks or multiphase flow. |
 | Classical mechanics | Interacting Newtonian point masses in an isolated domain, with explicit scaled units, trajectories and conservation instruments. |
 | Generated instruments | Python standard library and NumPy calculations inside the Windows LPAC boundary, with project-scoped inputs and retained outputs. Network access is unavailable inside this boundary. |
 | Batched studies and ML | Durable solver sweeps and a scoped pressure-surrogate study with frozen data roles, held-out evaluation, uncertainty and direct-solver fallback. Useful acceleration must be demonstrated, not assumed. |
@@ -71,6 +73,20 @@ public research and CAD/PCB tools remain available; see
 [public research and Studio](docs/public-research-and-studio.md), and
 [optional CAD/PCB engines](docs/CAD_PCB_ENGINES.md).
 
+Completed outputs are reachable from Results and the horizontal experiment
+history. Image and numerical result controls expose each retained output.
+Explain with AI, Suggest next steps and Review numerical checks use the current
+conversation's model and work limit, read the selected job's pinned evidence,
+and reply in chat. These review actions cannot start or modify an experiment.
+Visible camera controls and presentation changes reuse saved states; a new
+camera angle or higher export resolution does not rerun the scientific solver.
+
+The capability catalog distinguishes executable models from missing domains.
+No black-hole merger solver is integrated in this release. A separately built
+AthenaK reference benchmark establishes a numerical foundation, but does not
+fulfill the requested head-on collision at 0.999c per black hole. See the
+[relativistic solver investigation](docs/validation/relativistic-solver-path-2026-09-12.md).
+
 ## Current evidence
 
 The evidence ledger distinguishes component checks, observed installed studies
@@ -97,9 +113,12 @@ and the acceptance of an exact release artifact:
 - [OpenSSL runtime correction](docs/validation/runtime-v5.md): official fixed DLL
   provenance and actual copied-runtime TLS compatibility checks for 0.9.1.
 
-These earlier checks do not certify a new installer automatically. Final 0.9.1
-installation checks and [marketplace admission](docs/validation/marketplace-release-handoff.md)
-are separate; marketplace acceptance is not claimed here.
+These earlier checks do not certify a new installer automatically. Each 0.10.0
+installer requires its own installation and marketplace acceptance records. See the
+[0.10.0 workbench evidence](docs/validation/workbench-010-results-2026-09-12.md),
+[Results checks](docs/validation/workspace-results-2026-09-12.md),
+[continuum validation](docs/validation/continuum-results-2026-09-12.md), and
+[release coordination](docs/validation/marketplace-release-handoff.md).
 
 ## Install or develop
 

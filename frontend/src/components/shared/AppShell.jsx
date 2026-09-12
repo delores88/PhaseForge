@@ -7,6 +7,7 @@ import CommandPalette from "./CommandPalette";
 import { ThemeToggle } from "@/lib/theme";
 import {api} from '@/lib/api';
 import {useLiveRuntime} from '@/lib/liveRuntime';
+import {labJobPresentation} from '@/lib/laboratoryPresentation.mjs';
 import jobStyles from './SidebarJobs.module.css';
 const navigation = [
   { href:"/", label:"Laboratory", icon:House }, { href:"/runs/", label:"Runs", icon:Activity },
@@ -17,7 +18,7 @@ export default function AppShell({ backend, hardware, eventState, title, subtitl
   const router = useRouter();
   const {laboratoryJobs=[]}=useLiveRuntime();
   const jobActive=job=>['queued','running','provisioning','waiting'].includes(job.state);
-  const jobUnread=job=>job.state==='completed'&&(!job.seen_at||Date.parse(job.seen_at)<Date.parse(job.completed_at||job.events?.findLast(e=>e.kind==='completed')?.at||job.updated_at));
+  const jobUnread=job=>labJobPresentation(job).unread;
   const openJob=job=>{
     if(router.pathname==='/')window.dispatchEvent(new CustomEvent('phaseforge:open-job',{detail:{job}}));
     else router.push({pathname:'/',query:{project:job.project_id,lab_job:job.id}});

@@ -1,0 +1,151 @@
+{
+  "baselineVersion": "0.9.1",
+  "baselineSource": "27f5c91ac6482df16c34012c7f56501a1f494f32",
+  "progressMethod": "Sum of verified completed task weights; partial tasks reported separately",
+  "completedPercent": 63,
+  "remainingPercent": 37,
+  "monitorThread": "01a0912b-c5a6-79d3-9e35-9fe066ab5fdb",
+  "tasks": [
+    {
+      "id": "B1",
+      "weight": 25,
+      "title": "Intent and evidence-backed completion",
+      "status": "complete",
+      "evidence": [
+        "docs/validation/workbench-010-results-2026-09-12.md",
+        ".local/validation/workbench-010/actual-publication-verification.json",
+        "Actual ordinary UI illustration then heat simulation: session666af4a1-d8f3-4fb5-b6ba-34ebf8d30269, solverc0e86028-024c-45e9-9f49-ef269a4a479e;21states0-0.4s. Unsupported merger reports gap; analysis and explicit illustrations fulfill separate contracts."
+      ]
+    },
+    {
+      "id": "B2",
+      "weight": 20,
+      "title": "Scientific solver coverage, including required relativistic collision",
+      "status": "in_progress",
+      "evidence": [
+        "docs/validation/continuum-results-2026-09-12.md",
+        ".local/validation/workbench-010/continuum-backend.log",
+        ".local/validation/workbench-010/actual-fields-status.json",
+        "Actual normal API heat and flow jobs completed with retained fields. Browser loaded21 states, playback advanced0→0.2s; visible pan/tilt/zoom persisted to presentation without rerunning solver.",
+        "docs/validation/relativistic-compute-feasibility-2026-09-12.md",
+        "docs/validation/relativistic-solver-path-2026-09-12.md",
+        "Pinned AthenaK built and three bounded gauge-wave grids executed with independently checked refinement; does not constitute a black-hole collision."
+      ],
+      "acceptance": "Retain verified bounded thermal/fluid workflows AND execute the requested equal-mass head-on collision at 0.999c per black hole using suitable relativistic initial data and Einstein evolution through collision, with numerical/reference validation and saved measurable playback. A capability gap or analytic precontact field is not fulfillment.",
+      "remaining": [
+        "Integrate suitable relativistic computation and constraint-satisfying high-boost initial data with resource/lifecycle enforcement",
+        "Validate the requested 0.999c collision and saved numerical outputs; do not count the gauge-wave foundation as fulfillment"
+      ]
+    },
+    {
+      "id": "B3",
+      "weight": 15,
+      "title": "Visible working inspection and playback controls",
+      "status": "complete",
+      "evidence": [
+        ".local/viewer-acceptance/controls-20260912/runs/2026-09-12T11-46-28-016Z/interaction-report.json",
+        ".local/viewer-acceptance/controls-20260912/runs/2026-09-12T11-43-16-113Z/interaction-report.json",
+        "68 actual React/Electron interaction assertions at 320/520/1000px; stills, particle and field playback, real camera effects, lineage selection and refresh behavior; zero renderer errors."
+      ]
+    },
+    {
+      "id": "B4",
+      "weight": 10,
+      "title": "Horizontal iteration lineage",
+      "status": "complete",
+      "evidence": [
+        ".local/viewer-acceptance/controls-20260912/runs/2026-09-12T11-46-28-016Z/interaction-report.json",
+        ".local/viewer-acceptance/controls-20260912/runs/2026-09-12T11-43-16-113Z/interaction-report.json",
+        "68 actual React/Electron interaction assertions at 320/520/1000px; stills, particle and field playback, real camera effects, lineage selection and refresh behavior; zero renderer errors."
+      ]
+    },
+    {
+      "id": "B5",
+      "weight": 8,
+      "title": "Coherent useful views and tab cleanup",
+      "status": "complete",
+      "evidence": [
+        ".local/validation/workbench-010/navigation-read-verification.json",
+        ".local/viewer-acceptance/json-analysis-20260912-01/runs/2026-09-12T12-05-33-178Z/interaction-report.json"
+      ]
+    },
+    {
+      "id": "B6",
+      "weight": 5,
+      "title": "Durable inbox-style read state",
+      "status": "complete",
+      "evidence": [
+        ".local/validation/workbench-010/navigation-read-verification.json",
+        "frontend/tests/laboratory-read-state.test.mjs",
+        "backend/src/laboratory/api.rs read acknowledgement regressions"
+      ]
+    },
+    {
+      "id": "B7",
+      "weight": 3,
+      "title": "Transparent PF marketplace symbol",
+      "status": "in_progress",
+      "evidence": []
+    },
+    {
+      "id": "B8",
+      "weight": 7,
+      "title": "Integrated and native verification",
+      "status": "in_progress",
+      "evidence": [
+        "docs/validation/workspace-results-2026-09-12.md",
+        ".local/validation/workbench-010/fullpage-results-20260912-01.json",
+        ".local/validation/workbench-010/backend-full-with-result-review.log"
+      ]
+    },
+    {
+      "id": "B9",
+      "weight": 7,
+      "title": "Local Windows deployment and marketplace release",
+      "status": "queued",
+      "evidence": []
+    }
+  ],
+  "completionUpdates": [
+    {
+      "at": "2026-09-12T05:41:17.569122-06:00",
+      "task": "B4",
+      "completedPercent": 10,
+      "remainingPercent": 90
+    },
+    {
+      "at": "2026-09-12T05:45:05.796795-06:00",
+      "task": "B3",
+      "completedPercent": 25,
+      "remainingPercent": 75
+    },
+    {
+      "at": "2026-09-12T06:04:21.687845-06:00",
+      "task": "B2",
+      "completedPercent": 45,
+      "remainingPercent": 55
+    },
+    {
+      "at": "2026-09-12T06:13:47.380011-06:00",
+      "tasks": [
+        "B5",
+        "B6"
+      ],
+      "completedPercent": 58,
+      "remainingPercent": 42
+    },
+    {
+      "completedPercent": 83,
+      "at": "2026-09-12T12:24:05.7216971Z",
+      "remainingPercent": 17,
+      "task": "B1"
+    },
+    {
+      "at": "2026-09-12T12:48:10.3711333Z",
+      "task": "B2 scope correction",
+      "completedPercent": 63,
+      "remainingPercent": 37,
+      "reason": "The required actual black-hole collision was incorrectly treated as fulfilled by explicit capability-gap reporting. Thermal/fluid subwork stays verified; B2 is reopened until the relativistic criterion is fulfilled."
+    }
+  ]
+}

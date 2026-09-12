@@ -20,7 +20,7 @@ def release_target(system=None,architecture=None):
             'installer_suffix':{'windows':'-setup.exe','linux':'.AppImage','macos':'.dmg'}[name]}
 
 def validate_laboratory_inputs(folder,version,commit,backend_hash,acceptance):
-    """An old ODE-only profile cannot be relabeled as current native coverage."""
+    """Earlier native coverage cannot be relabeled as this workbench release."""
     lab_file=folder/'LABORATORY_ACCEPTANCE.json';managed_file=folder/'managed-runtime-materials.json'
     lab=load(lab_file);managed=load(managed_file)
     for key,file in [('laboratory_evidence',lab_file),('managed_runtime_evidence',managed_file)]:
@@ -29,7 +29,7 @@ def validate_laboratory_inputs(folder,version,commit,backend_hash,acceptance):
     if lab.get('schema')!='phaseforge.native-laboratory.v1' or lab.get('passed') is not True:raise ValueError('Actual installed laboratory checks did not complete')
     if lab.get('source_commit')!=commit or lab.get('version')!=version or lab.get('backend_sha256')!=backend_hash:raise ValueError('Laboratory evidence belongs to other installed bytes')
     if lab.get('provider_tokens')!=0:raise ValueError('Credential-free native checks require zero observed provider tokens')
-    for check in ('openmm','diffusion','lpac','cancel','quit_recovery','backup_restore'):
+    for check in ('openmm','diffusion','heat','incompressible_flow','heat_playback','flow_playback','lpac','cancel','quit_recovery','backup_restore'):
         if lab.get('checks',{}).get(check) is not True:raise ValueError('Missing native laboratory check: '+check)
     files=lab.get('evidence_files')
     if not isinstance(files,list) or not files or len(files)>10000:raise ValueError('Laboratory numerical/process evidence inventory is missing')

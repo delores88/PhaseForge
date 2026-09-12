@@ -52,7 +52,7 @@ class CandidateCollectionTests(unittest.TestCase):
         # These are deliberately tiny synthetic receipts, never a native pass.
         evidence=self.folder/'laboratory/fixture.json';self.write(evidence,{'synthetic_fixture':True})
         lab={'schema':'phaseforge.native-laboratory.v1','passed':True,'source_commit':COMMIT,'version':VERSION,'backend_sha256':'b'*64,'provider_tokens':0,
-             'checks':{key:True for key in ('openmm','diffusion','lpac','cancel','quit_recovery','backup_restore')},
+             'checks':{key:True for key in ('openmm','diffusion','heat','incompressible_flow','heat_playback','flow_playback','lpac','cancel','quit_recovery','backup_restore')},
              'evidence_files':[{'path':'laboratory/fixture.json','bytes':evidence.stat().st_size,'sha256':collect.digest(evidence)}]}
         runtimes={}
         for kind in ('science-v5','python-numpy-v4'):
@@ -65,6 +65,22 @@ class CandidateCollectionTests(unittest.TestCase):
             self.write(self.folder/name,value);self.acceptance[key]={'path':name,'sha256':collect.digest(self.folder/name)}
         self.write(self.folder/'NATIVE_ACCEPTANCE.json',self.acceptance)
         return lab,managed
+
+    def test_laboratory_collection_requires_new_continuum_computation_and_playback(self):
+        lab,_=self.laboratory_fixture()
+        file=self.folder/'LABORATORY_ACCEPTANCE.json'
+        self.assertIsNotNone(collect.validate_laboratory_inputs(self.folder,VERSION,COMMIT,'b'*64,self.acceptance))
+        for key in ('heat','incompressible_flow','heat_playback','flow_playback'):
+            for absent in (True,False):
+                with self.subTest(check=key,absent=absent):
+                    changed=copy.deepcopy(lab)
+                    if absent:changed['checks'].pop(key)
+                    else:changed['checks'][key]=False
+                    self.write(file,changed)
+                    acceptance=copy.deepcopy(self.acceptance)
+                    acceptance['laboratory_evidence']['sha256']=collect.digest(file)
+                    with self.assertRaisesRegex(ValueError,'Missing native laboratory check: '+key):
+                        collect.validate_laboratory_inputs(self.folder,VERSION,COMMIT,'b'*64,acceptance)
 
     def test_laboratory_collection_requires_both_fixed_sqlite_queries_bound_to_exact_receipts(self):
         self.laboratory_fixture()

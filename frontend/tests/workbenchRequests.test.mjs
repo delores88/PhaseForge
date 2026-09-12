@@ -1,6 +1,6 @@
 import {test} from 'node:test';
 import assert from 'node:assert/strict';
-import {snapshotConversationModel,selectedLaboratoryContext,conversationTimeLimit,createViewTracker,createProjectRequestGate,mergeBackgroundRun} from '../src/lib/workbenchRequests.mjs';
+import {snapshotConversationModel,selectedLaboratoryContext,conversationTimeLimit,resolveRunInspection,createViewTracker,createProjectRequestGate,mergeBackgroundRun} from '../src/lib/workbenchRequests.mjs';
 
 test('admission snapshots the target conversation even when the visible picker has moved elsewhere',async()=>{
   const choices={a:{provider:'open_ai',model:'selected-a',reasoning_effort:'high'},b:{provider:'anthropic',model:'selected-b',reasoning_effort:null}};
@@ -54,4 +54,34 @@ test('background updates preserve inspected ordering and reject another projectâ
   assert.deepEqual(merged.map(row=>row.id),['old','new']);assert.equal(merged[1].status,'completed');
   assert.equal(mergeBackgroundRun(rows,{id:'foreign',project_id:'b'},'a'),rows);
   assert.equal(mergeBackgroundRun(rows,{id:'later',project_id:'a'},'a')[0],rows[0]);
+});
+
+test('delayed session inspection cannot select a run after project navigation, return, or a newer load',async()=>{
+  for(const change of ['project','away-and-back','load','result']){
+    const view=createViewTracker();view.observe(['a','sessions','old']);let project='a',generation=1;
+    const captured=view.capture(),loadGeneration=generation;let finish;
+    const pending=resolveRunInspection({id:'run-a',projectId:'a',loadRun:()=>new Promise(resolve=>{finish=resolve;}),isCurrent:()=>project==='a'&&generation===loadGeneration&&view.isCurrent(captured)});
+    if(change==='project'){project='b';view.observe(['b','laboratory',null]);}
+    if(change==='away-and-back'){view.observe(['b','laboratory',null]);view.observe(['a','sessions','old']);}
+    if(change==='load')generation++;
+    if(change==='result')view.observe(['a','findings','new']);
+    finish({id:'run-a',project_id:'a',status:'completed'});
+    assert.equal(await pending,null,change);
+  }
+});
+
+test('session inspection requires exact returned run/project identity and opens an unchanged visit',async()=>{
+  const run={id:'run-a',project_id:'a',status:'completed'},options={id:run.id,projectId:run.project_id,isCurrent:()=>true};
+  assert.equal(await resolveRunInspection({...options,loadRun:async()=>run}),run);
+  await assert.rejects(resolveRunInspection({...options,loadRun:async()=>({...run,id:'different'})}),/saved project/);
+  await assert.rejects(resolveRunInspection({...options,loadRun:async()=>({...run,project_id:'b'})}),/saved project/);
+});
+
+test('review and observation admission validate the visible timer draft rather than silently using old saved minutes',()=>{
+  const storage={getItem:()=> '1800'};
+  for(const value of ['',0,-1,1.5,10081,'invalid'])assert.throws(()=>conversationTimeLimit('a',storage,{mode:'custom',value}),/Custom time/);
+  assert.equal(conversationTimeLimit('a',storage,{mode:'custom',value:'47'}),2820);
+  assert.equal(conversationTimeLimit('a',storage,{mode:'preset',value:'off'}),null);
+  assert.equal(conversationTimeLimit('a',storage,{mode:'preset',value:'900'}),900);
+  assert.equal(conversationTimeLimit('b',storage),1800);
 });

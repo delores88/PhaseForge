@@ -5,6 +5,8 @@ import net from 'node:net';
 import crypto from 'node:crypto';
 import assert from 'node:assert/strict';
 import {fileURLToPath} from 'node:url';
+import {execFileSync} from 'node:child_process';
+import {HEAT_PARAMETERS,FLOW_PARAMETERS,CONTINUUM_TOLERANCES,validateContinuum} from './native-continuum.mjs';
 
 const HERE=path.dirname(fileURLToPath(import.meta.url));
 const ACTIVE=new Set(['queued','running','provisioning','waiting']);
@@ -84,7 +86,7 @@ export function validateBoundary(report){
 export function solverProcess(job,records,expectedExecutable){const starts=job.events.filter(event=>event.kind==='solver_started');assert.equal(starts.length,1,'Expected one actual solver process launch');const event=starts[0];assert.ok(Number.isInteger(event.data.pid));const created=Date.parse(job.created_at)/1000,at=Date.parse(event.at)/1000;const matches=records.filter(row=>row.pid===event.data.pid&&Number.isFinite(row.created)&&row.created>=created-1&&row.created<=at+1&&samePath(row.exe,expectedExecutable));assert.equal(matches.length,1,'Solver PID must match one sampled bundled-runtime process creation');if(event.data.python)assert.ok(samePath(event.data.python,expectedExecutable),'Solver launch path must be bundled science-v5');return matches[0];}
 export function verifyRestart(oldJob,newJob){assert.notEqual(newJob.id,oldJob.id);assert.equal(newJob.input.restarted_from_job_id,oldJob.id);assert.equal(newJob.deadline_at,oldJob.deadline_at);for(const key of ['engine','code','inputs','sources','limits'])assert.deepEqual(newJob.input[key],oldJob.input[key]);return true;}
 export function verifyRestoredStopped(job,expected,{replacementId}={}){assert.equal(job.id,expected.id);assert.equal(job.state,expected.state);assert.equal(job.deadline_at,expected.deadline_at);assert.deepEqual(job.input,expected.input);assert.ok(job.events.some(event=>event.kind===(replacementId?'interrupted':'cancelled')));if(replacementId)assert.ok(job.events.some(event=>event.kind==='generated_restart_requested'&&event.data.new_job_id===replacementId));return true;}
-export function acceptanceComplete(state){return Boolean(state.first_launch_passed&&state.cancel?.passed&&state.quit?.observed_active&&state.restart?.passed&&state.restored?.passed&&state.restored.index===3&&state.checks?.openmm?.passed&&state.checks?.field?.passed&&state.checks?.boundary?.passed);}
+export function acceptanceComplete(state){return Boolean(state.first_launch_passed&&state.cancel?.passed&&state.quit?.observed_active&&state.restart?.passed&&state.restored?.passed&&state.restored.index===3&&state.checks?.openmm?.passed&&state.checks?.field?.passed&&state.checks?.heat?.passed&&state.checks?.flow?.passed&&state.checks?.heat?.playback?.passed&&state.checks?.flow?.playback?.passed&&state.checks?.boundary?.passed);}
 
 export function createLaboratoryAcceptance({page,call,remember,observedProcesses,workspace,output,projectId,sourceCommit,version,backendSha256}){
   assert.ok(UUID.test(projectId)&&/^[a-f0-9]{40}$/.test(sourceCommit)&&HASH.test(backendSha256));
@@ -131,14 +133,29 @@ export function createLaboratoryAcceptance({page,call,remember,observedProcesses
     }else{
       const process=solverProcess(job,observedProcesses(),path.join(workspace,'environments/science-v5/python.exe'));state.processes??={};state.processes[job.id]=process;write(path.join(directory,'process-observation.json'),{job_id:job.id,event:job.events.find(event=>event.kind==='solver_started'),process});
       for(const name of ['worker-input.json','manifest.json','result.json','measurements.json','checkpoint.json','observations/index.json'])await retain(name);
-      const manifest=json(await retain('manifest.json'));const worker=job.input.engine==='openmm_argon'?'scientific_worker.py':'field_worker.py';await retain(worker,{sha256:manifest.worker_sha256});assert.equal(sha(fs.readFileSync(path.resolve(HERE,'../../tools',worker))),manifest.worker_sha256);
-      const checkpoint=json(await retain('checkpoint.json'));if(job.input.engine==='openmm_argon'){await retain(checkpoint.checkpoint_path,{sha256:checkpoint.checkpoint_sha256});for(const name of ['restart.json','system.xml','integrator.xml'])await retain(name);}else await retain('checkpoint.npz',{sha256:checkpoint.checkpoint_sha256});
+      const continuum=['heat_conduction_2d','navier_stokes_2d'].includes(job.input.engine);
+      const manifest=json(await retain('manifest.json'));const worker=job.input.engine==='openmm_argon'?'scientific_worker.py':continuum?'continuum_worker.py':'field_worker.py';await retain(worker,{sha256:manifest.worker_sha256});assert.equal(sha(fs.readFileSync(path.resolve(HERE,'../../tools',worker))),manifest.worker_sha256);
+      if(continuum){await retain('field_worker.py',{sha256:manifest.shared_io_sha256});assert.equal(sha(fs.readFileSync(path.resolve(HERE,'../../tools/field_worker.py'))),manifest.shared_io_sha256);assert.deepEqual(json(await retain('worker-input.json')),{engine:job.input.engine,parameters:job.input.parameters});}
+      const checkpoint=json(await retain('checkpoint.json'));if(job.input.engine==='openmm_argon'){await retain(checkpoint.checkpoint_path,{sha256:checkpoint.checkpoint_sha256});for(const name of ['restart.json','system.xml','integrator.xml'])await retain(name);}else if(!continuum)await retain('checkpoint.npz',{sha256:checkpoint.checkpoint_sha256});
       const observations=json(await retain('observations/index.json'));assert.equal(observations.schema_version,1);assert.ok(Array.isArray(observations.images));for(const image of observations.images)await retain(image.path,{sha256:image.sha256});
       if(job.input.engine==='openmm_argon'){
         const trajectory=json(await retain('trajectory/index.json'));await retain('topology.json');const frames=[];
         assert.ok(Array.isArray(trajectory.chunks)&&trajectory.chunks.length<=12);
         for(const chunk of trajectory.chunks){const data=json(await retain(chunk.path,{sha256:chunk.sha256}));assert.equal(data.schema_version,1);frames.push(...data.frames);await retain(chunk.arrays_path,{sha256:chunk.arrays_sha256});}
         state.checks.openmm=validateOpenMM({manifest,measurements:json(await retain('measurements.json')),trajectory,result:json(await retain('result.json')),frames});
+      }else if(continuum){
+        const index=json(await retain('fields/index.json')),views=[],arrays=[];assert.equal(index.frames.length,5);
+        const python=process.env.PHASEFORGE_ACCEPTANCE_PYTHON;assert.ok(typeof python==='string'&&path.isAbsolute(python),'Hosted evidence Python must be explicitly identified');
+        for(const frame of index.frames){
+          for(const [name,hashkey]of [['path','sha256'],['state_path','state_sha256']]){assert.match(frame[hashkey],HASH);await retain(frame[name],{sha256:frame[hashkey]});}
+          views.push(json(await retain(frame.view_path,{sha256:frame.view_sha256})));
+          // Host stdlib decodes only retained data. It never imports the worker,
+          // NumPy, pickle or the application runtime being evaluated.
+          arrays.push(json(execFileSync(python,['-I','-B',path.join(HERE,'native-continuum-arrays.py'),'--engine',job.input.engine,'--state',path.join(directory,'artifacts',frame.state_path),'--state-sha256',frame.state_sha256,'--primary',path.join(directory,'artifacts',frame.path),'--primary-sha256',frame.sha256],{encoding:'utf8',windowsHide:true,timeout:Math.max(1,Math.min(10000,remaining())),maxBuffer:1024*1024})));
+        }
+        const key=job.input.engine==='heat_conduction_2d'?'heat':'flow';
+        state.checks[key]=validateContinuum({manifest,measurements:json(await retain('measurements.json')),index,views,arrays,result:json(await retain('result.json')),checkpoint,observations});
+        write(path.join(directory,'numerical-reference.json'),state.checks[key]);
       }else{
         assert.equal(job.input.engine,'diffusion_2d');const index=json(await retain('fields/index.json')),views=[];assert.ok(Array.isArray(index.frames)&&index.frames.length<=5);
         for(const frame of index.frames){await retain(frame.path,{sha256:frame.sha256});views.push(json(await retain(frame.view_path,{sha256:frame.view_sha256})));}
@@ -148,10 +165,34 @@ export function createLaboratoryAcceptance({page,call,remember,observedProcesses
     const receipt={job_id:job.id,label,state:job.state,input_sha256:sha(input),artifacts:records,total_bytes:total};write(path.join(directory,'artifact-receipts.json'),receipt);
     if(job.state==='completed')state.artifact_sets.push(receipt);save();return {receipt,cache};
   }
+  async function playback(job,captured,key){
+    const index=json(captured.cache.get('fields/index.json')),target=new URL('/',page.url());target.searchParams.set('project',projectId);target.searchParams.set('lab_job',job.id);
+    await page.goto(target.href,{waitUntil:'domcontentloaded',timeout:15000});
+    const viewer=page.getByRole('region',{name:'Recorded scalar field laboratory viewer',exact:true});await viewer.waitFor({state:'visible',timeout:15000});
+    await until(async()=>await viewer.getByRole('button',{name:'Play field',exact:true}).isEnabled().catch(()=>false),'recorded field playback controls',15000);
+    assert.ok((await viewer.locator('header').innerText()).includes(job.title),'The viewer must display the exact created job');
+    const timeline=viewer.getByRole('slider',{name:'Recorded field time',exact:true});
+    await viewer.getByRole('button',{name:'Restart field playback',exact:true}).click({timeout:5000});
+    await until(async()=>await timeline.getAttribute('aria-valuetext')==='0 s','first recorded field',5000);
+    await viewer.getByRole('spinbutton',{name:'Field playback duration in seconds',exact:true}).fill('0.5',{timeout:5000});
+    await viewer.getByRole('combobox',{name:'Field playback speed',exact:true}).selectOption('1',{timeout:5000});
+    await viewer.getByRole('button',{name:'Play field',exact:true}).click({timeout:5000});
+    const finalText=await until(async()=>{const value=await timeline.getAttribute('aria-valuetext');return value===`${index.end_time} s`&&await viewer.getByRole('button',{name:'Play field',exact:true}).isVisible()?value:null;},'playback reaching the final retained state',10000);
+    const canvas=viewer.locator('canvas');assert.equal(await canvas.count(),1);const extent=await canvas.evaluate(element=>({width:element.width,height:element.height}));assert.ok(extent.width>0&&extent.height>0,'Recorded field has a real canvas');
+    const image=await viewer.screenshot({timeout:10000});assert.ok(image.length<4*1024*1024);const screenshot=`playback-${key}.png`;fs.writeFileSync(plain(path.join(root,screenshot),{missing:true}),image);
+    const after=await get(job.id);assert.equal(after.state,'completed');assert.deepEqual(after.events.filter(e=>e.kind==='solver_started'),job.events.filter(e=>e.kind==='solver_started'),'Playback must not launch another scientific process');
+    // Exact persisted numerical bytes and all channels remain unchanged through
+    // the normal presentation/play controls; no presentation DOM injection.
+    for(const row of captured.receipt.artifacts){const bytes=await fetchArtifact(job.id,row.path);assert.equal(bytes.length,row.bytes);assert.equal(sha(bytes),row.sha256,`Playback changed retained numerical evidence: ${row.path}`);}
+    state.checks[key].playback={passed:true,job_id:job.id,recorded_states:5,first_time_s:0,final_time_s:index.end_time,final_aria_value:finalText,duration_seconds:.5,speed:1,canvas:extent,screenshot:{path:screenshot,bytes:image.length,sha256:sha(image)},index_sha256:sha(captured.cache.get('fields/index.json')),unchanged_artifacts:captured.receipt.artifacts.length,scope:'Actual installed Electron field controls reached the exact final saved time; retained source bytes and solver launch events did not change. Screenshot and native canvas retained; no Blender or video export claim.'};
+    write(path.join(root,`playback-${key}.json`),state.checks[key].playback);save();
+  }
   async function firstLaunch(){return phase('first_launch',async()=>{
     assert.ok(!state.first_launch_passed&&Object.keys(state.jobs).length===0,'Fresh laboratory acceptance required');
+    write(path.join(root,'continuum-reference-plan.json'),{schema:'phaseforge.native-continuum-plan.v1',heat_parameters:HEAT_PARAMETERS,flow_parameters:FLOW_PARAMETERS,tolerances:CONTINUUM_TOLERANCES,reference_source_sha256:sha(fs.readFileSync(path.join(HERE,'native-continuum.mjs'))),decoder_source_sha256:sha(fs.readFileSync(path.join(HERE,'native-continuum-arrays.py'))),frames_per_engine:5,all_channel_cell_comparisons:10240,phase_active_budget_ms:290000,scope:'Fixed small normal-API continuum cases and data playback; no provider requests, generated publication, Blender export or experimental calibration.'});
     await capture(await completed((await create('openmm','solver',{engine:'openmm_argon',parameters:OPENMM_PARAMETERS})).id),'completed');
     await capture(await completed((await create('field','solver',{engine:'diffusion_2d',parameters:FIELD_PARAMETERS})).id),'completed');
+    for(const [key,engine,parameters]of [['heat','heat_conduction_2d',HEAT_PARAMETERS],['flow','navier_stokes_2d',FLOW_PARAMETERS]]){const done=await completed((await create(key,'solver',{engine,parameters})).id);const captured=await capture(done,'completed');await playback(done,captured,key);}
     const canaries=path.join(root,'canaries');fs.mkdirSync(canaries,{recursive:true});const readCanary=path.join(canaries,'read.txt'),writeCanary=path.join(canaries,'must-not-write.txt'),runtimeCanary=path.join(path.dirname(runtime),'release-must-not-write.txt');
     fs.writeFileSync(plain(readCanary,{missing:true}),'Synthetic release boundary canary; contains no user data.');const before=sha(fs.readFileSync(readCanary));assert.ok(!fs.existsSync(writeCanary)&&!fs.existsSync(runtimeCanary));
     let connections=0,received=0;const server=net.createServer(socket=>{connections++;socket.on('data',data=>{received+=data.length;});socket.end();});
@@ -182,10 +223,10 @@ export function createLaboratoryAcceptance({page,call,remember,observedProcesses
     }
     assert.ok(state.restart?.passed&&!state.restored);const checks=[];
     for(const set of state.artifact_sets){const job=await get(set.job_id);assert.equal(job.state,'completed');assert.equal(sha(await fetchArtifact(job.id,'input.json')),set.input_sha256);for(const row of set.artifacts){const bytes=await fetchArtifact(job.id,row.path);assert.equal(bytes.length,row.bytes);assert.equal(sha(bytes),row.sha256,`Restored artifact changed: ${job.id}/${row.path}`);}checks.push({job_id:job.id,artifacts_checked:set.artifacts.length,input_sha256:set.input_sha256});write(path.join(root,'restored-jobs',`${job.id}.json`),job);}
-    assert.equal(checks.length,4);const stoppedChecks=[];
+    assert.equal(checks.length,6);const stoppedChecks=[];
     for(const [kind,expected,artifacts,replacementId]of [['explicit_cancel',state.cancel.job,state.cancel.artifact_receipt.artifacts,null],['quit_original',{...state.quit.job,state:'paused'},state.quit.source_artifacts,state.restart.new_job_id]]){const job=await get(expected.id);verifyRestoredStopped(job,expected,{replacementId});for(const row of artifacts){const bytes=await fetchArtifact(job.id,row.path);assert.equal(bytes.length,row.bytes);assert.equal(sha(bytes),row.sha256,`Restored stopped-attempt artifact changed: ${job.id}/${row.path}`);}write(path.join(root,'restored-jobs',`${job.id}.json`),job);stoppedChecks.push({kind,job_id:job.id,state:job.state,artifacts_checked:artifacts.length,input_unchanged:true,source_and_inputs_unchanged:true,lineage_verified:true});}
     const usage=await api('/api/usage');assert.equal(usage.totals.total_tokens,0);state.restored={passed:true,index:3,workspace:path.resolve(workspace),jobs:checks,stopped_jobs:stoppedChecks,scope:'Normal API reads from the caller-provided closed-backup restored data directory; backup/connection-closure proof is in the parent native receipt'};
-    assert.ok(acceptanceComplete(state));assert.ok(remaining()>0,'Laboratory acceptance exceeded five-minute active-work bound');write(path.join(root,'completion-state.json'),state);const receipt={schema:FIXTURE,passed:true,...binding,scope:'Actual installed normal authenticated laboratory API; bounded CPU OpenMM and field references, generated NumPy/LPAC checks, explicit cancellation, normal-Quit interruption, immutable restart and exact restored-artifact hashes. No provider/model calls or Blender/ML scientific acceptance.',jobs:state.jobs,checks:{openmm:true,diffusion:true,lpac:true,cancel:true,quit_recovery:true,backup_restore:true},numerical_checks:state.checks,cancel:state.cancel,quit:state.quit,restart:state.restart,restored:state.restored,provider_tokens:0,artifact_sets:state.artifact_sets,evidence_files:evidenceFiles(root,path.resolve(output)),active_elapsed_ms:state.active_elapsed_ms+Date.now()-phaseBegan,limitations:['Storage is a monitored soft limit; no hard quota claim.','Small fixed numerical references do not establish broad physical/biological predictive validity.','The parent native process receipts establish final normal-Quit process/service drainage.']};write(path.join(output,'LABORATORY_ACCEPTANCE.json'),receipt);save();return receipt;
+    assert.ok(acceptanceComplete(state));assert.ok(remaining()>0,'Laboratory acceptance exceeded five-minute active-work bound');write(path.join(root,'completion-state.json'),state);const receipt={schema:FIXTURE,passed:true,...binding,scope:'Actual installed normal authenticated laboratory API; bounded CPU OpenMM, diffusion, SI heat and incompressible flow references, native recorded-field playback, generated NumPy/LPAC checks, explicit cancellation, normal-Quit interruption, immutable restart and exact restored-artifact hashes. No provider/model calls or generated-publication/Blender/ML scientific acceptance.',jobs:state.jobs,checks:{openmm:true,diffusion:true,heat:true,incompressible_flow:true,heat_playback:true,flow_playback:true,lpac:true,cancel:true,quit_recovery:true,backup_restore:true},numerical_checks:state.checks,cancel:state.cancel,quit:state.quit,restart:state.restart,restored:state.restored,provider_tokens:0,artifact_sets:state.artifact_sets,evidence_files:evidenceFiles(root,path.resolve(output)),active_elapsed_ms:state.active_elapsed_ms+Date.now()-phaseBegan,limitations:['Storage is a monitored soft limit; no hard quota claim.','Small fixed numerical references do not establish broad physical/biological predictive validity.','Generated temporal publication and Blender exports are outside this hosted fixture.','The parent native process receipts establish final normal-Quit process/service drainage.']};write(path.join(output,'LABORATORY_ACCEPTANCE.json'),receipt);save();return receipt;
   });}
   return {firstLaunch,beforeQuit,reopen,evidence:state};
 }

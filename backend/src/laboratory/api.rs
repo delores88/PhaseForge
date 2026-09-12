@@ -12,6 +12,7 @@ pub fn routes()->Router<Arc<AppState>>{
         .merge(super::exports::routes())
         .merge(super::data::routes())
         .merge(crate::agent::laboratory::steering_routes())
+        .route("/api/laboratory/capabilities",get(capabilities))
         .route("/api/laboratory/jobs",get(list))
         .route("/api/laboratory/jobs/:id",get(get_job))
         .route("/api/laboratory/jobs/:id/control",post(control))
@@ -19,7 +20,9 @@ pub fn routes()->Router<Arc<AppState>>{
         .route("/api/laboratory/jobs/:id/artifacts/*path",get(artifact))
         .route("/api/laboratory/jobs/:id/presentation",get(presentation).put(save_presentation))
         .route("/api/laboratory/jobs/:id/observations",post(observe))
+        .route("/api/laboratory/jobs/:id/review",post(review_result))
         .route("/api/projects/:id/laboratory/chat",post(chat))
+        .route("/api/projects/:id/laboratory/seen",post(seen_project))
         .route("/api/projects/:id/laboratory/jobs",post(create_standalone_job))
 }
 /// Direct numerical clients use the same retained jobs and supervision as chat.
@@ -38,6 +41,8 @@ fn standalone_deadline(request:&StandaloneJobRequest,now:chrono::DateTime<chrono
             match request.input["engine"].as_str(){
                 Some("openmm_argon")=>{},
                 Some("diffusion_2d")=>super::field::validate(&request.input["parameters"])?,
+                Some("heat_conduction_2d")=>super::thermal::validate(&request.input["parameters"])?,
+                Some("navier_stokes_2d")=>super::fluid::validate(&request.input["parameters"])?,
                 Some("newtonian_nbody")=>super::mechanics::validate(&request.input["parameters"])?,
                 _=>anyhow::bail!("Choose an executable scientific engine"),
             }
@@ -62,6 +67,7 @@ async fn create_standalone_job(State(state):State<Arc<AppState>>,Path(project):P
 async fn list(State(state):State<Arc<AppState>>,Query(query):Query<ProjectQuery>)->Result<Json<Value>,Error>{
     Ok(Json(json!({"jobs":state.laboratory.list(query.project_id)?.iter().map(LabJob::summary).collect::<Vec<_>>()})))
 }
+async fn capabilities()->Json<Value>{Json(super::catalog::capabilities())}
 async fn get_job(State(state):State<Arc<AppState>>,Path(id):Path<Uuid>)->Result<Json<LabJob>,Error>{Ok(Json(state.laboratory.get(id)?))}
 async fn chat(State(state):State<Arc<AppState>>,Path(project):Path<Uuid>,Json(request):Json<crate::agent::laboratory::SessionRequest>)->Result<Json<LabJob>,Error>{
     let job=state.agent.start_lab_session(state.clone(),project,request,None)?;Ok(Json(job))
@@ -81,6 +87,7 @@ async fn control(State(state):State<Arc<AppState>>,Path(id):Path<Uuid>,Json(requ
         "pause"=>{state.laboratory.stop(id,"paused")?;}
         "resume"=>{
             if !matches!(job.state.as_str(),"paused"|"failed"|"timed_out"){return Err(anyhow::anyhow!("Only paused, failed or timed-out jobs can resume").into());}
+            if job.kind=="published_simulation"{return Err(anyhow::anyhow!("Resume the parent agent to continue this retained-data publication; it is not a solver restart").into());}
             if job.kind=="specialist"{
                 if request.options.contains_key("time_limit_seconds"){return Err(anyhow::anyhow!("Specialists inherit their parent's exact deadline. Extend and resume the parent session instead.").into());}
                 state.agent.resume_lab_session(state.clone(),id)?;
@@ -117,8 +124,40 @@ async fn control(State(state):State<Arc<AppState>>,Path(id):Path<Uuid>,Json(requ
     }
     Ok(Json(state.laboratory.get(id)?))
 }
-async fn seen(State(state):State<Arc<AppState>>,Path(id):Path<Uuid>)->Result<Json<LabJob>,Error>{
-    Ok(Json(state.laboratory.update(id,|job|job.seen_at=Some(chrono::Utc::now()))?))
+#[derive(Default,Deserialize)]
+#[serde(deny_unknown_fields)]
+struct SeenRequest { completed_at:Option<chrono::DateTime<chrono::Utc>> }
+#[derive(Deserialize)]
+#[serde(deny_unknown_fields)]
+struct SeenJob { id:Uuid,completed_at:chrono::DateTime<chrono::Utc> }
+#[derive(Deserialize)]
+#[serde(deny_unknown_fields)]
+struct SeenProjectRequest { jobs:Vec<SeenJob> }
+fn acknowledge_seen(service:&super::LaboratoryService,id:Uuid,expected:Option<chrono::DateTime<chrono::Utc>>)->anyhow::Result<LabJob>{
+    let current=service.get(id)?;
+    let observed=expected.or(current.completed_at);
+    if current.state!="completed"||observed.is_none()||current.completed_at!=observed||current.seen_at.is_some_and(|seen|Some(seen)>=observed){return Ok(current);}
+    service.update(id,|job|{
+        // A completion after the user's click remains unread, including a
+        // restart that finished while this acknowledgement was in flight.
+        if job.state=="completed"&&job.completed_at==observed{
+            job.seen_at=Some(job.seen_at.map_or(observed.unwrap(),|seen|seen.max(observed.unwrap())));
+        }
+    })
+}
+async fn seen(State(state):State<Arc<AppState>>,Path(id):Path<Uuid>,Json(request):Json<SeenRequest>)->Result<Json<LabJob>,Error>{
+    Ok(Json(acknowledge_seen(&state.laboratory,id,request.completed_at)?))
+}
+fn acknowledge_project(service:&super::LaboratoryService,project:Uuid,request:&SeenProjectRequest)->anyhow::Result<Vec<Value>>{
+    anyhow::ensure!(request.jobs.len()<=1000,"Acknowledge at most 1,000 observed jobs at once");
+    let mut unique=std::collections::HashSet::new();
+    for item in &request.jobs{
+        anyhow::ensure!(unique.insert(item.id)&&service.get(item.id)?.project_id==project,"Each observed job must be unique and belong to this project");
+    }
+    request.jobs.iter().map(|item|acknowledge_seen(service,item.id,Some(item.completed_at)).map(|job|job.summary())).collect()
+}
+async fn seen_project(State(state):State<Arc<AppState>>,Path(project):Path<Uuid>,Json(request):Json<SeenProjectRequest>)->Result<Json<Value>,Error>{
+    Ok(Json(json!({"jobs":acknowledge_project(&state.laboratory,project,&request)?})))
 }
 fn render_restart_deadline(service:&super::LaboratoryService,job:&LabJob,options:&serde_json::Map<String,Value>,now:chrono::DateTime<chrono::Utc>)->anyhow::Result<Option<chrono::DateTime<chrono::Utc>>>{
     if let Some(parent)=job.parent_id.map(|id|service.get(id)).transpose()?{
@@ -244,6 +283,18 @@ async fn observe(State(state):State<Arc<AppState>>,Path(id):Path<Uuid>,Json(mut 
     };
     Ok(Json(state.agent.start_lab_session(state.clone(),job.project_id,request,None)?))
 }
+
+/// A dedicated endpoint fails closed against an older engine. Never fall back
+/// to ordinary chat if this evidence-only operation is unavailable.
+async fn review_result(State(state):State<Arc<AppState>>,Path(id):Path<Uuid>,Json(request):Json<crate::agent::laboratory::SessionRequest>)->Result<Json<LabJob>,Error>{
+    let review=request.result_review.as_ref().context("Choose a saved-result review action")?;
+    if review.source_job_id!=id{return Err(anyhow::anyhow!("The review path and selected source do not match").into());}
+    let request_id=request.request_id.context("A saved-result review needs an immutable request ID")?;
+    let source=state.laboratory.get(id)?;
+    let existing=state.laboratory.list(Some(source.project_id))?;
+    if existing.iter().any(|job|job.id!=request_id&&job.kind=="session"&&job.active()){return Err(anyhow::anyhow!("Finish or stop this conversation's active session before starting a result review").into());}
+    Ok(Json(state.agent.start_lab_session(state.clone(),source.project_id,request,None)?))
+}
 pub struct Error(anyhow::Error);
 impl<E:Into<anyhow::Error>> From<E> for Error{fn from(error:E)->Self{Self(error.into())}}
 impl IntoResponse for Error{fn into_response(self)->Response{
@@ -269,6 +320,24 @@ impl IntoResponse for Error{fn into_response(self)->Response{
         let db=crate::persistence::Database::open(&config.database_path()).unwrap();
         let project=crate::domain::ResearchProject::new(crate::domain::CreateProjectRequest{name:Some("Presentation".into()),question:"test".into()});db.put_project(&project).unwrap();
         let service=super::super::LaboratoryService::new(db,config).unwrap();let id=Uuid::new_v4();service.create(id,project.id,None,"solver","test",json!({}),None).unwrap();(dir,service,id)
+    }
+    #[test]fn viewed_completion_stays_read_but_a_new_completion_does_not(){
+        let (_dir,service,id)=fixture();
+        let done=service.update(id,|job|{job.state="completed".into();job.event("completed","First result",json!({}));}).unwrap();
+        let first=done.completed_at.unwrap();
+        let seen=acknowledge_seen(&service,id,Some(first)).unwrap();assert_eq!(seen.seen_at,Some(first));
+        service.update(id,|job|job.event("presentation_updated","Camera moved",json!({}))).unwrap();
+        assert_eq!(service.get(id).unwrap().completed_at,Some(first));
+        let later=first+chrono::Duration::seconds(10);
+        service.update(id,|job|{job.events.push(super::super::LabEvent{sequence:job.events.len()+1,at:later,kind:"completed".into(),message:"New result".into(),data:json!({})});}).unwrap();
+        let stale=acknowledge_seen(&service,id,Some(first)).unwrap();assert_eq!(stale.seen_at,Some(first));assert_eq!(stale.completed_at,Some(later));
+        let viewed=acknowledge_seen(&service,id,Some(later)).unwrap();assert_eq!(viewed.seen_at,Some(later));
+    }
+    #[test]fn project_read_validates_all_members_before_changing_any_job(){
+        let (_dir,service,id)=fixture();let job=service.update(id,|job|{job.state="completed".into();job.event("completed","Saved",json!({}));}).unwrap();
+        let request=SeenProjectRequest{jobs:vec![SeenJob{id,completed_at:job.completed_at.unwrap()}]};
+        assert!(acknowledge_project(&service,Uuid::new_v4(),&request).is_err());assert!(service.get(id).unwrap().seen_at.is_none());
+        let result=acknowledge_project(&service,job.project_id,&request).unwrap();assert_eq!(result.len(),1);assert!(service.get(id).unwrap().seen_at.is_some());
     }
     #[test]fn concurrent_camera_save_rebases_without_losing_agent_color(){
         let (_dir,service,id)=fixture();

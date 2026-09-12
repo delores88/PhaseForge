@@ -1,0 +1,7 @@
+.results{flex:none;min-width:0;border-bottom:1px solid #274053;background:#0c1a26;color:#e0eaf3}
+.results header{display:flex;align-items:center;gap:12px;padding:8px 14px;flex-wrap:wrap}
+.results button{font:inherit;color:inherit;cursor:pointer;border:1px solid #38596c;background:#172c3b;border-radius:8px;min-height:36px;padding:7px 11px}
+.results button:hover{background:#214254}.results button:focus-visible{outline:2px solid #69c9f2;outline-offset:2px}
+.toggle{font-weight:650;white-space:nowrap}.latest{display:flex;min-width:140px;flex:1;flex-direction:column;gap:2px;font-size:12px}.latest strong{color:#8fc4d8;font-size:11px}.latest span{overflow:hidden;text-overflow:ellipsis;white-space:nowrap;max-width:100%}
+.openLatest{font-size:12px!important;white-space:nowrap}.list{display:flex;gap:9px;overflow-x:auto;padding:4px 14px 12px;scrollbar-gutter:stable}
+.card{display:flex!important;flex-direction:column;align-items:flex-start;text-align:left;gap:5px;width:230px;min-width:230px;max-width:230px}.card span,.card small{font-size:11px;color:#b2c6d4}.card strong{font-size:13px;white-space:normal;display:-webkit-box;-webkit-line-clamp:3;-webkit-box-orient:vertical;overflow:hidden}.card code{font-size:10px;overflow-wrap:anywhere;white-space:normal;color:#91b2c8}.card.selected{border-color:#65cff1;background:#163f50}

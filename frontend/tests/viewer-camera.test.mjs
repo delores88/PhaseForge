@@ -22,3 +22,9 @@ test('focused keyboard controls consume only recognized camera gestures and remo
   const {nav,listeners,controls}=rig(4);let prevented=0;listeners.get('keydown')({key:'ArrowRight',shiftKey:true,preventDefault(){prevented++;},stopPropagation(){}});
   assert.equal(prevented,1);assert.ok(controls.target.length()>0);listeners.get('keydown')({key:'a',preventDefault(){prevented++;}});assert.equal(prevented,1);nav.dispose();assert.equal(listeners.size,0);
 });
+
+test('camera shortcuts do not intercept modified browser commands or an input descendant',()=>{
+  const {nav,listeners,camera}=rig(4),before=camera.position.clone();let prevented=0;
+  for(const event of [{key:'-',ctrlKey:true},{key:'ArrowLeft',altKey:true},{key:'Home',target:{tagName:'INPUT'}}])listeners.get('keydown')({...event,preventDefault(){prevented++;},stopPropagation(){}});
+  assert.equal(prevented,0);assert.deepEqual(camera.position,before);nav.dispose();
+});

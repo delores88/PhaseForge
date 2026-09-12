@@ -1,6 +1,6 @@
 {
   "name": "phaseforge-desktop",
-  "version": "0.9.1",
+  "version": "0.10.0",
   "description": "Local scientific research and simulation workbench",
   "homepage": "https://github.com/delores88/PhaseForge",
   "desktopName": "science.phaseforge.desktop",

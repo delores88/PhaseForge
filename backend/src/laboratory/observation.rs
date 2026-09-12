@@ -44,7 +44,7 @@ fn digest(bytes: &[u8]) -> String {
     format!("{:x}", Sha256::digest(bytes))
 }
 
-fn bounded_bytes(path: &std::path::Path) -> anyhow::Result<Vec<u8>> {
+pub(super) fn bounded_bytes(path: &std::path::Path) -> anyhow::Result<Vec<u8>> {
     anyhow::ensure!(
         std::fs::metadata(path)?.len() <= 64 * 1024 * 1024,
         "Observation source exceeds the 64 MiB artifact limit"
@@ -117,7 +117,7 @@ fn pin_source(
     observation: Uuid,
     time: f64,
 ) -> anyhow::Result<Value> {
-    let field = source.input["engine"] == "diffusion_2d";
+    let field = source.field_output();
     let index_path = if field {
         "fields/index.json"
     } else {
@@ -227,14 +227,17 @@ fn validate_job_pin(service: &LaboratoryService, job: &LabJob) -> anyhow::Result
             .as_str()
             .context("Observation has no numerical source")?,
     )?;
+    let source_job=service.get(source)?;
     anyhow::ensure!(
-        service.get(source)?.project_id == job.project_id,
+        source_job.project_id == job.project_id,
         "Observation source belongs to another project"
     );
+    let metadata=super::exports::source_metadata(service,&source_job)?;
+    if !metadata.is_null(){anyhow::ensure!(job.input["settings"]["source_metadata"]==metadata,"Published observation source metadata changed after admission");}
     validate_pin(
         service,
         source,
-        job.input["engine"] == "diffusion_2d",
+        source_job.field_output(),
         &job.input["settings"]["source_pin"],
     )
 }
@@ -245,9 +248,10 @@ fn render_input(
     observation: Uuid,
     args: &Value,
 ) -> anyhow::Result<Value> {
-    let field = source.input["engine"] == "diffusion_2d";
+    let field = source.field_output();
+    let metadata=super::exports::source_metadata(service,source)?;
     anyhow::ensure!(
-        source.kind == "solver" && (field || source.input["engine"] == "openmm_argon" || source.input["engine"] == "newtonian_nbody"),
+        source.kind == "published_simulation" || (source.kind == "solver" && (field || source.input["engine"] == "openmm_argon" || source.input["engine"] == "newtonian_nbody")),
         "Additional views require a supported numerical solver result"
     );
     let index = service.read_json(
@@ -319,7 +323,7 @@ fn render_input(
         .unwrap_or(true);
     let pin = pin_source(service, source, observation, time)?;
     Ok(
-        json!({"source_directory":service.directory(source.id),"source_pin":pin,"mode":"png","width":width,"height":height,"fps":1,"playback_duration_seconds":1.0,"start_time":time,"end_time":time,"renderer":"eevee","samples":64,"labels":labels,"presentation":presentation}),
+        json!({"source_directory":service.directory(source.id),"source_pin":pin,"source_metadata":metadata,"mode":"png","width":width,"height":height,"fps":1,"playback_duration_seconds":1.0,"start_time":time,"end_time":time,"renderer":"eevee","samples":64,"labels":labels,"presentation":presentation}),
     )
 }
 
@@ -360,7 +364,7 @@ impl LaboratoryService {
             "Numerical source belongs to another project"
         );
         let settings = render_input(self, &source, id, args)?;
-        self.create_locked(id,source.project_id,Some(parent),"observation",args["title"].as_str().unwrap_or("Additional numerical view"),json!({"engine":source.input["engine"],"source_job_id":source_id,"request":args,"settings":settings,"scientific_rerun":false}),session.deadline_at)
+        self.create_locked(id,source.project_id,Some(parent),"observation",args["title"].as_str().unwrap_or("Additional numerical view"),json!({"engine":source.input["engine"],"representation":source.input["representation"],"source_job_id":source_id,"request":args,"settings":settings,"scientific_rerun":false}),session.deadline_at)
     }
     pub fn restart_observation(
         &self,
@@ -469,7 +473,7 @@ impl LaboratoryService {
         validate_job_pin(self, &job)?;
         let folder = self.directory(id);
         let settings = &job.input["settings"];
-        let field = job.input["engine"] == "diffusion_2d";
+        let field = job.field_output();
         write_json(&folder.join("render-input.json"), settings)?;
         std::fs::write(
             folder.join("trajectory_render.py"),

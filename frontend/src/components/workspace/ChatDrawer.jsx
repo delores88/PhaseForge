@@ -7,6 +7,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { formatDate, statusLabel } from "@/lib/format";
 import { api } from "@/lib/api";
 import ChatMarkdown from "./ChatMarkdown";
+import DeliverableStatus from './DeliverableStatus';
 import ConversationHistory from "./ConversationHistory";
 import drawerStyles from './ChatDrawer.module.css';
 import {ATTACHMENT_FORMATS as ALLOWED,readAttachmentBatch} from '@/lib/attachmentIntake.mjs';
@@ -19,7 +20,7 @@ function newId(){
   const h=Array.from(bytes,b=>b.toString(16).padStart(2,"0")).join("");
   return `${h.slice(0,8)}-${h.slice(8,12)}-${h.slice(12,16)}-${h.slice(16,20)}-${h.slice(20)}`;
 }
-export default function ChatDrawer({containerRef,messages,providers,busy,activeJob,error,project,projects,structures,selectedStructure,onStructureSelect,onProjectSelect,onNewProject,onRenameProject,onDeleteProject,onSend,onCancel,activeRequestId,findingsRun,onOpenFindings}){
+export default function ChatDrawer({containerRef,messages,providers,busy,activeJob,error,project,projects,structures,selectedStructure,onStructureSelect,onProjectSelect,onNewProject,onRenameProject,onDeleteProject,onSend,onTimeLimitChange,onCancel,activeRequestId,findingsRun,onOpenFindings}){
   const {selection,selectionValid,selectionError,selectionProjectId}=useModelSelection();
   const [collapsed,setCollapsed]=useState(false),[width,setWidth]=useState(34),[dragging,setDragging]=useState(false);
   const [historyOpen,setHistoryOpen]=useState(false);
@@ -46,10 +47,13 @@ export default function ChatDrawer({containerRef,messages,providers,busy,activeJ
     lastProject.current=project?.id||null;
     let value="";try{value=project?.id?localStorage.getItem(key(project.id))||"":"";}catch{}
     draftOwner.current=null;setContent(value);setAttachments([]);setBranch(null);setLocalError("");
-    let valueDuration='900';try{valueDuration=savedDuration(localStorage.getItem(`phaseforge.chat.duration:${project?.id}`));}catch{}setDuration(valueDuration);setCustomDuration(!CHAT_DURATION_PRESETS.some(([value])=>value===valueDuration));setCustomMinutes(valueDuration==='off'?'30':String(Number(valueDuration)/60));
+    let valueDuration='900';try{valueDuration=savedDuration(localStorage.getItem(`phaseforge.chat.duration:${project?.id}`));}catch{}
+    const custom=!CHAT_DURATION_PRESETS.some(([value])=>value===valueDuration),minutes=valueDuration==='off'?'30':String(Number(valueDuration)/60);
+    setDuration(valueDuration);setCustomDuration(custom);setCustomMinutes(minutes);
+    onTimeLimitChange?.(project?.id,{mode:custom?'custom':'preset',value:custom?minutes:valueDuration});
     // Separate the restore from the write effect; never write another world's draft.
     const t=setTimeout(()=>{draftOwner.current=project?.id||null;},0);return()=>clearTimeout(t);
-  },[project?.id]);
+  },[project?.id,onTimeLimitChange]);
   useEffect(()=>{if(project?.id&&draftOwner.current===project.id)try{localStorage.setItem(key(project.id),content);}catch{}},[content,project?.id]);
   const jump=useCallback(()=>{const el=transcript.current;if(el){el.scrollTo({top:el.scrollHeight,behavior:"smooth"});bottom.current=true;setNearBottom(true);}},[]);
   useEffect(()=>{if(bottom.current)jump();},[messages,busy,jump]);
@@ -77,6 +81,18 @@ export default function ChatDrawer({containerRef,messages,providers,busy,activeJ
     try{const next=await readAttachmentBatch(files,attachments);if(lastProject.current===owner)setAttachments(current=>[...current,...next]);}
     catch(e){if(lastProject.current===owner)setLocalError(e.message);}
     finally{readingFiles.current=false;}
+  };
+  const changeDuration=event=>{
+    const value=event.target.value,custom=value==='custom',next=custom?'1800':value;
+    setCustomDuration(custom);setDuration(next);if(custom)setCustomMinutes('30');
+    onTimeLimitChange?.(project?.id,{mode:custom?'custom':'preset',value:custom?'30':value});
+    try{if(project?.id)localStorage.setItem(`phaseforge.chat.duration:${project.id}`,next);}catch{}
+  };
+  const changeCustomMinutes=event=>{
+    const value=event.target.value;setCustomMinutes(value);
+    // Share invalid drafts too, so a review cannot silently use an older saved limit.
+    onTimeLimitChange?.(project?.id,{mode:'custom',value});
+    try{const seconds=customMinutesToSeconds(value);setDuration(String(seconds));if(project?.id)localStorage.setItem(`phaseforge.chat.duration:${project.id}`,String(seconds));}catch{}
   };
   const submit=async(event,override=null)=>{
     event?.preventDefault?.();const text=override?.content??content.trim();const files=override?[]:attachments;
@@ -110,13 +126,13 @@ export default function ChatDrawer({containerRef,messages,providers,busy,activeJ
       <button type="button" title="Collapse chat" aria-label="Collapse chat" onClick={()=>setCollapsed(true)}><PanelRightClose size={17}/></button>
     </div></header>
     {historyOpen&&<div className="researchHistoryOverlay"><div className="researchHistoryClose"><button type="button" onClick={()=>setHistoryOpen(false)}><X size={15}/>Close history</button></div><ConversationHistory projects={projects} activeId={project?.id} onSelect={id=>{onProjectSelect(id);setHistoryOpen(false);}} onNew={()=>{onNewProject();setHistoryOpen(false);}} onRename={onRenameProject} onDelete={id=>{if(!busy)onDeleteProject(id);}}/></div>}
-    <div className="researchContext"><label className={drawerStyles.duration}>{activeJob?'Next session limit':'Work limit'}<select aria-label="Maximum work time for the next new session" value={customDuration?'custom':duration} onChange={event=>{const value=event.target.value;if(value==='custom'){setCustomDuration(true);setCustomMinutes('30');setDuration('1800');try{if(project?.id)localStorage.setItem(`phaseforge.chat.duration:${project.id}`,'1800');}catch{}}else{setCustomDuration(false);setDuration(value);try{if(project?.id)localStorage.setItem(`phaseforge.chat.duration:${project.id}`,value);}catch{}}}}>{CHAT_DURATION_PRESETS.map(([value,label])=><option key={value} value={value}>{label}</option>)}<option value="custom">Custom…</option></select></label>{customDuration&&<label className={drawerStyles.duration}><input type="number" min="1" max="10080" step="1" aria-label="Custom work time in minutes" value={customMinutes} onChange={event=>{setCustomMinutes(event.target.value);try{const seconds=customMinutesToSeconds(event.target.value);setDuration(String(seconds));if(project?.id)localStorage.setItem(`phaseforge.chat.duration:${project.id}`,String(seconds));}catch{}}}/>minutes</label>}<Link href="/usage/" title="Token usage, cost controls, and stopping all calls"><Wallet size={14}/><span>Usage controls</span></Link></div>
+    <div className="researchContext"><label className={drawerStyles.duration}>{activeJob?'Next session limit':'Work limit'}<select aria-label="Maximum work time for the next new session" value={customDuration?'custom':duration} onChange={changeDuration}>{CHAT_DURATION_PRESETS.map(([value,label])=><option key={value} value={value}>{label}</option>)}<option value="custom">Custom…</option></select></label>{customDuration&&<label className={drawerStyles.duration}><input type="number" min="1" max="10080" step="1" aria-label="Custom work time in minutes" value={customMinutes} onChange={changeCustomMinutes}/>minutes</label>}<Link href="/usage/" title="Token usage, cost controls, and stopping all calls"><Wallet size={14}/><span>Usage controls</span></Link></div>
     {structures.length>0&&<div className="researchStructureContext"><FlaskConical size={14}/><select aria-label="Molecular structure context" value={selectedStructure?.id||""} onChange={e=>onStructureSelect?.(e.target.value||null)}><option value="">No structure selected</option>{structures.map(s=><option key={s.id} value={s.id}>{s.name}</option>)}</select></div>}
     <div className="researchTranscript" ref={transcript} onScroll={()=>{const el=transcript.current;const close=el.scrollHeight-el.scrollTop-el.clientHeight<90;bottom.current=close;setNearBottom(close);}}>
       {!messages.length&&<div className="researchChatEmpty"><span><Sparkles size={25}/></span><h3>{project?"What should we investigate?":"Your research starts here."}</h3><p>{project?"Ask a scientific question, run an experiment, or inspect its evidence. Work continues when you navigate elsewhere.":"Create a research world, connect your API account, and choose a model."}</p>{!configured.length?<Link href="/settings/" className="button button--secondary"><Settings size={15}/>Connect provider</Link>:<div className="researchSuggestions">{["Design and run an experiment","Explain the current evidence","Inspect the selected molecular structure"].map(text=><button key={text} type="button" onClick={()=>setContent(text)} disabled={!project}>{text}</button>)}</div>}</div>}
       {messages.map((m,index)=>{const user=m.role==="user";const meta=m.metadata||{};const presentation=chatPresentation(m);const source=user?m:[...messages.slice(0,index)].reverse().find(item=>item.role==="user");const sessionOwned=presentation.session||chatPresentation(source).session;return <article key={m.id} className={`researchMessage ${user?"researchMessage--user":"researchMessage--assistant"} ${m.kind==="error"?"researchMessage--error":""}`}>
         {!user&&<div className="assistantIdentity"><Bot size={16}/><strong>{statusLabel(m.agent_role||"assistant")}</strong><time>{formatDate(m.created_at)}</time></div>}
-        <div className="researchMessageBody">{user&&<div className="userMessageMeta">{presentation.label} <time>{formatDate(m.created_at)}</time></div>}<ChatMarkdown>{presentation.content}</ChatMarkdown>{meta.attachments?.length>0&&<div className="researchMessageFiles">{meta.attachments.map((a,i)=><span key={a.id||i}><Paperclip size={12}/>{a.name}</span>)}</div>}</div>
+        <div className="researchMessageBody">{user&&<div className="userMessageMeta">{presentation.label} <time>{formatDate(m.created_at)}</time></div>}<ChatMarkdown>{presentation.content}</ChatMarkdown>{!user&&<DeliverableStatus value={meta.deliverable}/>}{meta.attachments?.length>0&&<div className="researchMessageFiles">{meta.attachments.map((a,i)=><span key={a.id||i}><Paperclip size={12}/>{a.name}</span>)}</div>}</div>
         {(m.manifest_id||meta.submitted_run_id||meta.capability_gap||meta.research_plan_id)&&<div className="researchArtifacts">{meta.research_plan_id&&<span><Sparkles size={13}/>Research plan ready</span>}{m.manifest_id&&<span><FlaskConical size={13}/>Experiment revision saved</span>}{meta.submitted_run_id&&<span>Run submitted</span>}{meta.capability_gap&&<span><ShieldAlert size={13}/>Capability gap recorded</span>}</div>}
         <footer className="researchMessageActions"><button type="button" onClick={()=>copy({...m,content:presentation.content})} title="Copy message">{copied===m.id?<Check size={13}/>:<Copy size={13}/>}<span>{copied===m.id?"Copied":"Copy"}</span></button>{user&&!sessionOwned&&<button type="button" onClick={()=>edit(m)} disabled={busy}><Pencil size={13}/><span>Edit & branch</span></button>}{!sessionOwned&&<button type="button" onClick={()=>repeat(m,index)} disabled={busy||blocked} title="Sends a new metered model request"><RotateCcw size={13}/><span>{user||m.kind==="error"?"Retry":"Regenerate"}</span></button>}{sessionOwned&&<small>Research session · progress and controls in Agents</small>}{!user&&meta.model&&<small>{meta.model}</small>}</footer>
       </article>;})}

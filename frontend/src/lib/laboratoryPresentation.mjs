@@ -9,7 +9,7 @@ export function labJobPresentation(job) {
   const unread=state==='completed'&&(!Number.isFinite(seen)||(Number.isFinite(completed)&&seen<completed));
   const labels={queued:'Queued',running:'Running',provisioning:'Preparing environment',waiting:'Waiting',completed:'Completed',paused:'Paused',failed:'Failed',timed_out:'Time limit reached',cancelled:'Cancelled'};
   const fraction=job.progress?.fraction;
-  return {state,label:labels[state]||state.replaceAll('_',' '),active:ACTIVE_LAB_STATES.has(state),unread,resumable:RESUMABLE_LAB_STATES.has(state),
+  return {state,label:labels[state]||state.replaceAll('_',' '),active:ACTIVE_LAB_STATES.has(state),unread,resumable:RESUMABLE_LAB_STATES.has(state)&&job.kind!=='published_simulation',
     percent:Number.isFinite(fraction)?Math.round(Math.max(0,Math.min(1,fraction))*100):null};
 }
 export function labElapsed(job,now=Date.now()) {

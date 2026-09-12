@@ -4,7 +4,7 @@ export async function dispatchLabMessage({projectId,activeSession,payload,snapsh
   const target=activeSession?.project_id===projectId&&activeSession.kind==='session'&&['queued','running','waiting','provisioning'].includes(activeSession.state)?activeSession:null;
   let attachments=payload.attachments||[];
   if(target){
-    try{return{kind:'update',value:await submitUpdate(target.id,{request_id:payload.request_id,content:payload.content,attachments})};}
+    try{return{kind:'update',value:await submitUpdate(target.id,{request_id:payload.request_id,content:payload.content,attachments,...(payload.output_intent?{output_intent:payload.output_intent}:{})})};}
     catch(error){
       if(error.status!==409||error.body?.error?.code!=='session_finished')throw error;
       const retained=error.body.error.retained_files;

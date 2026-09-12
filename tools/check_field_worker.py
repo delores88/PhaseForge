@@ -131,7 +131,10 @@ class Runner:
         return folder, input_path, folder / "output"
 
     def command(self, input_path, output):
-        return [sys.executable, str(self.worker), "--input", str(input_path),
+        # Interpreter flags are not inherited from this checker's own process.
+        # The bundled source runtime is immutable: imported libraries must never
+        # create __pycache__ entries in its checked inventory.
+        return [sys.executable, "-I", "-B", str(self.worker), "--input", str(input_path),
                 "--output", str(output)]
 
     def execute(self, folder, input_path, output, label="process", timeout=300):

@@ -5,9 +5,19 @@
 
 .syncNotice{margin:0;color:#aac3df;font-size:10px;line-height:1.5;pointer-events:none}
 
+.particleViewer{display:grid;flex-shrink:0;grid-template-columns:minmax(0,1fr);grid-template-rows:auto auto minmax(300px,50vh) auto auto auto;height:auto;min-height:850px}
+.particleViewer>.header{position:relative;inset:auto;grid-row:1;padding:16px 20px 10px;background:#080f20;flex-wrap:wrap}
+.particleViewer>.provenance{position:relative;inset:auto;grid-row:2;padding:0 20px 10px;flex-wrap:wrap}
+.particleViewer>.canvas{position:relative;inset:auto;grid-row:3;z-index:0;min-height:0;overflow:hidden}
+.particleViewer>.cameraTools{position:relative;inset:auto;grid-row:4;max-width:none;background:#0d1b2d;padding:12px 16px;border-top:1px solid #304761;z-index:3}
+.particleViewer>.footer{position:relative;inset:auto;grid-row:6;background:#080f20;padding:14px 16px}
+.particleLegend{grid-row:5;display:flex;align-items:center;justify-content:space-between;gap:12px;flex-wrap:wrap;padding:12px 16px;background:#0d1a2d;color:#cedff4;font-size:10px}
+.particleViewer>.orientation{bottom:315px;z-index:1}.particleViewer>.scaleLabel{bottom:290px;z-index:1}.particleViewer>.inspector{bottom:330px}.particleViewer:fullscreen{height:100vh;min-height:0;overflow:auto;grid-template-rows:auto auto minmax(280px,1fr) auto auto auto}
+@media(max-width:600px){.particleViewer{height:auto;min-height:880px}.particleViewer>.orientation{bottom:390px}.particleViewer>.scaleLabel{bottom:365px}.particleViewer>.inspector{bottom:410px}}
+
 /* The quantitative plane owns a real viewport between controls and legend.
    Camera fitting uses that viewport, so no scientific cells sit under chrome. */
-.fieldViewer{display:grid;grid-template-rows:auto auto auto minmax(280px,1fr) auto auto;height:clamp(760px,90vh,960px);min-height:760px}
+.fieldViewer{display:grid;flex-shrink:0;grid-template-columns:minmax(0,1fr);grid-template-rows:auto auto auto minmax(300px,50vh) auto auto;height:auto;min-height:760px}
 .fieldViewer>.header{position:relative;inset:auto;grid-row:1;padding:18px 20px 10px;background:#080f20;gap:12px}
 .fieldViewer>.provenance{position:relative;inset:auto;grid-row:2;padding:0 20px 10px;font-size:11px;color:#b7c9e0}
 .fieldViewer>.cameraTools{position:relative;inset:auto;grid-row:3;max-width:none;padding:0 20px 12px;background:#080f20;z-index:2}
@@ -21,5 +31,5 @@
 .legendDetails{display:grid;gap:2px;color:#c0d2ea;font-size:10px}
 .legendDetails>strong{font-weight:500;color:#e2edfb}
 .bodyColors{display:flex;flex-wrap:wrap;gap:7px 14px;margin-top:8px;font-size:11px}.bodyColors>span{display:inline-flex;align-items:center;gap:6px}.bodyColors i{width:9px;height:9px;border-radius:50%;display:inline-block;box-shadow:0 0 0 1px #ffffff35}
-.fieldViewer:fullscreen{height:100vh;min-height:0}
+.fieldViewer:fullscreen{height:100vh;min-height:0;overflow:auto;grid-template-rows:auto auto auto minmax(280px,1fr) auto auto}
 @media(max-width:600px){.fieldViewer{height:auto;min-height:800px;grid-template-rows:auto auto auto minmax(300px,1fr) auto auto}.fieldViewer>.header{padding:16px 16px 9px;gap:8px}.fieldViewer>.header .actions{align-self:flex-start;margin:0}.fieldViewer>.provenance{padding:0 16px 10px;font-size:10px;flex-wrap:wrap}.fieldViewer>.cameraTools{padding:0 16px 12px}.fieldViewer>.footer{padding:14px 16px}.fieldLegend{padding:12px 16px;gap:10px}.legendScale{flex-basis:220px}.legendDetails{font-size:10px}.fieldViewer:fullscreen{overflow:auto}}

@@ -29,12 +29,15 @@ function json(method, payload = {}) {
 }
 
 export const api = {
+  labCapabilities: signal=>request('/api/laboratory/capabilities',{signal}),
   labJobs: (projectId,signal)=>request(`/api/laboratory/jobs${projectId ? `?project_id=${projectId}` : ""}`,{signal}),
   labJob: (id,signal)=>request(`/api/laboratory/jobs/${id}`,{signal}),
   labChat: (projectId,payload)=>request(`/api/projects/${projectId}/laboratory/chat`,json("POST",payload)),
+  labReview: (sourceId,payload)=>request(`/api/laboratory/jobs/${encodeURIComponent(sourceId)}/review`,json('POST',payload)),
   labSteer: (id,payload)=>request(`/api/laboratory/jobs/${id}/steer`,json("POST",payload)),
   labControl: (id,action,options={})=>request(`/api/laboratory/jobs/${id}/control`,json("POST",{action,...options})),
-  labSeen: id=>request(`/api/laboratory/jobs/${id}/seen`,json("POST")),
+  labSeen: (id,completed_at)=>request(`/api/laboratory/jobs/${id}/seen`,json("POST",completed_at?{completed_at}:{})),
+  labProjectSeen: (projectId,jobs)=>request(`/api/projects/${projectId}/laboratory/seen`,json('POST',{jobs})),
   labObserve: (id,payload)=>request(`/api/laboratory/jobs/${id}/observations`,json("POST",payload)),
   studio: (path, payload, signal) => request(`/api/${path}`, {...(payload===undefined?{}:json('POST',payload)),signal}),
   tasks: (projectId, signal) => request(`/api/projects/${projectId}/tasks`, {signal}),

@@ -19,7 +19,7 @@ from mathutils import Vector
 
 # Both files are shipped trusted sources copied by the backend into this export job.
 sys.path.insert(0, str(Path(__file__).resolve().parent))
-from trajectory_render import atomic_json, sha256, committed_digest, pinned_source_index, verify_source_bytes, finite, integer, retained_time, recorded_index, export_frame_count, vec, rgb, camera_basis
+from trajectory_render import atomic_json, sha256, committed_digest, pinned_source_index, verify_source_bytes, finite, integer, retained_time, recorded_index, export_frame_count, vec, rgb, camera_basis, publication_metadata, publication_title
 
 
 class Fields:
@@ -129,6 +129,7 @@ def set_hud_visibility(objects, visible):
 def main(config, output):
     started = time.monotonic()
     source = Fields(Path(config['source_directory']), config.get('source_pin'))
+    source_metadata = publication_metadata(config, source)
     presentation = config.get('presentation') or {}
     mode = config.get('mode', 'video')
     if mode not in ('video', 'png'):
@@ -241,7 +242,8 @@ def main(config, output):
         values,receipt=source.sample(timestamp)
         colors=field_colors(values,source.index['color_scale'],presentation)
         pixels.pixels.foreach_set(np.concatenate([colors,np.ones((source.ny,source.nx,1))],axis=2).astype(np.float32).ravel());pixels.update()
-        label.data.body=f"PhaseForge | computed scalar field | {source.nx} x {source.ny} cells\nt = {receipt['display_time']:.6g} {source.index['time_unit']} | exact recorded state"
+        heading=publication_title(source_metadata) or f"PhaseForge | computed scalar field | {source.nx} x {source.ny} cells"
+        label.data.body=f"{heading}\nt = {receipt['display_time']:.6g} {source.index['time_unit']} | exact recorded state"
         return receipt
     scene.frame_start,scene.frame_end=1,count
     phase={'name':'preview','previews':0,'completed':0,'movie_started':None}
@@ -276,6 +278,7 @@ def main(config, output):
         artifact=output/'first-frame.png';decoded={'decoder':'Blender PNG render','width':width,'height':height,'frame_count':1}
     result={'schema_version':1,'state':'completed','filename':artifact.name,'width':width,'height':height,'fps':fps,'duration_seconds':count/fps if mode=='video' else 0,'frame_count':count,'start_time':start,'end_time':end,'time_unit':source.index['time_unit'],'renderer':f'Blender {bpy.app.version_string} {engine}','worker_sha256':sha256(Path(__file__)),'helper_sha256':sha256(Path(__file__).with_name('trajectory_render.py')),'sha256':sha256(artifact),'size_bytes':artifact.stat().st_size,'elapsed_seconds':time.monotonic()-started,'source_index_sha256':source.index_sha256,'source_fields':source.hashes,'presentation':presentation,'endpoint_frames':receipts,'representation':'scalar_field','color_scale':source.index['color_scale'],'display_transform':{'view':'Standard','look':'None','color_mapping':'sRGB linear two-stop interpolation; fixed range; nearest cell; contrast shared with legend'},'interpolation':'hold previous recorded numerical field','scientific_rerun':False,'decode_check':decoded,'independent_player_check':'not performed by this worker'}
     result['labels'] = config.get('labels', True)
+    result['source_metadata'] = source_metadata
     atomic_json(output/'result.json',result);atomic_json(output/'progress.json',{'state':'completed','fraction':1,'frame':count,'frame_count':count,'elapsed_seconds':result['elapsed_seconds']});stop.set();return result
 
 

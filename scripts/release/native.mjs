@@ -194,7 +194,8 @@ async function session(executable,workspace,index,fixture){
     const laboratory=platform==='windows'?createLaboratoryAcceptance({page,call,remember,observedProcesses:()=>[...known.values()],workspace,output,projectId:fixture.project.id,sourceCommit:process.env.GITHUB_SHA,version,backendSha256:await sha256(backend)}):null;
     if(laboratory){if(index===1)await laboratory.firstLaunch();else await laboratory.reopen(index);}
     await page.goto(`http://127.0.0.1:7332/?project=${fixture.project.id}&run=${fixture.run_id}`,{waitUntil:'domcontentloaded'});
-    await page.getByRole('button',{name:'Results',exact:true}).click({timeout:30000});
+    await page.getByRole('button',{name:'Tools',exact:true}).click({timeout:30000});
+    await page.getByRole('button',{name:'Equation measurements',exact:true}).click({timeout:30000});
     await page.getByText('What we can say now',{exact:true}).waitFor({timeout:30000});
     writeJSON(path.join(folder,'findings-report.json'),await call(page,`/api/runs/${fixture.run_id}/findings`));
     for(let i=0;i<6;i++){const records=remember();peakRSS=Math.max(peakRSS,records.reduce((sum,item)=>sum+item.rss_bytes,0));assert.equal((await call(page,'/api/health')).status,'ok');await sleep(2000);}

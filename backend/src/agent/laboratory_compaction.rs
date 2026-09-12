@@ -49,7 +49,7 @@ impl AgentService {
             id:Uuid::new_v4(),round:journal.round,usage_id:previous.as_ref().map(|row|row.id),
             state:if previous.is_some(){"requesting"}else{"prepared"}.into(),response_id:previous.and_then(|row|row.provider_response_id),
             provider,model,reasoning_effort:request.reasoning_effort.clone(),output_limit:self.usage.settings()?.max_output_tokens,
-            prompt:format!("Produce a concise factual continuation ledger for this ongoing scientific task. Preserve the original goal, all user constraints, exact job IDs, tool outcomes including failures, measured values/units, hypotheses not yet tested, and next actions. Do not invent completion. Existing memory: {}. Transcript: {}",journal.memory,context_text(source)),
+            prompt:format!("Produce a concise factual continuation ledger for this ongoing scientific task. Preserve the original goal, all user constraints, exact job IDs, tool outcomes including failures, measured values/units, hypotheses not yet tested, and next actions. Do not invent completion. Existing memory: {}. Durable output intent (retain exactly; model summary cannot change it): {}. Transcript: {}",journal.memory,json!(journal.output_intent),context_text(source)),
             system:SYSTEM.into(),
             context_start:journal.context_start,through_item:journal.items.len(),source_sha256:source_hash(source)?,
             original_request:request.content.clone(),context_job_id:request.context_job_id,tool_count:journal.tools.len(),
@@ -141,7 +141,7 @@ impl AgentService {
         if !journal.compactions.iter().any(|entry|entry["id"]==json!(pending.id)){
             anyhow::ensure!(journal.context_start==pending.context_start&&journal.items.len()==pending.through_item,"Saved transcript changed during compaction; its receipt remains preserved");
             anyhow::ensure!(source_hash(&journal.items[pending.context_start..pending.through_item])?==pending.source_sha256,"Compaction source transcript no longer matches its saved request");
-            journal.memory=json!({"summary":summary,"original_request":pending.original_request,"context_job_id":pending.context_job_id,"tool_count":pending.tool_count,"tool_receipts":"journal.json tools dictionary; retrieve bounded ranges with read_artifact"});
+            journal.memory=json!({"summary":summary,"original_request":pending.original_request,"context_job_id":pending.context_job_id,"tool_count":pending.tool_count,"tool_receipts":"journal.json tools dictionary; retrieve bounded ranges with read_artifact","output_intent":journal.output_intent,"user_update_ids":journal.steering_ids});
             journal.compactions.push(json!({"id":pending.id,"at":Utc::now(),"usage_id":usage_id,"provider":pending.provider,"model":pending.model,"reasoning_effort":pending.reasoning_effort,"through_item":pending.through_item,"source_sha256":pending.source_sha256,"request":format!("compaction-request-{}.json",pending.id),"receipt":format!("compaction-provider-{}.json",pending.id),"memory":journal.memory}));
             journal.context_start=pending.through_item;
             journal.items.push(json!({"role":"user","content":format!("Continue this task from its durable ledger. Full source messages are available via recall and journal.json is available via read_artifact. {}",journal.memory)}));

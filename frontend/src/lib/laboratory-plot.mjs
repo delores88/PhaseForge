@@ -1,4 +1,4 @@
-export const laboratoryViewable=job=>['solver','illustration','ml_study','study_plot'].includes(job?.kind)||(job?.kind==='generated'&&job.state==='completed');
+export const laboratoryViewable=job=>['solver','illustration','ml_study','study_plot','published_simulation'].includes(job?.kind)||(job?.kind==='generated'&&job.state==='completed');
 export const isStudyPlot=job=>['ml_study','study_plot'].includes(job?.kind);
 
 export function plotSourceId(job){

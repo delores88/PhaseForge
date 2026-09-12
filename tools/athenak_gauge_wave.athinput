@@ -1,0 +1,70 @@
+# Analytic harmonic gauge wave, NOT a black-hole or gravitational-radiation case.
+# AthenaK c5a0d7f9155a70149931bf0be5a4ffb673f2532a
+# Build PROBLEM=z4c/z4c_gauge_wave, double precision, serial CPU.
+# Exact ds^2=(1-H)(-dt^2+dx^2)+dy^2+dz^2; H=.01 sin(2*pi*(x-t)).
+# Coordinates/time are dimensionless geometrized units with c=1, length L=1.
+<job>
+basename = harmonic-gauge
+<mesh>
+nghost = 2
+nx1 = 32
+nx2 = 4
+nx3 = 4
+x1min = 0
+x1max = 1
+x2min = 0
+x2max = 1
+x3min = 0
+x3max = 1
+ix1_bc = periodic
+ox1_bc = periodic
+ix2_bc = periodic
+ox2_bc = periodic
+ix3_bc = periodic
+ox3_bc = periodic
+<meshblock>
+nx1 = 32
+nx2 = 4
+nx3 = 4
+<time>
+evolution = dynamic
+integrator = rk4
+cfl_number = 0.25
+nlim = -1
+tlim = 0.1
+ndiag = 10
+<z4c>
+lapse_harmonic = 1
+lapse_harmonicf = 1
+lapse_oplog = 0
+lapse_advect = 0
+slow_start_lapse = false
+shift_Gamma = 0
+shift_alpha2Gamma = 0
+shift_H = 0
+shift_advect = 0
+shift_eta = 0
+diss = 0
+damp_kappa1 = 0
+damp_kappa2 = 0
+chi_psi_power = -4
+<problem>
+pgen_name = z4c_gauge_wave
+amp = 0.01
+<output1>
+file_type = bin
+variable = z4c
+dt = 0.05
+ghost_zones = false
+<output2>
+file_type = bin
+variable = con
+dt = 0.05
+ghost_zones = false
+<output3>
+file_type = hst
+dt = 0.05
+data_format = %24.16e
+<output4>
+file_type = rst
+dt = 0.05

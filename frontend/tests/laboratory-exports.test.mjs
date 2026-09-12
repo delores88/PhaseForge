@@ -1,6 +1,15 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import {exportStatusFromJob,exportsForSource,exportDownloadName,createExportRefresh} from '../src/lib/laboratory-exports.mjs';
+import {exportStatusFromJob,exportsForSource,exportDownloadName,createExportRefresh,savedRenderingReady} from '../src/lib/laboratory-exports.mjs';
+
+test('completed publications can render saved frames despite legacy capability flags; uncommitted publications cannot',()=>{
+  for(const representation of ['particle_trajectory','scalar_field']){
+    const publication={kind:'published_simulation',result:{representation,presentation:{capture:false,exports:false}}};
+    for(const state of ['queued','running','validating','failed','cancelled'])assert.equal(savedRenderingReady({...publication,state}),false);
+    assert.equal(savedRenderingReady({...publication,state:'completed'}),true);
+  }
+  assert.equal(savedRenderingReady({kind:'solver',state:'running'}),true,'native solver committed-frame rendering remains available');
+});
 
 test('export recovery uses the saved source identity and never offers cancelled/partial results as downloads',()=>{
   const jobs=[{id:'old',kind:'export',state:'completed',parent_id:'source',created_at:'2026-09-11T00:00:00Z'},

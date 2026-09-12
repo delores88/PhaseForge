@@ -4,6 +4,7 @@ use axum::{Router,Json,extract::{State,Path},routing::{get,post}};
 use serde::{Deserialize,Serialize};
 use serde_json::{json,Value};
 use uuid::Uuid;
+use sha2::{Digest,Sha256};
 use crate::app::AppState;
 use super::{LabJob,LaboratoryService,write_json,process,api::Error};
 
@@ -130,10 +131,68 @@ pub fn routes()->Router<Arc<AppState>>{
         .route("/api/laboratory/exports/:id",get(status))
         .route("/api/laboratory/exports/:id/cancel",post(cancel))
 }
+/// Publication is a data/lineage contract, never a scientific-validity certificate.
+/// Verify immutable publication bytes before queue admission and again at launch.
+pub(super) fn source_metadata(service:&LaboratoryService,job:&LabJob)->anyhow::Result<Value>{
+    if job.kind=="solver" {return Ok(Value::Null);}
+    anyhow::ensure!(job.kind=="published_simulation"&&job.state=="completed"&&!service.executing(job.id),"Rendering requires a completed, inactive numerical publication");
+    anyhow::ensure!(job.input["engine"]=="generated_temporal"&&job.result["engine"]=="generated_temporal"&&job.result["status"]=="completed","Numerical publication receipt is incomplete");
+    let representation=job.input["representation"].as_str().context("Publication representation missing")?;
+    for key in ["source_sha256","source_code_sha256","source_manifest_sha256"] {
+        anyhow::ensure!(job.input[key].as_str().is_some_and(|value|value.len()==64&&value.bytes().all(|b|b.is_ascii_hexdigit())),"Publication source digest missing: {key}");
+    }
+    let index_path=match representation {"scalar_field"=>"fields/index.json","particle_trajectory"=>"trajectory/index.json",_=>anyhow::bail!("Unsupported data-only numerical publication")};
+    anyhow::ensure!(job.result["representation"]==representation&&job.result["index_path"]==index_path,"Publication representation changed");
+    let read=|relative:&str|->anyhow::Result<Vec<u8>>{super::observation::bounded_bytes(&service.path(job.id,relative)?)};
+    let digest=|raw:&[u8]|format!("{:x}",Sha256::digest(raw));
+    let raw=read("source-simulation.json")?;
+    let document:Value=serde_json::from_slice(&raw)?;
+    anyhow::ensure!(document["schema"]=="phaseforge.simulation.v1"&&document["representation"]==representation,"Original numerical publication schema differs");
+    anyhow::ensure!(job.input["source_sha256"]==digest(&raw)&&job.result["source_sha256"]==job.input["source_sha256"],"Original published numerical source hash changed");
+    anyhow::ensure!(job.result["source_job_id"]==job.input["source_job_id"]&&job.result["source_code_sha256"]==job.input["source_code_sha256"],"Publication original execution lineage changed");
+    let source_manifest=read("source-execution-manifest.json")?;
+    anyhow::ensure!(job.input["source_manifest_sha256"]==digest(&source_manifest)&&job.result["source_manifest_sha256"]==job.input["source_manifest_sha256"],"Original execution manifest changed");
+    let manifest:Value=serde_json::from_slice(&read("manifest.json")?)?;
+    anyhow::ensure!(manifest["source"]==job.input&&manifest["model"]==document["model"]&&job.result["model"]==document["model"]&&job.input["model"]==document["model"],"Publication model/source declaration changed");
+    anyhow::ensure!(manifest["scientific_validation"]=="not_established_by_publication"&&job.result["scientific_validation"]=="not_established_by_publication","A publication cannot certify generated model validity");
+    let index_raw=read(index_path)?;let index_sha=digest(&index_raw);
+    anyhow::ensure!(job.result["index_sha256"]==index_sha,"Published numerical index hash changed");
+    let index:Value=serde_json::from_slice(&index_raw)?;
+    anyhow::ensure!(index["representation"]==representation&&index["time_unit"]==document["time_unit"],"Published numerical units/representation differ from their source");
+    let entries=index[if representation=="scalar_field"{"frames"}else{"chunks"}].as_array().context("Retained numerical entries missing")?;
+    anyhow::ensure!(!entries.is_empty(),"Published numerical entries are empty");
+    for entry in entries {
+        let pairs=if representation=="scalar_field"{vec![("path","sha256"),("view_path","view_sha256")]}else{vec![("path","sha256")]};
+        for (path_key,hash_key) in pairs {
+            let relative=entry[path_key].as_str().context("Numerical artifact path missing")?;
+            anyhow::ensure!(entry[hash_key]==digest(&read(relative)?),"Published numerical artifact changed: {relative}");
+        }
+    }
+    let topology_sha=if representation=="particle_trajectory" {
+        let raw=read("topology.json")?;let topology:Value=serde_json::from_slice(&raw)?;
+        anyhow::ensure!(index["boundary"]=="isolated"&&index.get("wrapping").is_none(),"Published isolated particles cannot acquire periodic wrapping");
+        let expected=json!({"schema_version":1,"boundary":"isolated","entities":document["topology"]["entities"],"bonds":[],"units":{"position":document["position_unit"],"time":document["time_unit"]}});
+        anyhow::ensure!(topology==expected&&index["position_unit"]==document["position_unit"],"Published topology or physical coordinate units changed");
+        Some(digest(&raw))
+    } else {
+        // The publisher writes normalized f64 lengths; original JSON may use
+        // integer tokens. Compare exact numeric values after raw-file pin checks.
+        let same_lengths=index["lengths_um"].as_array().zip(document["lengths_um"].as_array()).is_some_and(|(a,b)|a.len()==2&&b.len()==2&&a.iter().zip(b).all(|(x,y)|x.as_f64().is_some()&&x.as_f64()==y.as_f64()));
+        anyhow::ensure!(index["length_unit"]=="um"&&same_lengths&&index["field_unit"]==document["field_unit"]&&index["field_name"]==document["field_name"]&&index["boundary"]==document["boundary"],"Published scalar quantity/domain units changed");None
+    };
+    Ok(json!({"kind":"published_simulation","publication_job_id":job.id,"representation":representation,"model":document["model"],
+        "scientific_validation":"not_established_by_publication","source_job_id":job.input["source_job_id"],"source_sha256":job.input["source_sha256"],
+        "source_code_sha256":job.input["source_code_sha256"],"source_manifest_sha256":job.input["source_manifest_sha256"],"index_sha256":index_sha,"topology_sha256":topology_sha}))
+}
+
+#[cfg(test)]
+#[path="published_render_tests.rs"]
+mod published_render_tests;
+
 fn source_index(service:&LaboratoryService,id:Uuid)->anyhow::Result<Value>{
     let job=service.get(id)?;
-    anyhow::ensure!(job.kind=="solver","Only recorded numerical results can be exported");
-    let mut index=service.read_json(id,if job.input["engine"]=="diffusion_2d"{"fields/index.json"}else{"trajectory/index.json"})?;
+    source_metadata(service,&job)?;
+    let mut index=service.read_json(id,if job.field_output(){"fields/index.json"}else{"trajectory/index.json"})?;
     if index["representation"]=="scalar_field" {
         let frames=index["frames"].as_array().context("Recorded field states missing")?;
         let start=frames.first().and_then(|frame|frame["time"].as_f64()).context("Recorded field start missing")?;
@@ -143,7 +202,7 @@ fn source_index(service:&LaboratoryService,id:Uuid)->anyhow::Result<Value>{
     Ok(index)
 }
 fn estimate_value(state:&AppState,id:Uuid,request:&ExportRequest)->anyhow::Result<Value>{
-    let job=state.laboratory.get(id)?;anyhow::ensure!(job.kind=="solver","Only numerical trajectories can be exported");
+    let job=state.laboratory.get(id)?;
     let index=source_index(&state.laboratory,id)?;let (request,frames)=request.normalized(&index)?;
     let blender=crate::studio::render::find_blender();
     let pixels=request.width as f64*request.height as f64;
@@ -151,7 +210,7 @@ fn estimate_value(state:&AppState,id:Uuid,request:&ExportRequest)->anyhow::Resul
     let seconds=warmup+1.5+frames as f64*(0.12+0.18*pixels/(1920.0*1080.0))*(request.samples as f64/64.0).max(0.25)*if request.renderer=="cycles"{8.0}else{1.0};
     Ok(json!({"supported":blender.is_some(),"reason":if blender.is_none(){Some("Blender is unavailable; install the supported Blender runtime in Scientific Studio")}else{None},
         "estimated_seconds":seconds,"estimated_warmup_seconds":warmup,"includes_cold_start":true,"frame_count":frames,
-        "estimate_basis":if job.input["engine"]=="diffusion_2d"{"Includes cold startup. Field export cost uses the existing renderer throughput approximation; this field shape and hardware need fresh calibration. Queue wait is additional. Exact saved cells use a fixed color range; no solver reruns."}else if job.input["engine"]=="newtonian_nbody"{"Includes cold startup and approximate renderer throughput. This isolated-body count, camera and hardware need calibration for a reliable estimate; queue wait is additional. Rendering uses saved L0/T0 coordinates without rerunning forces."}else{"Includes a 16-second cold-start allowance plus launch and rendering. Measured on this development machine (RTX 4090 Laptop), 108 particles, Eevee 64 samples: 0.21s/frame at 720p and 0.30s/frame at 1080p. Scaling is approximate; scene complexity, Cycles and other systems need fresh calibration. Queue wait is additional. Scientific accuracy is unchanged."},
+        "estimate_basis":if job.kind=="published_simulation"{"Approximate cold startup and renderer throughput; this generated model, scene size and hardware are not calibrated. Uses retained numerical coordinates/units only, with no scientific rerun or claim of model validity."}else if job.field_output(){"Includes cold startup. Field export cost uses the existing renderer throughput approximation; this field shape and hardware need fresh calibration. Queue wait is additional. Exact saved cells use a fixed color range; no solver reruns."}else if job.input["engine"]=="newtonian_nbody"{"Includes cold startup and approximate renderer throughput. This isolated-body count, camera and hardware need calibration for a reliable estimate; queue wait is additional. Rendering uses saved L0/T0 coordinates without rerunning forces."}else{"Includes a 16-second cold-start allowance plus launch and rendering. Measured on this development machine (RTX 4090 Laptop), 108 particles, Eevee 64 samples: 0.21s/frame at 720p and 0.30s/frame at 1080p. Scaling is approximate; scene complexity, Cycles and other systems need fresh calibration. Queue wait is additional. Scientific accuracy is unchanged."},
         "scientific_time_range":[request.start_time,request.end_time],"movie_duration_seconds":frames as f64/request.fps as f64}))
 }
 async fn estimate(State(state):State<Arc<AppState>>,Path(id):Path<Uuid>,Json(request):Json<ExportRequest>)->Result<Json<Value>,Error>{
@@ -163,7 +222,8 @@ async fn create(State(state):State<Arc<AppState>>,Path(id):Path<Uuid>,Json(reque
     let source=state.laboratory.get(id)?;
     let (request,frames)=request.normalized(&source_index(&state.laboratory,id)?)?;
     let settings=worker_settings(&request,frames)?;
-    let job=state.laboratory.create(Uuid::new_v4(),source.project_id,Some(id),"export",&format!("Video · {}",source.title),json!({"source_job_id":id,"settings":settings,"estimate":estimate}),request.time_limit_seconds.map(|s|chrono::Utc::now()+chrono::Duration::seconds(s.min(604800) as i64)))?;
+    let metadata=source_metadata(&state.laboratory,&source)?;
+    let job=state.laboratory.create(Uuid::new_v4(),source.project_id,Some(id),"export",&format!("Video · {}",source.title),json!({"source_job_id":id,"settings":settings,"estimate":estimate,"source_metadata":metadata}),request.time_limit_seconds.map(|s|chrono::Utc::now()+chrono::Duration::seconds(s.min(604800) as i64)))?;
     state.laboratory.start_export(job.id)?;
     Ok(Json(export_status(&job)))
 }
@@ -224,13 +284,16 @@ impl LaboratoryService{
     async fn run_export(&self,id:Uuid,token:&tokio_util::sync::CancellationToken)->anyhow::Result<()>{
         let _slot=tokio::select!{_=token.cancelled()=>anyhow::bail!("Export cancelled in queue"),slot=self.render_slots.acquire()=>slot?};
         let job=self.get(id)?;let source=Uuid::parse_str(job.input["source_job_id"].as_str().context("Export source missing")?)?;
-        let directory=self.directory(id);let field=self.get(source)?.input["engine"]=="diffusion_2d";
+        let source_job=self.get(source)?;anyhow::ensure!(source_job.project_id==job.project_id,"Export source belongs to another project");
+        let metadata=source_metadata(self,&source_job)?;
+        if !metadata.is_null(){anyhow::ensure!(job.input["source_metadata"]==metadata,"Published export source metadata changed after admission");}
+        let directory=self.directory(id);let field=source_job.field_output();
         std::fs::write(directory.join("trajectory_render.py"),include_str!("../../../tools/trajectory_render.py"))?;
         let worker=if field{let worker=directory.join("field_render.py");std::fs::write(&worker,include_str!("../../../tools/field_render.py"))?;worker}else{directory.join("trajectory_render.py")};
         anyhow::ensure!(job.kind=="export"&&job.state=="queued"&&!token.is_cancelled(),"Export stopped before renderer launch");
         let request:ExportRequest=serde_json::from_value(job.input["settings"].clone())?;
         let (request,frames)=request.normalized(&source_index(self,source)?)?;
-        let mut input=worker_settings(&request,frames)?;input["source_directory"]=json!(self.directory(source));
+        let mut input=worker_settings(&request,frames)?;input["source_directory"]=json!(self.directory(source));input["source_metadata"]=metadata;
         write_json(&directory.join("render-input.json"),&input)?;
         let blender=crate::studio::render::find_blender().context("Blender runtime is unavailable")?;
         let mut command=process::clean_command(&blender,&directory);
@@ -241,7 +304,7 @@ impl LaboratoryService{
         let mut child=process::OwnedProcess::spawn(&mut command,8192)?;
         let progress_service=self.clone();let progress_token=token.clone();
         let progress=tokio::spawn(async move{loop{tokio::select!{_=progress_token.cancelled()=>break,_=tokio::time::sleep(Duration::from_millis(500))=>{}}if let Ok(value)=progress_service.read_json(id,"progress.json"){let _=progress_service.update(id,|j|{if j.active(){j.progress=value;}});}}});
-        let status=child.wait_cooperative(token,&directory.join("cancel.request")).await;progress.abort();let status=status?;
+        let status=child.wait_cooperative(token,&directory.join("cancel.request")).await;progress.abort();let _=progress.await;let status=status?;
         anyhow::ensure!(status.success(),"Blender export failed ({status}); inspect retained stderr.log");
         let result=self.read_json(id,"result.json")?;
         anyhow::ensure!(self.directory(id).join("simulation.mp4").is_file(),"The renderer did not produce the requested video");

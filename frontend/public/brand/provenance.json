@@ -75,6 +75,13 @@
       "sha256": "bc7cec527eda29afa28e6857d6d67b5b5352e43650c13bec40ac3a7c49400dd6",
       "source": "03_PNG/phaseforge-app-icon-dark-512.png",
       "transformation": "PNG ICO container; scripts/brand-icons.py, Pillow 10.4.0; Lanczos reductions of original shaded app icon only"
+    },
+    {
+      "path": "frontend/public/brand/phaseforge-marketplace-symbol.png",
+      "source": "03_PNG/phaseforge-symbol-dark@2x.png",
+      "bytes": 117040,
+      "sha256": "9e80652ae7851e9f1baf79a45cd4a43666404182b267b9bd76c7a3cbc66da9ec",
+      "transformation": "none; exact original shaded PF symbol with transparent alpha; marketplace artwork only"
     }
   ]
 }

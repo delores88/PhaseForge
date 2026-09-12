@@ -1,4 +1,4 @@
-import {durationSeconds,savedDuration} from './chatDuration.mjs';
+import {durationSeconds,savedDuration,customMinutesToSeconds} from './chatDuration.mjs';
 import {laboratoryViewable} from './laboratory-plot.mjs';
 export function snapshotConversationModel(projectId,getSelection,getSelectionError) {
   if(!projectId)throw Error('Create a project first.');
@@ -14,9 +14,22 @@ export function selectedLaboratoryContext(projectId,tab,selectedId,jobs) {
   return jobs.find(job=>job.id===selectedId&&job.project_id===projectId&&laboratoryViewable(job))||null;
 }
 
-export function conversationTimeLimit(projectId,storage) {
+export function conversationTimeLimit(projectId,storage,draft) {
+  if(draft){
+    if(draft.mode==='custom')return customMinutesToSeconds(draft.value);
+    if(draft.mode==='preset')return durationSeconds(draft.value);
+    throw Error('Choose a valid conversation work limit.');
+  }
   let saved;try{saved=storage?.getItem(`phaseforge.chat.duration:${projectId}`);}catch{}
   return durationSeconds(savedDuration(saved));
+}
+
+/** A delayed inspection may reveal only its exact source in the original visit. */
+export async function resolveRunInspection({id,projectId,loadRun,isCurrent}){
+  if(!id||!projectId)throw Error('Choose a retained run in this project.');
+  const run=await loadRun(id);
+  if(run?.id!==id||run.project_id!==projectId)throw Error('The requested run did not match its saved project.');
+  return isCurrent()?run:null;
 }
 
 // A response from an older visit cannot select a new item after the user leaves

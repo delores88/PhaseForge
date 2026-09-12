@@ -5,7 +5,7 @@ use axum::{Router,Json,extract::{State,Path},routing::post,http::StatusCode};
 
 #[derive(Clone,Deserialize,Serialize)]
 #[serde(deny_unknown_fields)]
-pub struct SteeringRequest{pub request_id:Uuid,#[serde(default)]pub content:String,#[serde(default)]pub attachments:Vec<files::Attachment>}
+pub struct SteeringRequest{pub request_id:Uuid,#[serde(default)]pub content:String,#[serde(default)]pub attachments:Vec<files::Attachment>,#[serde(default,skip_serializing_if="Option::is_none")]pub output_intent:Option<OutputIntent>}
 #[derive(Debug,thiserror::Error)]
 #[error("The session already finished; this message can start a new session.")]
 struct SessionFinished;
@@ -18,7 +18,8 @@ pub(super) fn receive(state:&AppState,id:Uuid,request:SteeringRequest)->anyhow::
     anyhow::ensure!((!request.content.trim().is_empty()||!request.attachments.is_empty())&&request.content.len()<=16000,"An update needs text or files, with at most 16,000 text bytes");
     let initial=state.laboratory.get(id)?;anyhow::ensure!(initial.kind=="session","Send user updates to the parent conversation session");
     let (references,prepared)=files::prepare(&state.laboratory,initial.project_id,request.request_id,Some(id),&request.attachments)?;
-    let update=json!({"request_id":request.request_id,"content":request.content,"attachments":references});
+    let mut update=json!({"request_id":request.request_id,"content":request.content,"attachments":references});
+    if let Some(intent)=request.output_intent{update["output_intent"]=json!(intent);}
     if let Some(event)=initial.events.iter().find(|event|event.kind=="steering_received"&&event.data["request_id"]==json!(request.request_id)){
         anyhow::ensure!(event.data==update,"Update identity is bound to different instructions");return Ok(json!({"session_id":id,"request_id":request.request_id,"state":"saved","duplicate":true,"files":references}));
     }
@@ -46,6 +47,7 @@ pub(super) fn apply(state:&AppState,job:&LabJob,journal_path:&std::path::Path,jo
     if updates.is_empty(){deliver_applied(state,job.id,journal)?;return Ok(false);}
     let mut user_items=vec![];
     for (id,update) in &updates{
+        intent::steer(journal,*id,update)?;
         user_items.push(json!({"role":"user","content":format!("Explicit user update to this ongoing task. Preserve the original research objective unless this update explicitly changes it. Apply new constraints to future actions and distinguish earlier results under their original assumptions. Do not mutate a running solver's physics. The session's captured model and deadline remain unchanged. USER UPDATE: {}\nADDITIONAL RETAINED SOURCE FILES: {}",update["content"].as_str().unwrap_or("Inspect the additional source files."),update["attachments"])}));
         journal.steering_ids.push(*id);
     }

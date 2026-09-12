@@ -88,6 +88,54 @@ def verify_source_bytes(raw, expected, relative, pin=None):
     return digest
 
 
+def publication_metadata(config, source):
+    """Verify data-only publication identity supplied by the trusted coordinator.
+
+    Descriptions are displayed as plain text, never evaluated as code or HTML.
+    This receipt attests to retained bytes, not to generated-model validity.
+    """
+    metadata = config.get('source_metadata')
+    if metadata is None:
+        return None
+    if not isinstance(metadata, dict) or metadata.get('kind') != 'published_simulation' or metadata.get('scientific_validation') != 'not_established_by_publication':
+        raise ValueError('Invalid numerical publication metadata')
+    if source.index_sha256 != committed_digest(metadata.get('index_sha256')):
+        raise ValueError('Published index differs from its admitted immutable receipt')
+    representation = source.index.get('representation')
+    if representation != metadata.get('representation') or representation not in ('particle_trajectory', 'scalar_field'):
+        raise ValueError('Published representation changed')
+    model = metadata.get('model')
+    if not isinstance(model, dict) or any(not isinstance(model.get(key), str) or not model[key].strip() or len(model[key]) > maximum for key, maximum in (('id', 120), ('description', 4000), ('scope', 4000))):
+        raise ValueError('Published model and scope declaration missing')
+    if not isinstance(model.get('limitations'), list) or not 1 <= len(model['limitations']) <= 32 or any(not isinstance(v, str) or not v.strip() or len(v) > 1000 for v in model['limitations']):
+        raise ValueError('Published model limitations missing')
+    for relative, key in (('source-simulation.json', 'source_sha256'), ('source-execution-manifest.json', 'source_manifest_sha256')):
+        path = source.root / relative
+        if path.stat().st_size > 64 * 1024 * 1024:
+            raise ValueError('Publication source exceeds bounded metadata size')
+        raw = path.read_bytes()
+        if len(raw) > 64 * 1024 * 1024 or hashlib.sha256(raw).hexdigest() != committed_digest(metadata.get(key)):
+            raise ValueError('Published original source bytes changed')
+        if relative == 'source-simulation.json':
+            original = json.loads(raw)
+            if original.get('schema') != 'phaseforge.simulation.v1' or original.get('model') != model or original.get('representation') != representation:
+                raise ValueError('Published model declaration differs from original data')
+    committed_digest(metadata.get('source_code_sha256'))
+    if representation == 'particle_trajectory':
+        if source.index.get('boundary') != 'isolated' or source.topology.get('boundary') != 'isolated' or source.index.get('wrapping') or source.topology.get('box') or source.topology.get('box_nm'):
+            raise ValueError('Published isolated particles cannot acquire a periodic boundary')
+        if source.topology_sha256 != committed_digest(metadata.get('topology_sha256')):
+            raise ValueError('Published topology differs from its admitted receipt')
+    return metadata
+
+
+def publication_title(metadata):
+    if metadata is None:
+        return None
+    name = ' '.join(metadata['model']['id'].split())[:60]
+    return f"PhaseForge | {name}\nGenerated numerical data; model validity not established"
+
+
 def finite(value, name, minimum, maximum):
     if isinstance(value, bool) or not isinstance(value, (int, float)) or not math.isfinite(value) or not minimum <= value <= maximum:
         raise ValueError(f'{name} must be a finite number in [{minimum}, {maximum}]')
@@ -348,6 +396,7 @@ def camera_basis(position, target, up):
 def main(config, output):
     started = time.monotonic()
     source = Trajectory(Path(config['source_directory']), config.get('source_pin'))
+    source_metadata = publication_metadata(config, source)
     presentation = config.get('presentation') or {}
     mode = config.get('mode', 'video')
     if mode not in ('video', 'png'):
@@ -520,7 +569,8 @@ def main(config, output):
             kind = f"{next(iter(elements))} particles" if len(elements)==1 and None not in elements else 'bodies'
             spatial = f"cell {box[0]:.4g} {domain['units']['position']}" if domain['periodic'] else f"isolated positions [{domain['units']['position']}]"
             scientific_time = f"t/T0 = {receipt['display_time']:.6g}" if domain['units']['time']=='T0' else f"t = {receipt['display_time']:.6g} {domain['units']['time']}"
-            label.data.body = f"PhaseForge  |  {len(positions)} {kind}\n{scientific_time}  |  {spatial}\n{'Interpolated display' if receipt['interpolated'] else 'Recorded numerical state'}"
+            heading = publication_title(source_metadata) or f"PhaseForge  |  {len(positions)} {kind}"
+            label.data.body = f"{heading}\n{scientific_time}  |  {spatial}\n{'Interpolated display' if receipt['interpolated'] else 'Recorded numerical state'}"
         return receipt
     scene.frame_start, scene.frame_end = 1, count
     progress_phase = {'name': 'preview', 'previews': 0, 'completed': 0, 'movie_started': None}
@@ -596,7 +646,8 @@ def main(config, output):
               'source_index_sha256': source.index_sha256, 'source_topology_sha256': source.topology_sha256,
               'source_chunks': source.hashes, 'presentation': presentation, 'endpoint_frames': receipts,
               'labels': config.get('labels', True),
-              'interpolation': 'minimum-image periodic interpolation of retained positions' if interpolation else 'hold previous recorded state',
+              'interpolation': ('minimum-image periodic interpolation of retained positions' if domain['periodic'] else 'linear interpolation of retained isolated positions') if interpolation else 'hold previous recorded state',
+              'source_metadata': source_metadata,
               'scientific_rerun': False, 'decode_check': decoded, 'independent_player_check': 'not performed by this worker'}
     atomic_json(output / 'result.json', result)
     atomic_json(output / 'progress.json', {'state': 'completed', 'fraction': 1, 'frame': count, 'frame_count': count, 'elapsed_seconds': result['elapsed_seconds']})

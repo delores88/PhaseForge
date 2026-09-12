@@ -17,8 +17,13 @@ async fn fixture()->Fixture{
         let output=if number==1{
             let files=body["input"].as_array().unwrap().iter().filter_map(|item|item["content"].as_str()).find_map(|text|text.split_once("FILES: ").map(|(_,json)|serde_json::from_str::<Value>(json).unwrap())).expect("Provider did not receive a file index");
             let id=files[0]["job_id"].as_str().unwrap();
-            json!([{"type":"function_call","call_id":"read-original","name":"read_project_file","arguments":json!({"job_id":id,"max_bytes":18000}).to_string()},
-                {"type":"function_call","call_id":"profile-original","name":"profile_dataset","arguments":json!({"job_id":id}).to_string()}])
+            let mut output=vec![];
+            if let Some(contract)=body["instructions"].as_str().and_then(|text|text.split_once("Application output-contract state (not a new user message): ").map(|(_,tail)|serde_json::Deserializer::from_str(tail).into_iter::<Value>().next().unwrap().unwrap())) {
+                output.push(json!({"type":"function_call","call_id":"resolve-output","name":"set_output_intent","arguments":json!({"request_id":contract["request_id"],"intent":"explanation","update_effect":"replace_objective","user_instruction_quote":contract["user_instruction"],"scope":"Inspect attached originals and descriptive profiles without starting new science"}).to_string()}));
+            }
+            output.extend([json!({"type":"function_call","call_id":"read-original","name":"read_project_file","arguments":json!({"job_id":id,"max_bytes":18000}).to_string()}),
+                json!({"type":"function_call","call_id":"profile-original","name":"profile_dataset","arguments":json!({"job_id":id}).to_string()})]);
+            json!(output)
         }else{json!([{"type":"message","role":"assistant","content":[{"type":"output_text","text":"The original file and its descriptive statistics were inspected. Units still need confirmation."}]}])};
         Json(json!({"id":format!("attachment-response-{number}"),"status":"completed","output":output,"usage":{"input_tokens":25,"output_tokens":12}}))
     }}));
@@ -94,8 +99,12 @@ async fn finished(f:&Fixture,id:Uuid)->LabJob{
     let f=fixture().await;let request=request();let original=request.clone();
     let job=f.state.agent.start_lab_session(f.state.clone(),f.project,request,None).unwrap();let completed=finished(&f,job.id).await;assert_eq!(completed.state,"completed");
     let calls=f.calls.lock();assert_eq!(calls.len(),2);assert_eq!(calls[0]["model"],"gpt-6-astra");assert_eq!(calls[0]["reasoning"]["effort"],"low");
+    assert!(!calls[0]["input"].to_string().contains("Application output-contract state"));assert!(calls[1]["instructions"].as_str().unwrap().contains("The current request is already resolved."));
     let results=calls[1]["input"].as_array().unwrap().iter().filter(|item|item["type"]=="function_call_output").map(|item|(item["call_id"].as_str().unwrap(),serde_json::from_str::<Value>(item["output"].as_str().unwrap()).unwrap())).collect::<std::collections::BTreeMap<_,_>>();
+    assert_eq!(results["resolve-output"]["output_intent"]["resolved"],"explanation");
     assert_eq!(results["read-original"]["text"],"time,value\r\n0,1\r\n1,3\r\n");assert_eq!(results["profile-original"]["profile"]["columns"][1]["mean"],2.0);assert_eq!(results["read-original"]["file"]["sha256"],results["profile-original"]["file"]["sha256"]);drop(calls);
+    assert_eq!(completed.result["deliverable"]["status"],"fulfilled");assert_eq!(completed.result["deliverable"]["output_intent"],"explanation");
+    assert!(f.state.laboratory.list(Some(f.project)).unwrap().iter().all(|job|!matches!(job.kind.as_str(),"solver"|"generated"|"ml_study"|"sweep")));
     assert!(completed.input["attachments"][0].get("content").is_none());assert!(completed.input["attachments"][0]["job_id"].is_string());
     let messages=f.state.database.list_messages(f.project,20).unwrap();let user=messages.iter().find(|message|message.role==ConversationRole::User).unwrap();assert_eq!(user.metadata["attachments"][0]["name"],"observations.csv");assert!(user.content.contains("Do not start an experiment"));
     f.state.agent.start_lab_session(f.state.clone(),f.project,original,None).unwrap();assert_eq!(f.calls.lock().len(),2);assert_eq!(f.state.database.list_messages(f.project,20).unwrap().iter().filter(|message|message.role==ConversationRole::User).count(),1);

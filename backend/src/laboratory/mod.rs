@@ -4,6 +4,10 @@ mod runtime;
 pub mod isolation;
 pub mod generated;
 pub mod field;
+pub mod thermal;
+pub mod fluid;
+pub mod catalog;
+pub mod publication;
 pub mod mechanics;
 pub mod sweep;
 pub mod ml_study;
@@ -42,6 +46,10 @@ pub struct LabJob {
     pub error: Option<String>, pub events: Vec<LabEvent>,
 }
 impl LabJob {
+    pub fn field_output(&self)->bool {
+        matches!(self.input["engine"].as_str(),Some("diffusion_2d"|"heat_conduction_2d"|"navier_stokes_2d"))
+            || self.input["engine"]=="generated_temporal"&&self.input["representation"]=="scalar_field"
+    }
     pub fn active(&self) -> bool { matches!(self.state.as_str(), "queued" | "running" | "provisioning" | "waiting") }
     fn normalize_completion(&mut self) {
         if self.state=="completed" {
@@ -52,11 +60,11 @@ impl LabJob {
     /// The full record remains available on the individual job endpoint.
     pub fn summary(&self)->Value {
         let mut input=serde_json::Map::new();
-        for key in ["engine","parameters","provider","model","reasoning_effort","time_limit_seconds","source_job_id","source_session_id","context_job_id","source_run_id","width","height","fps","duration_seconds","playback_speed","restarted_from_export_id"] {
+        for key in ["engine","parameters","provider","model","reasoning_effort","time_limit_seconds","source_job_id","source_session_id","context_job_id","source_run_id","output_intent","source_illustration_id","restarted_from_illustration_id","width","height","fps","duration_seconds","playback_speed","restarted_from_export_id"] {
             if let Some(value)=self.input.get(key){input.insert(key.into(),value.clone());}
         }
         let events=self.events.iter().rev().take(1).map(|event|json!({"sequence":event.sequence,"at":event.at,"kind":event.kind,"message":event.message.chars().take(1200).collect::<String>(),"data":{}})).collect::<Vec<_>>();
-        let result=if matches!(self.kind.as_str(),"session"|"specialist"){json!({"rounds":self.result["rounds"],"tool_count":self.result["tool_count"],"compactions":self.result["compactions"]})}else if matches!(self.kind.as_str(),"generated"|"data"|"monitor"){json!({"engine":self.result["engine"],"status":self.result["status"],"source_job_id":self.result["source_job_id"],"detected":self.result["detected"]})}else if self.kind=="sweep"{json!({"status":self.result["status"],"case_count":self.result["case_count"],"completed_cases":self.result["completed_cases"],"retained_bytes":self.result["retained_bytes"]})}else{self.result.clone()};
+        let result=if matches!(self.kind.as_str(),"session"|"specialist"){json!({"rounds":self.result["rounds"],"tool_count":self.result["tool_count"],"compactions":self.result["compactions"],"deliverable":self.result["deliverable"]})}else if matches!(self.kind.as_str(),"generated"|"data"|"monitor"){json!({"engine":self.result["engine"],"status":self.result["status"],"source_job_id":self.result["source_job_id"],"detected":self.result["detected"]})}else if self.kind=="sweep"{json!({"status":self.result["status"],"case_count":self.result["case_count"],"completed_cases":self.result["completed_cases"],"retained_bytes":self.result["retained_bytes"]})}else{self.result.clone()};
         json!({"id":self.id,"project_id":self.project_id,"parent_id":self.parent_id,"kind":self.kind,"state":self.state,"title":self.title,"created_at":self.created_at,"updated_at":self.updated_at,"deadline_at":self.deadline_at,"seen_at":self.seen_at,"completed_at":self.completed_at,"input":input,"result":result,"progress":self.progress,"error":self.error,"events":events,"event_count":self.events.len(),"summary_only":true})
     }
     pub fn event(&mut self, kind: &str, message: impl Into<String>, data: Value) {
@@ -258,7 +266,7 @@ impl LaboratoryService {
     }
     async fn execute_solver(&self,id:Uuid,token:&CancellationToken) -> anyhow::Result<()> {
         self.ensure_science_attempt_identity(id)?;
-        if self.get(id)?.input["engine"]=="diffusion_2d" { return self.execute_field(id,token).await; }
+        if matches!(self.get(id)?.input["engine"].as_str(),Some("diffusion_2d"|"heat_conduction_2d"|"navier_stokes_2d")) { return self.execute_field(id,token).await; }
         if self.get(id)?.input["engine"]=="newtonian_nbody" { return self.execute_mechanics(id,token).await; }
         let _slot=tokio::select! { _=token.cancelled()=>bail!("Cancelled in queue"), slot=self.solver_slots.acquire()=>slot? };
         let job=self.get(id)?;
@@ -394,7 +402,7 @@ mod tests {
         let database=Database::open(&config.database_path()).unwrap();
         let project=crate::domain::ResearchProject::new(crate::domain::CreateProjectRequest{name:None,question:"Immutable worker admission".into()});database.put_project(&project).unwrap();
         let service=LaboratoryService::new(database,config).unwrap();
-        for (engine,filename) in [("openmm_argon","scientific_worker.py"),("diffusion_2d","field_worker.py")]{
+        for (engine,filename) in [("openmm_argon","scientific_worker.py"),("diffusion_2d","field_worker.py"),("heat_conduction_2d","continuum_worker.py"),("navier_stokes_2d","continuum_worker.py"),("heat_conduction_2d","field_worker.py"),("navier_stokes_2d","field_worker.py")]{
             let job=service.create(Uuid::new_v4(),project.id,None,"solver","Preserved prior worker",json!({"engine":engine,"parameters":{}}),None).unwrap();
             let path=service.directory(job.id).join(filename);std::fs::write(&path,b"previous worker version\n").unwrap();
             let error=service.execute_solver(job.id,&CancellationToken::new()).await.unwrap_err();

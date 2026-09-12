@@ -18,3 +18,13 @@
 .viewport select{width:auto;min-height:28px}
 .playback>input{width:0;min-height:0;padding:0;border:0;box-shadow:none}
 .settings input[type=range]{padding:0;min-height:20px}
+
+.viewport{display:grid;grid-template-columns:minmax(0,1fr);grid-template-rows:auto auto auto minmax(280px,1fr) auto auto;height:clamp(740px,88vh,980px);min-height:740px}
+.viewport>.header{position:relative;inset:auto;grid-row:1;padding:16px 20px 10px;background:#0a1019;flex-wrap:wrap}
+.viewport>.provenance{position:relative;inset:auto;grid-row:2;padding:0 20px 10px}
+.viewport>.tools{position:relative;inset:auto;grid-row:3;margin:0 20px 10px;justify-self:start;flex-wrap:wrap}
+.viewport>.canvas{position:relative;inset:auto;grid-row:4;z-index:0;min-height:0;overflow:hidden}
+.navigation{grid-row:5;background:#0e1c2c;border-top:1px solid #304660;padding:12px 16px;z-index:3}
+.viewport>.footer{position:relative;inset:auto;grid-row:6;background:#0a111c;padding:12px 16px}
+.viewport>.tree,.viewport>.inspector{z-index:2}.viewport .bottomLine{flex-wrap:wrap}.viewport:fullscreen{min-height:0}
+.compact{height:740px;min-height:740px}@media(max-width:500px){.viewport{height:850px}.viewport .playback{flex-wrap:wrap;gap:5px}.viewport .playback>input{min-width:90px}.viewport .playback>button:first-child{display:flex}}

@@ -166,9 +166,17 @@ impl LaboratoryService {
             .join("field-readiness")
             .join(Uuid::new_v4().to_string());
         fs::create_dir_all(&directory)?;
+        let job = self.get(id)?;
+        let engine = job.input["engine"].as_str().context("Field engine missing")?;
+        let parameters = match engine {
+            "diffusion_2d" => json!({"nx":16,"ny":16,"steps":2,"record_interval":1,"dt_s":0.005,"diffusivity_um2_s":0.2,"initial":{"kind":"fourier","baseline":1,"amplitude":0.2,"mode_x":1,"mode_y":2}}),
+            "heat_conduction_2d" => json!({"nx":16,"ny":16,"steps":2,"record_interval":1}),
+            "navier_stokes_2d" => json!({"nx":16,"ny":16,"steps":2,"record_interval":1}),
+            _ => bail!("Unsupported field readiness engine"),
+        };
         write_json(
             &directory.join("input.json"),
-            &json!({"engine":"diffusion_2d","parameters":{"nx":16,"ny":16,"steps":2,"record_interval":1,"dt_s":0.005,"diffusivity_um2_s":0.2,"initial":{"kind":"fourier","baseline":1,"amplitude":0.2,"mode_x":1,"mode_y":2}}}),
+            &json!({"engine":engine,"parameters":parameters}),
         )?;
         let mut command = process::clean_command(python, &directory);
         command
@@ -183,22 +191,37 @@ impl LaboratoryService {
         let status = process::OwnedProcess::spawn(&mut command, 512)?
             .wait_cooperative(token, &directory.join("cancel.request"))
             .await?;
-        ensure!(status.success(), "The actual diffusion readiness computation failed ({status}); its field-readiness receipts are retained");
+        ensure!(status.success(), "The actual {engine} readiness computation failed ({status}); its field-readiness receipts are retained");
         let result: Value = serde_json::from_slice(&fs::read(directory.join("result.json"))?)?;
-        let amplitude = result["final"]["mode_amplitude"]
-            .as_f64()
-            .context("Readiness field instrument missing")?;
-        let drift = result["relative_integral_drift"]
-            .as_f64()
-            .context("Readiness conservation instrument missing")?;
-        ensure!(result["status"] == "completed" && result["steps"] == 2 && amplitude > 0.19 && amplitude < 0.2 && drift.abs() < 1e-12, "Diffusion readiness must integrate a decaying spatial pattern and conserve its integral");
+        ensure!(result["status"] == "completed" && result["steps"] == 2, "Field readiness did not complete its numerical steps");
+        let (amplitude, drift) = match engine {
+            "diffusion_2d" => {
+                let a=result["final"]["mode_amplitude"].as_f64().context("Readiness amplitude missing")?;
+                let d=result["relative_integral_drift"].as_f64().context("Readiness conservation missing")?;
+                ensure!(a>0.19 && a<0.2 && d.abs()<1e-12,"Diffusion readiness must decay and conserve"); (a,d)
+            },
+            "heat_conduction_2d" => {
+                let a=result["final"]["mode_amplitude_K"].as_f64().context("Readiness temperature mode missing")?;
+                let d=result["relative_energy_drift"].as_f64().context("Readiness thermal energy missing")?;
+                ensure!(a>9.0 && a<10.0 && d.abs()<1e-12,"Thermal readiness must decay and conserve energy"); (a,d)
+            },
+            "navier_stokes_2d" => {
+                let a=result["relative_kinetic_energy_change"].as_f64().context("Readiness kinetic energy missing")?;
+                let d=result["final"]["divergence_max_s_inv"].as_f64().context("Readiness divergence missing")?;
+                ensure!(a<0.0 && a> -0.1 && d<1e-10,"Flow readiness must dissipate kinetic energy and remain incompressible"); (a,d)
+            },
+            _=>unreachable!(),
+        };
         let path = directory
             .strip_prefix(self.directory(id))?
             .to_string_lossy()
             .replace('\\', "/");
         write_json(
             &self.directory(id).join("field-readiness.json"),
-            &json!({"schema_version":1,"status":"passed","source_directory":path,"steps":2,"mode_amplitude":amplitude,"relative_integral_drift":drift,"worker_sha256":format!("{:x}",Sha256::digest(fs::read(worker)?))}),
+            &json!({"schema_version":1,"status":"passed","engine":engine,"source_directory":path,"steps":2,
+                "mode_amplitude":if engine=="diffusion_2d" {Some(amplitude)} else {None},
+                "relative_integral_drift":if engine=="diffusion_2d" {Some(drift)} else {None},
+                "numerical_result":result,"worker_sha256":format!("{:x}",Sha256::digest(fs::read(worker)?))}),
         )?;
         Ok(())
     }
@@ -296,11 +319,20 @@ impl LaboratoryService {
         self.ensure_science_attempt_identity(id)?;
         let _slot = tokio::select! {_=token.cancelled()=>bail!("Cancelled in field queue"),slot=self.solver_slots.acquire()=>slot?};
         let job = self.get(id)?;
-        validate(&job.input["parameters"])?;
-        ensure!(job.active() && !token.is_cancelled(), "Diffusion stopped before source verification");
+        let engine=job.input["engine"].as_str().context("Field engine missing")?;
+        match engine {
+            "diffusion_2d"=>validate(&job.input["parameters"])? ,
+            "heat_conduction_2d"=>super::thermal::validate(&job.input["parameters"])? ,
+            "navier_stokes_2d"=>super::fluid::validate(&job.input["parameters"])? ,
+            _=>bail!("Unsupported field engine"),
+        }
+        ensure!(job.active() && !token.is_cancelled(), "Field job stopped before source verification");
         let root = self.directory(id);
-        let worker = root.join("field_worker.py");
-        super::retain_worker_source(&worker, include_bytes!("../../../tools/field_worker.py"))?;
+        // Both files are part of immutable continuum identity; no source is updated
+        // on resume and no environment/old receipts are touched before this check.
+        let worker = root.join(if engine=="diffusion_2d" {"field_worker.py"} else {"continuum_worker.py"});
+        if engine!="diffusion_2d" {super::retain_worker_source(&worker,include_bytes!("../../../tools/continuum_worker.py"))?;}
+        super::retain_worker_source(&root.join("field_worker.py"), include_bytes!("../../../tools/field_worker.py"))?;
         super::retain_worker_source(&root.join("requirements-science.txt"), include_bytes!("../../../tools/requirements-science.txt"))?;
         let preparing = self.update(id, |job| {
             if job.active() && !token.is_cancelled() {
@@ -330,7 +362,7 @@ impl LaboratoryService {
         );
         write_json(
             &root.join("worker-input.json"),
-            &json!({"engine":"diffusion_2d","parameters":job.input["parameters"]}),
+            &json!({"engine":engine,"parameters":job.input["parameters"]}),
         )?;
         let mut command = process::clean_command(&python, &root);
         command
@@ -352,7 +384,7 @@ impl LaboratoryService {
             "Diffusion stopped before process launch"
         );
         let mut child = process::OwnedProcess::spawn(&mut command, 2048)?;
-        self.event(id,"solver_started","Integrating the spatial diffusion field and recording numerical instruments.",json!({"engine":"diffusion_2d","pid":child.id(),"memory_limit_mb":2048,"worker":"trusted_shipped_adapter"}))?;
+        self.event(id,"solver_started","Integrating spatial numerical fields and recording physical instruments.",json!({"engine":engine,"pid":child.id(),"memory_limit_mb":2048,"worker":"trusted_shipped_adapter"}))?;
         let progress_service = self.clone();
         let progress_token = token.clone();
         let progress = tokio::spawn(async move {
@@ -455,6 +487,42 @@ fn read_plain(root: &Path, relative: &str, limit: u64) -> anyhow::Result<Vec<u8>
 #[cfg(test)]
 mod tests {
     use super::*;
+    #[tokio::test]
+    #[ignore = "Requires explicitly supplied pinned science interpreter; executes two real continuum computations"]
+    async fn continuum_readiness_runs_actual_temperature_and_velocity_channels() {
+        use crate::{config::AppConfig,domain::{CreateProjectRequest,ResearchProject},persistence::Database};
+        let python=PathBuf::from(std::env::var_os("PHASEFORGE_TEST_PYTHON").expect("Pinned science interpreter required"));
+        let temp=tempfile::tempdir().unwrap();
+        let config=AppConfig {data_directory:temp.path().into(),..Default::default()};
+        let database=Database::open(&config.database_path()).unwrap();
+        let project=ResearchProject::new(CreateProjectRequest {name:None,question:"Actual thermal and incompressible readiness".into()});
+        database.put_project(&project).unwrap();
+        let service=LaboratoryService::new(database,config).unwrap();
+        for engine in ["heat_conduction_2d","navier_stokes_2d"] {
+            let job=service.create(Uuid::new_v4(),project.id,None,"solver","continuum readiness",json!({"engine":engine,"parameters":{}}),None).unwrap();
+            let worker=service.directory(job.id).join("continuum_worker.py");
+            fs::write(&worker,include_bytes!("../../../tools/continuum_worker.py")).unwrap();
+            fs::write(service.directory(job.id).join("field_worker.py"),include_bytes!("../../../tools/field_worker.py")).unwrap();
+            service.field_readiness(job.id,&python,&worker,&CancellationToken::new()).await.unwrap();
+            let receipt=service.read_json(job.id,"field-readiness.json").unwrap();
+            assert_eq!(receipt["status"],"passed");assert_eq!(receipt["engine"],engine);
+            let directory=service.directory(job.id).join(receipt["source_directory"].as_str().unwrap());
+            let index:Value=serde_json::from_slice(&fs::read(directory.join("fields/index.json")).unwrap()).unwrap();
+            assert_eq!(index["frame_count"],3);
+            assert!(index["frames"][2]["time"].as_f64().unwrap()>index["frames"][1]["time"].as_f64().unwrap());
+            let state=&index["frames"][2];
+            let bytes=fs::read(directory.join(state["state_path"].as_str().unwrap())).unwrap();
+            assert_eq!(state["state_sha256"],format!("{:x}",Sha256::digest(bytes)));
+            if engine=="navier_stokes_2d" {
+                assert_eq!(index["channels"]["velocity_x_m_s"],"m/s");
+                assert_eq!(index["channels"]["pressure_Pa"],"Pa");
+                assert!(receipt["numerical_result"]["relative_kinetic_energy_change"].as_f64().unwrap()<0.0);
+            } else {
+                assert_eq!(index["channels"]["temperature_K"],"K");
+                assert_eq!(index["channels"]["heat_flux_x_W_m2"],"W/m^2");
+            }
+        }
+    }
     #[tokio::test]
     async fn diffusion_readiness_runs_actual_field_and_instruments() {
         let Some(python) = std::env::var_os("PHASEFORGE_TEST_PYTHON").map(PathBuf::from) else {

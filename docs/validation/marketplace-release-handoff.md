@@ -2,6 +2,24 @@
 
 ## Current status, September 12 UTC
 
+Version 0.9.1, source `27f5c91ac6482df16c34012c7f56501a1f494f32`,
+was installed with 88 saved jobs preserved and accepted through ordinary
+marketplace validation at **03:58:56.667 UTC**. The exact Windows installer
+SHA-256 is `a631ba9f7ce0c211376a31b1bdf33edae715069ea590db45d6e7d07a89e268c1`.
+Submission `lvzzXIwbE8kvXsOK9LEVfdAI`, artifact `ypf467Kft7sInAt5lvpTTbU3`,
+and validation job `dPyhbsAQBEp2oHCk313sQ5cQ` identify that accepted release.
+Its local receipt is `.local/stable-release-state.json`; these identities do
+not certify the subsequent 0.10.0 source changes.
+
+The 0.10.0 candidate, local installation and marketplace admission are pending.
+Discovery artwork is being changed to the exact original transparent PF symbol,
+SHA-256 `9e80652ae7851e9f1baf79a45cd4a43666404182b267b9bd76c7a3cbc66da9ec`.
+The two genuine app screenshots remain detail/download-page media. The prepared
+marketplace artwork patch has not yet been deployed. Release remains Windows
+x64 only; future-platform design work does not add release targets.
+
+## Earlier September 12 repair and admission preparation
+
 Version 0.9.0 at commit `3cd794e4e869d319b958a91f3ccb636e404b006f` was
 installed locally with saved data preserved and published as an immutable GitHub
 release. Ordinary marketplace validation completed at 02:10:21 UTC and rejected

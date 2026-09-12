@@ -1,3 +1,8 @@
+/** Publications become render sources only after validation commits their immutable artifacts. */
+export function savedRenderingReady(job){
+  return job.kind!=='published_simulation'||(job.state||job.status)==='completed';
+}
+
 export function exportStatusFromJob(job){
   const id=encodeURIComponent(job.id);
   return {...job,status_url:`/api/laboratory/exports/${id}`,cancel_url:`/api/laboratory/exports/${id}/cancel`,
