@@ -85,8 +85,9 @@ fn plain(metadata: &fs::Metadata) -> anyhow::Result<()> {
 
 #[cfg(windows)]
 fn verify_handle(file: &File, path: &Path, directory: bool) -> anyhow::Result<()> {
+    use std::os::windows::ffi::OsStrExt;
     use std::os::windows::io::AsRawHandle;
-    use windows_sys::Win32::Storage::FileSystem::{GetFileInformationByHandle, GetFinalPathNameByHandleW, BY_HANDLE_FILE_INFORMATION};
+    use windows_sys::Win32::Storage::FileSystem::{GetFileInformationByHandle, GetFinalPathNameByHandleW, GetLongPathNameW, BY_HANDLE_FILE_INFORMATION};
     let mut information: BY_HANDLE_FILE_INFORMATION = unsafe { std::mem::zeroed() };
     ensure!(unsafe { GetFileInformationByHandle(file.as_raw_handle(), &mut information) } != 0, "Cannot inspect retained NR handle");
     ensure!(information.dwFileAttributes & 0x400 == 0 && (directory || information.nNumberOfLinks == 1), "NR retention refuses handle links/reparse points");
@@ -94,12 +95,31 @@ fn verify_handle(file: &File, path: &Path, directory: bool) -> anyhow::Result<()
     let length = unsafe { GetFinalPathNameByHandleW(file.as_raw_handle(), name.as_mut_ptr(), name.len() as u32, 0) };
     ensure!(length > 0 && (length as usize) < name.len(), "Cannot inspect retained NR final path");
     let final_path = String::from_utf16(&name[..length as usize])?;
+    // Windows may supply a legitimate 8.3 TEMP spelling while the opened
+    // handle reports long names. Expand spelling only, not canonicalize links:
+    // every ancestor remains checked and held without FILE_SHARE_DELETE.
+    let spelling = path.as_os_str().encode_wide().map(|unit|if unit == b'/' as u16 {b'\\' as u16}else{unit}).collect::<Vec<_>>();
+    // Unlike Rust's file open, this API does not add a verbatim namespace for
+    // long absolute paths. Preserve an existing namespace; add spelling only.
+    let mut requested = match path.components().next() {
+        Some(Component::Prefix(prefix)) => match prefix.kind() {
+            std::path::Prefix::Disk(_) => r"\\?\".encode_utf16().chain(spelling).collect::<Vec<_>>(),
+            std::path::Prefix::UNC(..) => r"\\?\UNC\".encode_utf16().chain(spelling.into_iter().skip(2)).collect(),
+            _ => spelling,
+        },
+        _ => spelling,
+    };
+    requested.push(0);
+    let mut long_name = vec![0u16; 32768];
+    let length = unsafe { GetLongPathNameW(requested.as_ptr(), long_name.as_mut_ptr(), long_name.len() as u32) };
+    ensure!(length > 0 && (length as usize) < long_name.len(), "Cannot inspect retained NR long path spelling");
+    let requested_path = String::from_utf16(&long_name[..length as usize])?;
     let normalize = |value: &str| {
         let value = if let Some(rest) = value.strip_prefix(r"\\?\UNC\") { format!(r"\\{rest}") }
             else { value.strip_prefix(r"\\?\").unwrap_or(value).to_owned() };
         value.replace('/', r"\").trim_end_matches('\\').to_lowercase()
     };
-    ensure!(normalize(&final_path) == normalize(&path.to_string_lossy()), "Retained NR handle resolved through an unexpected ancestor");
+    ensure!(normalize(&final_path) == normalize(&requested_path), "Retained NR handle resolved through an unexpected ancestor");
     Ok(())
 }
 
@@ -1086,6 +1106,58 @@ mod tests {
         fs::create_dir_all(fixture.directory.join("native/fields")).unwrap();
         fs::hard_link(fixture.remote_job().join("work/fields/run.bin"),fixture.directory.join("native/fields/run.bin")).unwrap();
         assert!(fixture.retain().is_err());
+    }
+
+    #[cfg(windows)]
+    #[test]
+    fn windows_long_absolute_paths_keep_exact_retained_reads_and_streaming() {
+        use std::os::windows::ffi::OsStrExt;
+        let temporary = tempfile::tempdir().unwrap();
+        let parent = temporary.path().join("long retained directory ".repeat(4).trim_end()).join("nested native output ".repeat(4).trim_end()).join("final retained component ".repeat(4).trim_end());
+        fs::create_dir_all(&parent).unwrap();
+        let source = parent.join("source.bin");
+        let bytes = b"Synthetic long-path bytes, not scientific data";
+        fs::write(&source,bytes).unwrap();
+        assert!(source.as_os_str().encode_wide().count() > 260,"Fixture must exceed MAX_PATH");
+        assert_eq!(bounded(&source,1024).unwrap(),bytes);
+        let destination = parent.join("retained.bin");
+        immutable_stream(&source,&destination,bytes.len() as u64,&nr::hash(bytes)).unwrap();
+        assert_eq!(bounded(&destination,1024).unwrap(),bytes);
+        eprintln!("EXERCISED actual Windows path beyond MAX_PATH with exact retained read and immutable streaming");
+    }
+
+    #[cfg(windows)]
+    #[test]
+    fn windows_short_alias_reads_and_streams_exact_bytes_without_allowing_other_handles_or_links() {
+        use std::os::windows::ffi::OsStrExt;
+        use windows_sys::Win32::Storage::FileSystem::GetShortPathNameW;
+        fn short_path(path: &Path) -> PathBuf {
+            let input = path.as_os_str().encode_wide().chain(Some(0)).collect::<Vec<_>>();
+            let mut output = vec![0u16; 32768];
+            let length = unsafe { GetShortPathNameW(input.as_ptr(),output.as_mut_ptr(),output.len() as u32) };
+            assert!(length > 0 && (length as usize) < output.len(),"Cannot query fixture short spelling: {}",std::io::Error::last_os_error());
+            PathBuf::from(String::from_utf16(&output[..length as usize]).unwrap())
+        }
+        let temporary = tempfile::Builder::new().prefix("phaseforge retained alias ").tempdir().unwrap();
+        let source = temporary.path().join("native restart long name.bin");
+        let bytes = b"Synthetic immutable alias fixture, not scientific data";
+        fs::write(&source,bytes).unwrap();
+        let alias = short_path(&source);
+        if alias.to_string_lossy().eq_ignore_ascii_case(&source.to_string_lossy()) {
+            eprintln!("SKIP actual Windows 8.3 alias coverage: this fixture filesystem does not supply a short spelling");
+            return;
+        }
+        assert_eq!(bounded(&alias,1024).unwrap(),bytes);
+        let destination = short_path(temporary.path()).join("retained output").join("native.bin");
+        immutable_stream(&alias,&destination,bytes.len() as u64,&nr::hash(bytes)).unwrap();
+        assert_eq!(bounded(&destination,1024).unwrap(),bytes);
+        immutable_stream(&alias,&destination,bytes.len() as u64,&nr::hash(bytes)).unwrap();
+        let different = temporary.path().join("different file.bin");
+        fs::write(&different,bytes).unwrap();
+        assert!(verify_handle(&File::open(&alias).unwrap(),&different,false).is_err(),"An unrelated handle must not become equivalent through long-name expansion");
+        fs::hard_link(&source,temporary.path().join("extra source link.bin")).unwrap();
+        assert!(bounded(&alias,1024).is_err(),"A real short alias must not bypass the hardlink guard");
+        eprintln!("EXERCISED actual Windows 8.3 directory/file aliases, exact immutable streaming, mismatched-handle and hardlink rejection");
     }
 
     #[cfg(unix)]
