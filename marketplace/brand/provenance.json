@@ -1,0 +1,20 @@
+{
+  "purpose": "Transparent 16:10 discovery thumbnail using the original supplied shaded PF symbol.",
+  "transformation": "Only the outer SVG viewBox changes from 0 0 520 420 to -124 -30 768 480. Child markup, geometry, colors and gradients are unchanged. Rendered at 1536 by 960 pixels with sharp 0.35.4 and librsvg 2.62.91; the original logo region matches a render of the source SVG exactly.",
+  "sourceSvg": {
+    "path": "frontend/public/brand/phaseforge-symbol-dark.svg",
+    "sha256": "e8b4a396921d10653746da8302c80a9637b288764cb4b18ed8e67ff99426755c"
+  },
+  "derivedSvg": {
+    "path": "marketplace/brand/phaseforge-marketplace-thumbnail.svg",
+    "sha256": "2ed72640d8cb4cab3b89c7f2cc8eff3332566bf04c5555fe4b19df7a0cb5c4cb"
+  },
+  "derivedPng": {
+    "path": "marketplace/brand/phaseforge-marketplace-thumbnail.png",
+    "sha256": "4fa545f8e6110cf3b8294df64676fb8fdf66bde5ce5be0cd4f5fff45acff93c6"
+  },
+  "unchangedIcon": {
+    "path": "frontend/public/brand/phaseforge-marketplace-symbol.png",
+    "sha256": "9e80652ae7851e9f1baf79a45cd4a43666404182b267b9bd76c7a3cbc66da9ec"
+  }
+}
