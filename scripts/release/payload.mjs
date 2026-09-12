@@ -11,6 +11,7 @@ import {frontendModuleEvidence} from './frontend-map.mjs';
 import {OPENMM_RESOURCE,verifyOpenmmSourceDelivery} from './openmm-sources.mjs';
 import {MSVC_RESOURCE,verifyMsvcNotices} from './msvc-notices.mjs';
 import {sqliteComponentEvidence} from './sqlite-runtime.mjs';
+import {opensslComponentEvidence} from './openssl-runtime.mjs';
 
 const {platform,architecture,folder:targetFolder}=releaseTarget();
 const folder=path.join(ROOT,'.local/marketplace',targetFolder),payload=path.join(folder,'payload');
@@ -88,8 +89,11 @@ if(platform==='windows'){
   assert.equal(managed.source_commit,installed.source_commit);assert.equal(managed.delivery,'bundled_immutable_seeds');assert.equal(managed.integrity_valid,true);
   const sqliteExecution=readJSON(path.join(folder,'managed-sqlite-runtime.json'));
   assert.equal(sqliteExecution.schema,'phaseforge.managed-sqlite-execution.v1');assert.equal(sqliteExecution.passed,true);assert.equal(sqliteExecution.source_commit,installed.source_commit);
-  assert.deepEqual(Object.keys(sqliteExecution.runtimes).sort(),['python-numpy-v3','science-v4']);
-  for(const kind of ['science-v4','python-numpy-v3']){
+  assert.deepEqual(Object.keys(sqliteExecution.runtimes).sort(),['python-numpy-v4','science-v5']);
+  const opensslExecution=readJSON(path.join(folder,'managed-openssl-runtime.json'));
+  assert.equal(opensslExecution.schema,'phaseforge.managed-openssl-execution.v1');assert.equal(opensslExecution.passed,true);assert.equal(opensslExecution.source_commit,installed.source_commit);
+  assert.deepEqual(Object.keys(opensslExecution.runtimes).sort(),['python-numpy-v4','science-v5']);
+  for(const kind of ['science-v5','python-numpy-v4']){
     const seed=path.join(resources,'runtime/runtime-seeds',kind),manifestPath=path.join(seed,'phaseforge-runtime-seed.json');
     const manifest=readJSON(manifestPath),hash=await sha256(manifestPath);
     assert.equal(hash,await sha256(path.join(ROOT,'tools/runtime-seeds',`${kind}.manifest.json`)));
@@ -103,7 +107,10 @@ if(platform==='windows'){
     assert.equal(sqliteExecution.runtimes[kind].seed_manifest_sha256,hash);
     const sqliteEvidence=sqliteComponentEvidence(kind,sqliteExecution.runtimes[kind],managed.runtimes[kind].native_identity,manifest);
     components.push({...component(sqliteEvidence.name,sqliteEvidence.version,sqliteEvidence.purl,sqliteEvidence.cpe,sqliteEvidence.properties),hashes:sqliteEvidence.hashes});
-    const versions={python:manifest.python,numpy:manifest.numpy,...(kind==='science-v4'?{openmm:manifest.openmm,pillow:manifest.pillow}:{})};
+    assert.equal(opensslExecution.runtimes[kind].seed_manifest_sha256,hash);
+    const opensslEvidence=opensslComponentEvidence(kind,opensslExecution.runtimes[kind],managed.runtimes[kind].native_identity,manifest);
+    components.push({...component(opensslEvidence.name,opensslEvidence.version,opensslEvidence.purl,opensslEvidence.cpe,opensslEvidence.properties),...(opensslEvidence.hashes?{hashes:opensslEvidence.hashes}:{})});
+    const versions={python:manifest.python,numpy:manifest.numpy,...(kind==='science-v5'?{openmm:manifest.openmm,pillow:manifest.pillow}:{})};
     for(const [name,version] of Object.entries(versions)){
       assert.match(version,/^\d+\.\d+\.\d+$/);
       const purl=name==='python'?`pkg:generic/cpython@${version}?consumer=${kind}`:`pkg:pypi/${name}@${version}?consumer=${kind}`;

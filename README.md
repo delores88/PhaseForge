@@ -1,4 +1,4 @@
-# PhaseForge 0.9.0
+# PhaseForge 0.9.1
 
 PhaseForge is a local Windows scientific workbench. Describe a study in ordinary
 chat, run a supported numerical experiment, inspect its saved measurements and
@@ -41,7 +41,8 @@ record; higher image resolution does not improve an experiment's physical model.
 | Batched studies and ML | Durable solver sweeps and a scoped pressure-surrogate study with frozen data roles, held-out evaluation, uncertainty and direct-solver fallback. Useful acceleration must be demonstrated, not assumed. |
 
 The bundled runtimes contain CPython 3.13.15, NumPy 2.4.6, OpenMM 8.5.2 and
-Pillow 12.3.0; the generated-code runtime contains Python and NumPy only. They are
+Pillow 12.3.0, with SQLite 3.53.4 and OpenSSL 3.0.22 replacements from pinned
+official archives; the generated-code runtime contains Python and NumPy only. They are
 verified and copied locally without finding a host Python or downloading packages
 at experiment startup. Generated code cannot add packages to the bundled runtime.
 
@@ -93,8 +94,10 @@ and the acceptance of an exact release artifact:
 - [Bundled runtime checks](docs/validation/runtime-v2.md) and
   [Windows isolation](docs/SCIENTIFIC_ISOLATION.md): actual copied-runtime physics,
   NumPy execution, access-denial probes and service recovery checks.
+- [OpenSSL runtime correction](docs/validation/runtime-v5.md): official fixed DLL
+  provenance and actual copied-runtime TLS compatibility checks for 0.9.1.
 
-These earlier checks do not certify a new installer automatically. Final 0.9.0
+These earlier checks do not certify a new installer automatically. Final 0.9.1
 installation checks and [marketplace admission](docs/validation/marketplace-release-handoff.md)
 are separate; marketplace acceptance is not claimed here.
 

@@ -120,6 +120,86 @@ class NativeIdentityTests(unittest.TestCase):
             aux.write_bytes(definition+b'changed')
             with self.assertRaisesRegex(ValueError,'auxiliary file'):inspect()
 
+    def test_openssl_pair_replays_exact_origins_and_license_without_broadening_replacements(self):
+        with tempfile.TemporaryDirectory(prefix='pf-native-openssl-') as temporary:
+            root = Path(temporary).resolve()
+            names = ('libcrypto-3.dll', 'libssl-3.dll')
+            original = {name: self.pe() + (name + ' original').encode() for name in names}
+            fixed = {name: self.pe() + (name + ' fixed').encode() for name in names}
+            prefix = 'cpython-bin-deps-openssl-bin-3.0.22/amd64/'
+            license_data = b'Synthetic license evidence'
+            def record(path):
+                data = Path(path).read_bytes()
+                return {'sha256': hashlib.sha256(data).hexdigest(), 'bytes': len(data)}
+            @contextlib.contextmanager
+            def opened(path):
+                with Path(path).open('rb') as stream:
+                    yield stream, None
+            sources = []
+            for name, members in [('python-3.13.15-embed-amd64.zip', original),
+                                  ('openssl-bin-3.0.22.zip', {**{prefix + name: data for name, data in fixed.items()}, prefix + 'LICENSE.txt': license_data})]:
+                with zipfile.ZipFile(root / name, 'w') as archive:
+                    for member, data in members.items():
+                        archive.writestr(member, data)
+                sources.append({'name': name, 'url': 'https://example.invalid/' + name, **record(root / name)})
+            aux = root / 'licenses/OpenSSL-3.0.22-LICENSE.txt'
+            aux.parent.mkdir()
+            aux.write_bytes(license_data)
+            rows, replacements = [], {}
+            for name in names:
+                (root / name).write_bytes(fixed[name])
+                row = {'path': name, **record(root / name)}
+                rows.append(row)
+                replacements[name] = {
+                    'component': 'OpenSSL', 'version': '3.0.22', 'reason': 'Synthetic exact upstream pair',
+                    'original': {'archive_name': sources[0]['name'], 'archive_sha256': sources[0]['sha256'],
+                                 'archive_member': name, 'sha256': hashlib.sha256(original[name]).hexdigest(),
+                                 'bytes': len(original[name]), 'version': '3.0.21'},
+                    'replacement': {'archive_name': sources[1]['name'], 'archive_sha256': sources[1]['sha256'],
+                                    'archive_member': prefix + name, 'sha256': row['sha256'], 'bytes': row['bytes'], 'version': '3.0.22'},
+                    'auxiliary_members': [{'path': 'licenses/OpenSSL-3.0.22-LICENSE.txt', 'archive_member': prefix + 'LICENSE.txt', **record(aux)}]
+                                         if name == 'libcrypto-3.dll' else [],
+                }
+            def inspect(pins=replacements, source_rows=sources, archive_root=root):
+                return native.evidence(root, rows, source_rows, archive_root, record=record, opened=opened,
+                                       version=lambda _: {'status': 'missing'}, replacements=pins)
+            receipt = inspect()
+            self.assertTrue(receipt['all_native_archive_members_verified'])
+            self.assertEqual(set(receipt['replaced_original_members']), set(names))
+            self.assertEqual(len(receipt['replacement_auxiliary_members']), 1)
+            self.assertTrue(receipt['replacement_auxiliary_members'][0]['archive_bytes_verified'])
+            for row in receipt['files']:
+                self.assertEqual(row['origin']['archive'], sources[1]['name'])
+                self.assertEqual(row['origin']['member'], prefix + row['path'])
+                self.assertEqual(row['origin']['component_version'], '3.0.22')
+                self.assertEqual(row['origin']['replaces'], replacements[row['path']]['original'])
+            self.assertFalse(inspect(archive_root=None)['all_native_archive_members_verified'])
+            changes = [
+                lambda p: p.pop('libssl-3.dll'),
+                lambda p: p['libcrypto-3.dll']['original'].__setitem__('sha256', '0' * 64),
+                lambda p: p['libssl-3.dll']['original'].__setitem__('version', '3.0.22'),
+                lambda p: p['libssl-3.dll']['replacement'].__setitem__('archive_name', sources[0]['name']),
+                lambda p: p['libssl-3.dll']['replacement'].__setitem__('archive_member', prefix.replace('/amd64/', '/win32/') + 'libssl-3.dll'),
+                lambda p: p['libssl-3.dll']['replacement'].__setitem__('bytes', 1),
+                lambda p: p['libcrypto-3.dll'].__setitem__('component', 'arbitrary component'),
+                lambda p: p['libcrypto-3.dll'].__setitem__('version', '3.0.21'),
+                lambda p: p['libcrypto-3.dll'].__setitem__('auxiliary_members', []),
+                lambda p: p['libcrypto-3.dll']['auxiliary_members'][0].__setitem__('path', '../LICENSE.txt'),
+                lambda p: p['libcrypto-3.dll']['auxiliary_members'][0].__setitem__('sha256', 'f' * 64),
+                lambda p: p['libssl-3.dll'].__setitem__('auxiliary_members', p['libcrypto-3.dll']['auxiliary_members']),
+                lambda p: p.__setitem__('unknown.dll', p['libcrypto-3.dll']),
+            ]
+            for index, change in enumerate(changes):
+                pins = copy.deepcopy(replacements)
+                change(pins)
+                with self.subTest(case=index), self.assertRaises(ValueError):
+                    inspect(pins)
+            with self.assertRaisesRegex(ValueError, 'Duplicate native source'):
+                inspect(source_rows=sources + [sources[0]])
+            aux.write_bytes(license_data + b'changed')
+            with self.assertRaisesRegex(ValueError, 'auxiliary file'):
+                inspect()
+
 
 if __name__ == '__main__':
     unittest.main()

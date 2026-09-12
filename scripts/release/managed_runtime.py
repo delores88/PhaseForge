@@ -28,8 +28,8 @@ NATIVE_SUFFIXES = {".exe", ".dll", ".pyd", ".so", ".dylib"}
 SHA256 = re.compile(r"[0-9a-f]{64}\Z")
 FROZEN_MANIFEST_ROOT = Path(__file__).absolute().parents[2] / "tools/runtime-seeds"
 SEED_MANIFEST = "phaseforge-runtime-seed.json"
-SEED_LAYOUT = {"science-v4": "environments/science-v4",
-               "python-numpy-v3": "environments/python-numpy-v3/runtime"}
+SEED_LAYOUT = {"science-v5": "environments/science-v5",
+               "python-numpy-v4": "environments/python-numpy-v4/runtime"}
 
 
 class InventoryError(ValueError):
@@ -373,6 +373,13 @@ def verify_seed_manifest(runtime, expected_kind):
         if (manifest.get("sqlite") != "3.53.4" or not isinstance(replacement, dict)
                 or replacement.get("version") != manifest["sqlite"]):
             raise InventoryError("Active runtime lacks the exact SQLite replacement provenance")
+    if "libcrypto-3.dll" in native or "libssl-3.dll" in native:
+        replacements = manifest.get("transformations", {}).get("native_replacements", {})
+        if manifest.get("openssl") != "3.0.22" or any(
+                name not in native or not isinstance(replacements.get(name), dict)
+                or replacements[name].get("component") != "OpenSSL" or replacements[name].get("version") != manifest["openssl"]
+                for name in ("libcrypto-3.dll", "libssl-3.dll")):
+            raise InventoryError("Active runtime lacks the exact OpenSSL pair replacement provenance")
     sources = manifest.get("sources")
     if not isinstance(sources, list) or not 0 < len(sources) <= 32:
         raise InventoryError("Seed archive source pins are missing or invalid")
@@ -395,7 +402,7 @@ def verify_seed_manifest(runtime, expected_kind):
                for name in sorted(set(pins) & set(observed))
                if pins[name] != observed[name]["sha256"] or sizes[name] != observed[name]["bytes"]]
     inner_check = None
-    if expected_kind == "python-numpy-v3":
+    if expected_kind == "python-numpy-v4":
         inner_path = root / "phaseforge-isolation-runtime.json"
         if not guard(inner_path, missing=True).exists():
             inner_check = {"valid": False, "reason": "isolation_manifest_missing"}
@@ -405,7 +412,7 @@ def verify_seed_manifest(runtime, expected_kind):
             inner_check = {"valid": isinstance(inner, dict) and inner.get("schema_version") == 1
                            and inner.get("files") == expected_inner and inner.get("sources") == sources
                            and inner.get("python") == manifest.get("python") and inner.get("numpy") == manifest.get("numpy")
-                           and inner.get("sqlite") == manifest.get("sqlite"),
+                           and inner.get("sqlite") == manifest.get("sqlite") and inner.get("openssl") == manifest.get("openssl"),
                            "scope": "Inner file hashes cover runtime members except both manifest files. The frozen outer manifest separately pins the inner manifest; its own bytes are compared with the frozen source-tree manifest."}
     return {"valid": not missing and not unexpected and not changed and (inner_check is None or inner_check["valid"]),
             "manifest": {"path": SEED_MANIFEST, **file_record(manifest_path), "content": manifest},
@@ -547,7 +554,7 @@ def main(argv=None):
     parser.add_argument("--workspace", required=True, type=Path)
     parser.add_argument("--bootstrap-python", type=Path)
     parser.add_argument("--seed-root", type=Path,
-                        help="Installed resources/runtime/runtime-seeds directory; selects the fixed science-v4 / python-numpy-v3 source/destination mapping")
+                        help="Installed resources/runtime/runtime-seeds directory; selects the fixed science-v5 / python-numpy-v4 source/destination mapping")
     parser.add_argument("--output", required=True, type=Path)
     parser.add_argument("--source-commit")
     parser.add_argument("--archive-root", type=Path, help="Existing pinned seed archive cache; verify original native members without executing them")

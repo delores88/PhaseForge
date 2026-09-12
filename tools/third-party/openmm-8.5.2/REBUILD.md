@@ -81,8 +81,8 @@ procedure. Keep the released application and its evidence unchanged.
    function using `freeze=True` and a new `manifest_root`. The function accepts
    explicit output, cache, offline, source_commit and manifest_root arguments.
    Retain the released manifests, then copy the new science manifest into that
-   checkout's `tools/runtime-seeds/science-v4.manifest.json`. The generated
-   Python/NumPy `python-numpy-v3` runtime is independent of OpenMM and should remain identical
+   checkout's `tools/runtime-seeds/science-v5.manifest.json`. The generated
+   Python/NumPy `python-numpy-v4` runtime is independent of OpenMM and should remain identical
    unless it was deliberately modified too.
 6. In the same source checkout, update the OpenMM expected source SHA-256 in
    `backend/src/laboratory/runtime.rs::parse` to the new wheel hash. The exact

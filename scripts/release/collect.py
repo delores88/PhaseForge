@@ -44,8 +44,12 @@ def validate_laboratory_inputs(folder,version,commit,backend_hash,acceptance):
     sqlite_file=folder/'managed-sqlite-runtime.json';sqlite=load(sqlite_file);binding=acceptance.get('managed_sqlite_evidence',{})
     if binding.get('path')!=sqlite_file.name or binding.get('sha256')!=digest(sqlite_file):raise ValueError('Managed SQLite execution evidence binding is missing or changed')
     if sqlite.get('schema')!='phaseforge.managed-sqlite-execution.v1' or sqlite.get('source_commit')!=commit or sqlite.get('passed') is not True:raise ValueError('Managed SQLite execution did not complete for this source')
-    if set(sqlite.get('runtimes',{}))!={'science-v4','python-numpy-v3'}:raise ValueError('Both active managed SQLite copies require observations')
-    for kind in ('science-v4','python-numpy-v3'):
+    if set(sqlite.get('runtimes',{}))!={'science-v5','python-numpy-v4'}:raise ValueError('Both active managed SQLite copies require observations')
+    openssl_file=folder/'managed-openssl-runtime.json';openssl=load(openssl_file);binding=acceptance.get('managed_openssl_evidence',{})
+    if binding.get('path')!=openssl_file.name or binding.get('sha256')!=digest(openssl_file):raise ValueError('Managed OpenSSL execution evidence binding is missing or changed')
+    if openssl.get('schema')!='phaseforge.managed-openssl-execution.v1' or openssl.get('source_commit')!=commit or openssl.get('passed') is not True:raise ValueError('Managed OpenSSL execution did not complete for this source')
+    if set(openssl.get('runtimes',{}))!={'science-v5','python-numpy-v4'}:raise ValueError('Both active managed OpenSSL copies require observations')
+    for kind in ('science-v5','python-numpy-v4'):
         runtime=managed.get('runtimes',{}).get(kind,{})
         if any(runtime.get(key,{}).get('valid') is not True for key in ('seed_pin_verification','copy_pin_verification','copy_comparison')):raise ValueError('A managed runtime differs from bundled source bytes')
         frozen=runtime.get('frozen_source_manifest',{})
@@ -56,6 +60,17 @@ def validate_laboratory_inputs(folder,version,commit,backend_hash,acceptance):
                 or 'ENABLE_FTS5' not in sqlite_row.get('compile_options',[])
                 or sqlite_row.get('fts5_rows')!=[[1,'retained result']] or sqlite_row.get('seed_manifest_sha256')!=digest(expected)):
             raise ValueError('Managed SQLite version/FTS5 observation is incomplete or stale')
+        openssl_row=openssl['runtimes'][kind]
+        if (openssl_row.get('passed') is not True or openssl_row.get('version')!='3.0.22'
+                or openssl_row.get('seed_manifest_sha256')!=digest(expected)
+                or set(openssl_row.get('libraries',{}))!={'libcrypto-3.dll','libssl-3.dll'}
+                or openssl_row.get('tls',{}).get('version')!='TLSv1.3'
+                or openssl_row.get('tls',{}).get('server_version')!='TLSv1.3'
+                or openssl_row.get('tls',{}).get('client_received')!='phaseforge-server-probe'
+                or openssl_row.get('tls',{}).get('server_received')!='phaseforge-client-probe'
+                or openssl_row.get('tls',{}).get('check_hostname') is not True
+                or openssl_row.get('tls',{}).get('verify_mode')!=2):
+            raise ValueError('Managed OpenSSL pair/TLS observation is incomplete or stale')
     return lab,managed
 
 def validated_inputs(folder,target,version,commit):

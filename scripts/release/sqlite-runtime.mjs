@@ -6,7 +6,7 @@ import {ROOT,command,readJSON,sha256} from './common.mjs';
 import {verifySeed} from './stage-seeds.mjs';
 
 export const SQLITE_VERSION='3.53.4';
-export const MANAGED_SQLITE_LAYOUT=Object.freeze({'science-v4':'environments/science-v4','python-numpy-v3':'environments/python-numpy-v3/runtime'});
+export const MANAGED_SQLITE_LAYOUT=Object.freeze({'science-v5':'environments/science-v5','python-numpy-v4':'environments/python-numpy-v4/runtime'});
 const samePath=(left,right)=>path.resolve(left).toLowerCase()===path.resolve(right).toLowerCase();
 export const SQLITE_PROBE=String.raw`
 import ctypes,json,sqlite3,sys

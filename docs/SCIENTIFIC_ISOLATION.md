@@ -4,7 +4,7 @@ This boundary is separate from the process supervisor for trusted shipped
 scientific adapters. A virtual environment is not a security sandbox.
 
 **Current runtime integration:** application service launches now require the
-compiled, offline `python-numpy-v3` outer inventory and its pinned inner manifest.
+compiled, offline `python-numpy-v4` outer inventory and its pinned inner manifest.
 See [runtime v2 validation](validation/runtime-v2.md) for the source standard
 library, exact inventory checks, atomic copy and current acceptance evidence.
 The v1 provisioning commands and results below are retained historical evidence;

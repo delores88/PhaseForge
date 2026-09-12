@@ -14,7 +14,7 @@ use uuid::Uuid;
 
 pub fn capability() -> Value {
     json!({"id":"newtonian_nbody","adapter_version":"1.0.0",
-        "runtime":"NumPy 2.4.6 and Pillow 12.3.0 in the bundled science-v4 environment",
+        "runtime":"NumPy 2.4.6 and Pillow 12.3.0 in the bundled science-v5 environment",
         "scope":"2–128 interacting point masses in isolated Cartesian 3D space; unsoftened Newtonian gravity G*=1 in explicitly scaled units. No collisions/mergers, relativity, ephemeris accuracy or general closed-form three-body solution.",
         "equations":"a_i=sum(j!=i) m_j*(q_j-q_i)/|q_j-q_i|^3; every mass responds to every other mass",
         "method":"fixed-step float64 velocity-Verlet; full-step positions and velocities; explicit collision/resolution refusal",

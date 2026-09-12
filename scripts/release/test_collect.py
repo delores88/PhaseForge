@@ -55,12 +55,13 @@ class CandidateCollectionTests(unittest.TestCase):
              'checks':{key:True for key in ('openmm','diffusion','lpac','cancel','quit_recovery','backup_restore')},
              'evidence_files':[{'path':'laboratory/fixture.json','bytes':evidence.stat().st_size,'sha256':collect.digest(evidence)}]}
         runtimes={}
-        for kind in ('science-v4','python-numpy-v3'):
+        for kind in ('science-v5','python-numpy-v4'):
             frozen=self.root/'tools/runtime-seeds'/f'{kind}.manifest.json';self.write(frozen,{'synthetic_fixture':kind})
             runtimes[kind]={'seed_pin_verification':{'valid':True},'copy_pin_verification':{'valid':True},'copy_comparison':{'valid':True},'frozen_source_manifest':{'matches_installed_seed_manifest':True,'sha256':collect.digest(frozen)}}
         managed={'source_commit':COMMIT,'delivery':'bundled_immutable_seeds','integrity_valid':True,'runtimes':runtimes}
         sqlite={'schema':'phaseforge.managed-sqlite-execution.v1','source_commit':COMMIT,'passed':True,'runtimes':{kind:{'passed':True,'sqlite_version':'3.53.4','module_version':'3.53.4','compile_options':['ENABLE_FTS5'],'fts5_rows':[[1,'retained result']],'seed_manifest_sha256':runtime['frozen_source_manifest']['sha256']} for kind,runtime in runtimes.items()}}
-        for key,name,value in [('laboratory_evidence','LABORATORY_ACCEPTANCE.json',lab),('managed_runtime_evidence','managed-runtime-materials.json',managed),('managed_sqlite_evidence','managed-sqlite-runtime.json',sqlite)]:
+        openssl={'schema':'phaseforge.managed-openssl-execution.v1','source_commit':COMMIT,'passed':True,'runtimes':{kind:{'passed':True,'version':'3.0.22','libraries':{'libcrypto-3.dll':{'sha256':'c'*64,'bytes':10},'libssl-3.dll':{'sha256':'d'*64,'bytes':10}},'tls':{'version':'TLSv1.3','server_version':'TLSv1.3','client_received':'phaseforge-server-probe','server_received':'phaseforge-client-probe','check_hostname':True,'verify_mode':2},'seed_manifest_sha256':runtime['frozen_source_manifest']['sha256']} for kind,runtime in runtimes.items()}}
+        for key,name,value in [('laboratory_evidence','LABORATORY_ACCEPTANCE.json',lab),('managed_runtime_evidence','managed-runtime-materials.json',managed),('managed_sqlite_evidence','managed-sqlite-runtime.json',sqlite),('managed_openssl_evidence','managed-openssl-runtime.json',openssl)]:
             self.write(self.folder/name,value);self.acceptance[key]={'path':name,'sha256':collect.digest(self.folder/name)}
         self.write(self.folder/'NATIVE_ACCEPTANCE.json',self.acceptance)
         return lab,managed
@@ -70,10 +71,10 @@ class CandidateCollectionTests(unittest.TestCase):
         sqlite_file=self.folder/'managed-sqlite-runtime.json'
         original=collect.load(sqlite_file)
         self.assertIsNotNone(collect.validate_laboratory_inputs(self.folder,VERSION,COMMIT,'b'*64,self.acceptance))
-        mutations=[lambda data:data['runtimes'].pop('python-numpy-v3'),
-                   lambda data:data['runtimes']['science-v4'].__setitem__('sqlite_version','3.50.4'),
-                   lambda data:data['runtimes']['science-v4'].__setitem__('fts5_rows',[]),
-                   lambda data:data['runtimes']['science-v4'].__setitem__('seed_manifest_sha256','0'*64)]
+        mutations=[lambda data:data['runtimes'].pop('python-numpy-v4'),
+                   lambda data:data['runtimes']['science-v5'].__setitem__('sqlite_version','3.50.4'),
+                   lambda data:data['runtimes']['science-v5'].__setitem__('fts5_rows',[]),
+                   lambda data:data['runtimes']['science-v5'].__setitem__('seed_manifest_sha256','0'*64)]
         for mutate in mutations:
             changed=copy.deepcopy(original);mutate(changed);self.write(sqlite_file,changed)
             acceptance=copy.deepcopy(self.acceptance);acceptance['managed_sqlite_evidence']['sha256']=collect.digest(sqlite_file)
@@ -82,6 +83,23 @@ class CandidateCollectionTests(unittest.TestCase):
         self.write(sqlite_file,original)
         with sqlite_file.open('a') as stream:stream.write(' ')
         with self.assertRaisesRegex(ValueError,'SQLite execution evidence binding'):
+            collect.validate_laboratory_inputs(self.folder,VERSION,COMMIT,'b'*64,self.acceptance)
+
+    def test_laboratory_collection_refuses_stale_openssl_and_incomplete_pair_or_tls_evidence(self):
+        self.laboratory_fixture()
+        file=self.folder/'managed-openssl-runtime.json';original=collect.load(file)
+        for mutate in [lambda data:data['runtimes'].pop('python-numpy-v4'),
+                       lambda data:data['runtimes']['science-v5'].__setitem__('version','3.0.21'),
+                       lambda data:data['runtimes']['science-v5']['libraries'].pop('libcrypto-3.dll'),
+                       lambda data:data['runtimes']['science-v5'].__setitem__('tls',{}),
+                       lambda data:data['runtimes']['science-v5'].__setitem__('seed_manifest_sha256','0'*64)]:
+            changed=copy.deepcopy(original);mutate(changed);self.write(file,changed)
+            acceptance=copy.deepcopy(self.acceptance);acceptance['managed_openssl_evidence']['sha256']=collect.digest(file)
+            with self.assertRaisesRegex(ValueError,'OpenSSL'):
+                collect.validate_laboratory_inputs(self.folder,VERSION,COMMIT,'b'*64,acceptance)
+        self.write(file,original)
+        with file.open('a') as stream:stream.write(' ')
+        with self.assertRaisesRegex(ValueError,'OpenSSL execution evidence binding'):
             collect.validate_laboratory_inputs(self.folder,VERSION,COMMIT,'b'*64,self.acceptance)
 
     def test_native_target_mapping_rejects_cross_labeling_and_unsupported_hosts(self):
@@ -162,7 +180,7 @@ class CandidateCollectionTests(unittest.TestCase):
         (self.folder/'laboratory/fixture.json').write_bytes(b'changed')
         with self.assertRaisesRegex(ValueError,'evidence changed'):validate()
         self.laboratory_fixture()
-        file=self.root/'tools/runtime-seeds/science-v4.manifest.json';file.write_bytes(b'other source seed')
+        file=self.root/'tools/runtime-seeds/science-v5.manifest.json';file.write_bytes(b'other source seed')
         with self.assertRaisesRegex(ValueError,'frozen source'):validate()
 
     def test_omitted_native_phase_and_prerelease_versions_block_final_assembly(self):

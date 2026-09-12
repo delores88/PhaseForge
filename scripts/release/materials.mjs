@@ -19,7 +19,7 @@ if(process.platform==='win32'){
   const seeds={},rebuiltPath=path.join(process.env.PHASEFORGE_RUNTIME_SEED_ROOT||path.join(ROOT,'.local/release-seeds/ci'),'seed-build.json');
   const rebuilt=readJSON(rebuiltPath);
   if(rebuilt.source_commit!==source.commit||rebuilt.schema!=='phaseforge.runtime-seed-build.v1'||rebuilt.managed_executables_run!==false)throw Error('Missing exact-commit archive rebuild receipt');
-  for(const kind of ['science-v4','python-numpy-v3']){
+  for(const kind of ['science-v5','python-numpy-v4']){
     const seed=path.join(runtime,'runtime-seeds',kind),manifestPath=path.join(seed,'phaseforge-runtime-seed.json');
     const frozen=path.join(ROOT,'tools/runtime-seeds',`${kind}.manifest.json`);
     if(await sha256(manifestPath)!==await sha256(frozen))throw Error(`Staged ${kind} differs from the frozen source manifest`);

@@ -1,5 +1,6 @@
 """Small synthetic archive regressions; no downloads or runtime execution."""
 import io
+import copy
 import hashlib
 import json
 from contextlib import ExitStack
@@ -23,6 +24,24 @@ class SeedRecipeTests(unittest.TestCase):
     sqlite_original = b"original SQLite fixture"
     sqlite_dll = b"fixed SQLite fixture"
     sqlite_def = b"definition fixture"
+    openssl_license = b"synthetic OpenSSL license"
+
+    def openssl_inputs(self):
+        original = {name: (name + ' original').encode() for name in seeds.OPENSSL_DLLS}
+        archive = {seeds.OPENSSL_ARCHIVE_PREFIX + name: (name + ' replacement').encode() for name in original}
+        archive[seeds.OPENSSL_ARCHIVE_PREFIX + 'LICENSE.txt'] = self.openssl_license
+        return original, archive
+
+    def openssl_pins(self):
+        original, archive = self.openssl_inputs()
+        pins = {name: {'original_sha256': seeds.digest(raw), 'original_bytes': len(raw),
+                       'sha256': seeds.digest(archive[seeds.OPENSSL_ARCHIVE_PREFIX + name]),
+                       'bytes': len(archive[seeds.OPENSSL_ARCHIVE_PREFIX + name])} for name, raw in original.items()}
+        stack = ExitStack()
+        stack.enter_context(patch.object(seeds, 'OPENSSL_DLLS', pins))
+        stack.enter_context(patch.object(seeds, 'OPENSSL_LICENSE_SHA256', seeds.digest(self.openssl_license)))
+        stack.enter_context(patch.object(seeds, 'OPENSSL_LICENSE_BYTES', len(self.openssl_license)))
+        return stack
 
     def sqlite_pins(self):
         stack = ExitStack()
@@ -103,6 +122,68 @@ class SeedRecipeTests(unittest.TestCase):
             source["sha3_256"] = hashlib.sha3_256(payload).hexdigest()
             self.assertEqual(seeds.cached(source, cache, offline=True), payload)
 
+    def test_archive_size_pin_is_required_even_when_sha256_matches(self):
+        payload = b'official binary archive fixture'
+        source = {'sha256': seeds.digest(payload), 'bytes': len(payload) + 1}
+        self.assertFalse(seeds.archive_matches(payload, source))
+        source['bytes'] = len(payload)
+        self.assertTrue(seeds.archive_matches(payload, source))
+
+    def test_openssl_pair_preserves_interpreter_extensions_and_sqlite_provenance(self):
+        embedded, source = self.inputs()
+        original, archive = self.openssl_inputs()
+        embedded.update(original, **{'sqlite3.dll': self.sqlite_original, '_ssl.pyd': b'ssl extension', '_hashlib.pyd': b'hash extension'})
+        with self.sqlite_pins(), self.openssl_pins():
+            files, receipt = seeds.assemble(embedded, source, [], sqlite_replacement=self.sqlite_archive(), openssl_replacement=archive)
+        replacements = receipt['native_replacements']
+        self.assertEqual(set(replacements), {'sqlite3.dll', 'libcrypto-3.dll', 'libssl-3.dll'})
+        for name in original:
+            self.assertEqual(files[name], archive[seeds.OPENSSL_ARCHIVE_PREFIX + name])
+            row = replacements[name]
+            self.assertEqual(row['component'], 'OpenSSL')
+            self.assertEqual(row['original']['version'], '3.0.21')
+            self.assertEqual(row['original']['sha256'], seeds.digest(original[name]))
+            self.assertEqual(row['replacement']['version'], '3.0.22')
+            self.assertEqual(row['replacement']['archive_sha256'], seeds.SOURCES[6]['sha256'])
+        for name in ('python.exe', 'python313.dll', '_ssl.pyd', '_hashlib.pyd'):
+            self.assertEqual(files[name], embedded[name])
+        self.assertEqual(files['licenses/OpenSSL-3.0.22-LICENSE.txt'], self.openssl_license)
+        self.assertEqual(len(replacements['libcrypto-3.dll']['auxiliary_members']), 1)
+        self.assertEqual(replacements['libssl-3.dll']['auxiliary_members'], [])
+
+    def test_openssl_pair_is_all_or_nothing_and_rejects_wrong_members_and_license(self):
+        original, archive = self.openssl_inputs()
+        prefix = seeds.OPENSSL_ARCHIVE_PREFIX
+        changes = [
+            lambda o, a: o.pop('libssl-3.dll'),
+            lambda o, a: o.__setitem__('libcrypto-3.dll', b'changed original'),
+            lambda o, a: o.__setitem__('LIBSSL-3.DLL', o['libssl-3.dll']),
+            lambda o, a: a.pop(prefix + 'libssl-3.dll'),
+            lambda o, a: a.__setitem__(prefix + 'libssl-3.dll', b'changed replacement'),
+            lambda o, a: a.__setitem__(prefix + 'extra.dll', b'unreviewed native'),
+            lambda o, a: a.__setitem__(prefix + 'LICENSE.txt', b'changed license'),
+            lambda o, a: a.pop(prefix + 'LICENSE.txt'),
+            lambda o, a: o.__setitem__('LICENSES/OPENSSL-3.0.22-LICENSE.TXT', b'occupied'),
+        ]
+        for index, change in enumerate(changes):
+            output, replacement = copy.deepcopy(original), copy.deepcopy(archive)
+            change(output, replacement)
+            before = copy.deepcopy(output)
+            with self.subTest(case=index), self.openssl_pins(), self.assertRaises(ValueError):
+                seeds.replace_openssl(output, replacement)
+            self.assertEqual(output, before)
+
+    def test_openssl_member_sizes_remain_independent_of_hashes(self):
+        original, archive = self.openssl_inputs()
+        for name in original:
+            for field in ('bytes', 'original_bytes'):
+                with self.subTest(name=name, field=field), self.openssl_pins():
+                    seeds.OPENSSL_DLLS[name][field] += 1
+                    with self.assertRaises(ValueError):
+                        seeds.replace_openssl(dict(original), archive)
+        with self.openssl_pins(), patch.object(seeds, 'OPENSSL_LICENSE_BYTES', 999), self.assertRaises(ValueError):
+            seeds.replace_openssl(dict(original), archive)
+
     def test_sqlite_replacement_preserves_other_members_and_records_both_origins(self):
         embedded, source = self.inputs()
         embedded["sqlite3.dll"] = self.sqlite_original
@@ -142,22 +223,26 @@ class SeedRecipeTests(unittest.TestCase):
     def test_freeze_is_explicit_one_time_and_default_rebuild_never_rewrites_changed_pins(self):
         embedded, source = self.inputs()
         embedded["sqlite3.dll"] = self.sqlite_original
-        archives = [bundle(embedded), b"fixture source", bundle({"numpy/native.pyd": b"numpy", seeds.MSVC_MEMBER: b"fixture MSVC"}), bundle({"openmm/native.dll": b"openmm"}), bundle({"PIL/native.pyd": b"pillow"}), bundle(self.sqlite_archive())]
+        openssl_original, openssl_archive = self.openssl_inputs()
+        embedded.update(openssl_original)
+        archives = [bundle(embedded), b"fixture source", bundle({"numpy/native.pyd": b"numpy", seeds.MSVC_MEMBER: b"fixture MSVC"}), bundle({"openmm/native.dll": b"openmm"}), bundle({"PIL/native.pyd": b"pillow"}), bundle(self.sqlite_archive()), bundle(openssl_archive)]
         with tempfile.TemporaryDirectory() as temporary:
             root = Path(temporary)
             def build(name, freeze=False):
-                with self.sqlite_pins(), patch.object(seeds, "cached", side_effect=archives), patch.object(seeds, "source_files", return_value=source), patch.object(seeds, "MSVC_SHA256", seeds.digest(b"fixture MSVC")):
+                with self.sqlite_pins(), self.openssl_pins(), patch.object(seeds, "cached", side_effect=archives), patch.object(seeds, "source_files", return_value=source), patch.object(seeds, "MSVC_SHA256", seeds.digest(b"fixture MSVC")):
                     return seeds.build(root/name, root/"cache", offline=True, freeze=freeze, manifest_root=root/"frozen")
             report = build("initial", True)
-            self.assertEqual(set(report["seeds"]), {"science-v4", "python-numpy-v3"})
-            for kind, count in (("science-v4", 6), ("python-numpy-v3", 4)):
+            self.assertEqual(set(report["seeds"]), {"science-v5", "python-numpy-v4"})
+            for kind, count in (("science-v5", 7), ("python-numpy-v4", 5)):
                 self.assertEqual(len(report["seeds"][kind]["sources"]), count)
                 manifest = json.loads((root/"frozen"/(kind + ".manifest.json")).read_bytes())
                 self.assertEqual(manifest["sqlite"], "3.53.4")
+                self.assertEqual(manifest["openssl"], "3.0.22")
                 self.assertEqual(manifest["files"]["sqlite3.dll"], seeds.digest(self.sqlite_dll))
-            isolation = json.loads((root/"initial/python-numpy-v3/phaseforge-isolation-runtime.json").read_bytes())
+            isolation = json.loads((root/"initial/python-numpy-v4/phaseforge-isolation-runtime.json").read_bytes())
             self.assertEqual(isolation["sqlite"], "3.53.4")
-            frozen = root/"frozen/science-v4.manifest.json"
+            self.assertEqual(isolation["openssl"], "3.0.22")
+            frozen = root/"frozen/science-v5.manifest.json"
             initial = frozen.read_bytes()
             build("replayed")
             self.assertEqual(frozen.read_bytes(), initial)

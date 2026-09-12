@@ -81,23 +81,36 @@ def evidence(root, native_rows, sources, archive_root, *, record, opened, versio
     if not isinstance(replacements, dict) or set(aliases) & set(replacements):
         raise ValueError("Invalid or overlapping frozen native replacements")
     pinned_sources = {source["name"]: source for source in sources}
+    if len(pinned_sources) != len(sources):
+        raise ValueError("Duplicate native source archive identity")
+    openssl_pair = {"libcrypto-3.dll", "libssl-3.dll"}
+    if set(replacements) & openssl_pair and not openssl_pair <= set(replacements):
+        raise ValueError("OpenSSL replacement must include the complete DLL pair")
     replaced_members = {}
     auxiliary_members = {}
     for destination, replacement in replacements.items():
+        is_openssl = destination in openssl_pair
+        component, expected_version = ("OpenSSL", "3.0.22") if is_openssl else ("SQLite", "3.53.4")
         if (destination not in origins or not isinstance(replacement, dict)
-                or replacement.get("component") != "SQLite" or destination != "sqlite3.dll"
-                or replacement.get("version") != "3.53.4" or not replacement.get("reason")):
-            raise ValueError("Invalid frozen SQLite native replacement")
+                or (not is_openssl and destination != "sqlite3.dll")
+                or replacement.get("component") != component
+                or replacement.get("version") != expected_version or not replacement.get("reason")):
+            raise ValueError("Invalid frozen native replacement")
         for role in ("original", "replacement"):
             pin = replacement.get(role)
             if not isinstance(pin, dict):
                 raise ValueError("Native replacement lacks original/replacement member pin")
             source = pinned_sources.get(pin.get("archive_name"))
+            member = ("cpython-bin-deps-openssl-bin-3.0.22/amd64/" + destination
+                      if is_openssl and role == "replacement" else destination)
             if (source is None or source["sha256"] != pin.get("archive_sha256")
-                    or pin.get("archive_member") != "sqlite3.dll"
+                    or pin.get("archive_member") != member
                     or not re.fullmatch(r"[a-f0-9]{64}", str(pin.get("sha256", "")))
                     or type(pin.get("bytes")) is not int or not 0 < pin["bytes"] <= 512 * 1024 * 1024):
                 raise ValueError("Native replacement archive/member pin differs from frozen sources")
+            if is_openssl and (pin.get("archive_name") != ("python-3.13.15-embed-amd64.zip" if role == "original" else "openssl-bin-3.0.22.zip")
+                               or pin.get("version") != ("3.0.21" if role == "original" else "3.0.22")):
+                raise ValueError("OpenSSL replacement source or version differs from reviewed pair")
         pin = replacement["replacement"]
         row = next(row for row in native_rows if row["path"] == destination)
         if (pin["sha256"] != row["sha256"] or pin["bytes"] != row["bytes"]
@@ -105,17 +118,21 @@ def evidence(root, native_rows, sources, archive_root, *, record, opened, versio
                 or replacement["original"]["sha256"] == pin["sha256"]):
             raise ValueError("Native replacement does not match frozen file pin")
         auxiliary = replacement.get("auxiliary_members", [])
-        if not isinstance(auxiliary, list) or len(auxiliary) != 1:
-            raise ValueError("SQLite replacement must retain its exact definition member")
-        item = auxiliary[0]
-        if (not isinstance(item, dict) or item.get("path") != "source-evidence/sqlite-3.53.4/sqlite3.def"
-                or item.get("archive_member") != "sqlite3.def"
-                or not re.fullmatch(r"[a-f0-9]{64}", str(item.get("sha256", "")))
-                or type(item.get("bytes")) is not int or not 0 < item["bytes"] <= 1024 * 1024):
-            raise ValueError("Invalid SQLite auxiliary member pin")
-        if record(Path(root) / item["path"]) != {"bytes": item["bytes"], "sha256": item["sha256"]}:
-            raise ValueError("SQLite auxiliary file differs from frozen pin")
-        auxiliary_members[item["path"]] = {**item, "archive": pin["archive_name"], "archive_sha256": pin["archive_sha256"], "archive_bytes_verified": False}
+        if not isinstance(auxiliary, list) or len(auxiliary) != (0 if destination == "libssl-3.dll" else 1):
+            raise ValueError("Native replacement must retain its exact auxiliary members")
+        for item in auxiliary:
+            expected_path, expected_member = (("licenses/OpenSSL-3.0.22-LICENSE.txt", "cpython-bin-deps-openssl-bin-3.0.22/amd64/LICENSE.txt")
+                                               if is_openssl else ("source-evidence/sqlite-3.53.4/sqlite3.def", "sqlite3.def"))
+            if (not isinstance(item, dict) or item.get("path") != expected_path
+                    or item.get("archive_member") != expected_member
+                    or not re.fullmatch(r"[a-f0-9]{64}", str(item.get("sha256", "")))
+                    or type(item.get("bytes")) is not int or not 0 < item["bytes"] <= 1024 * 1024):
+                raise ValueError("Invalid native auxiliary member pin")
+            if record(Path(root) / item["path"]) != {"bytes": item["bytes"], "sha256": item["sha256"]}:
+                raise ValueError("Native auxiliary file differs from frozen pin")
+            if item["path"] in auxiliary_members:
+                raise ValueError("Duplicate native auxiliary destination")
+            auxiliary_members[item["path"]] = {**item, "archive": pin["archive_name"], "archive_sha256": pin["archive_sha256"], "archive_bytes_verified": False}
     for destination, alias in aliases.items():
         if (destination not in origins or not isinstance(alias, dict)
                 or not isinstance(alias.get("archive_member"), str)
@@ -179,7 +196,7 @@ def evidence(root, native_rows, sources, archive_root, *, record, opened, versio
                             for item in auxiliary_members.values():
                                 if item["archive"] == source["name"] and item["archive_member"] == name:
                                     if digest != item["sha256"] or member.file_size != item["bytes"]:
-                                        raise ValueError("SQLite auxiliary archive member differs from frozen pin")
+                                        raise ValueError("Native auxiliary archive member differs from frozen pin")
                                     item["archive_bytes_verified"] = True
                             for destination, replacement in replacements.items():
                                 for role in ("original", "replacement"):
@@ -221,7 +238,7 @@ def evidence(root, native_rows, sources, archive_root, *, record, opened, versio
     if archive_root is not None and set(replaced_members) != set(replacements):
         raise ValueError("Native replacement original archive member is missing")
     if archive_root is not None and not all(item["archive_bytes_verified"] for item in auxiliary_members.values()):
-        raise ValueError("SQLite auxiliary source archive member is missing")
+        raise ValueError("Native auxiliary source archive member is missing")
     for row in native_rows:
         path = Path(root) / row["path"]
         with opened(path) as (stream, _):

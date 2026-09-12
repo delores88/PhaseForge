@@ -77,7 +77,7 @@ pub fn validate_generated_input(value: &Value) -> anyhow::Result<GeneratedInput>
     );
     ensure!(
         !input.code.trim().is_empty() && input.code.len() <= 256 * 1024,
-        "Experiment source must contain 1–262144 bytes"
+        "Experiment source must contain 1â€“262144 bytes"
     );
     ensure!(
         input.inputs.is_object() && serde_json::to_vec(&input.inputs)?.len() <= MIB as usize,
@@ -96,7 +96,7 @@ pub fn validate_generated_input(value: &Value) -> anyhow::Result<GeneratedInput>
             .limits
             .wall_seconds
             .is_none_or(|seconds| (1..=86400).contains(&seconds)),
-        "wall_seconds must be null or 1–86400"
+        "wall_seconds must be null or 1â€“86400"
     );
     ensure!(
         (64..=4096).contains(&input.limits.storage_mb),
@@ -969,12 +969,12 @@ mod tests {
     }
 
     #[tokio::test]
-    async fn generated_runtime_v3_rejects_prior_attempt_before_mutation_or_provisioning() {
-        for mixed in [false, true] {
+    async fn generated_runtime_v4_rejects_prior_attempt_before_mutation_or_provisioning() {
+        for (prior,mixed) in ["python-numpy-v2","python-numpy-v3"].into_iter().flat_map(|prior| [false,true].map(|mixed|(prior,mixed))) {
             let temp = tempfile::tempdir().unwrap();
             let (service, project) = service(temp.path());
             let job = create(&service, project, input("pass"));
-            service.event(job.id, "runtime_verified", "Previous runtime", json!({"kind":"python-numpy-v2","manifest_sha256":"bb2bbd5163b1cc488fa32e7b663974b3bb23b3edf6dc579af6e9fd7c138d3a52"})).unwrap();
+            service.event(job.id, "runtime_verified", "Previous runtime", json!({"kind":prior,"manifest_sha256":"bb2bbd5163b1cc488fa32e7b663974b3bb23b3edf6dc579af6e9fd7c138d3a52"})).unwrap();
             if mixed {
                 service.event(job.id, "runtime_verified", "A later matching event cannot erase prior identity", json!({"kind":super::super::runtime::RuntimeKind::Generated.name(),"manifest_sha256":super::super::runtime::RuntimeKind::Generated.manifest_sha256()})).unwrap();
             }
@@ -996,7 +996,7 @@ mod tests {
     }
 
     #[test]
-    fn generated_runtime_v3_requires_identity_for_retained_evidence_and_exact_current_hash() {
+    fn generated_runtime_v4_requires_identity_for_retained_evidence_and_exact_current_hash() {
         let temp = tempfile::tempdir().unwrap();
         let (service, project) = service(temp.path());
         let job = create(&service, project, input("pass"));
@@ -1009,11 +1009,11 @@ mod tests {
         service.ensure_generated_attempt_identity(job.id).unwrap();
         service.event(job.id,"runtime_verified","Wrong current hash",json!({"kind":super::super::runtime::RuntimeKind::Generated.name(),"manifest_sha256":"wrong"})).unwrap();
         assert!(service.ensure_generated_attempt_identity(job.id).unwrap_err().to_string().contains("runtime differs"));
-        assert_eq!(service.generated_runtime_directory(), service.config.data_directory.join("environments/python-numpy-v3/runtime"));
+        assert_eq!(service.generated_runtime_directory(), service.config.data_directory.join("environments/python-numpy-v4/runtime"));
     }
 
     #[test]
-    fn generated_runtime_v3_rejects_old_queued_replacement_before_restart_receipt_mutation() {
+    fn generated_runtime_v4_rejects_old_queued_replacement_before_restart_receipt_mutation() {
         let temp = tempfile::tempdir().unwrap();
         let (service, project) = service(temp.path());
         let original = create(&service, project, input("pass"));
@@ -1031,7 +1031,7 @@ mod tests {
     }
 
     #[tokio::test]
-    async fn generated_runtime_v3_restart_of_v2_source_uses_a_new_immutable_attempt() {
+    async fn generated_runtime_v4_restart_of_v2_source_uses_a_new_immutable_attempt() {
         let temp = tempfile::tempdir().unwrap();
         let (service, project) = service(temp.path());
         let original = create(&service, project, input("pass"));

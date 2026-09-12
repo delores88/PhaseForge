@@ -1,5 +1,26 @@
 # Windows release coordination, 2026-09-11
 
+## Current status, September 12 UTC
+
+Version 0.9.0 at commit `3cd794e4e869d319b958a91f3ccb636e404b006f` was
+installed locally with saved data preserved and published as an immutable GitHub
+release. Ordinary marketplace validation completed at 02:10:21 UTC and rejected
+the bundled OpenSSL 3.0.21 DLLs: CVE-2026-75803, CVE-2026-54874,
+CVE-2026-63072 and CVE-2026-63076. Malware, SBOM and secrets stages passed.
+The complete report was retained with SHA-256
+`f2c9ed3a471c85e0bc7ab9deef4458c6963ffa97cd3d28a956d36602aad41587`.
+The private full-report upload now succeeds; this is a dependency rejection,
+not the earlier report-transport failures.
+
+Version 0.9.1 prepares new immutable runtimes with the official CPython OpenSSL
+3.0.22 Windows DLL pair. It requires its own final hosted build, installed
+compatibility checks and exact marketplace profile/admission. The rejected
+0.9.0 assets and report remain unchanged. No exemption or automatic retry
+establishes acceptance. Logo discovery art and the two detail-page screenshots
+are already hosted; the historical discovery defect described below is fixed.
+
+## Earlier coordination record
+
 Delores owner reconfirmed the live state at 16:20:29 UTC by comparing deployed
 source hashes. The clean deployed worktree is
 `<DeloresAI repository-root>/.local/phaseforge-alpha`, branch

@@ -1,13 +1,13 @@
 Microsoft Visual C++ Runtime
 Copyright Microsoft Corporation. All rights reserved.
 
-The science-v4 runtime includes an unmodified MSVCP140.dll (AMD64,
+The science-v5 runtime includes an unmodified MSVCP140.dll (AMD64,
 file/product version 14.40.33810.0, 575056 bytes). Its SHA256 is:
 a4c2229bdc2a2a630acdc095b4d86008e5c3e3bc7773174354f3da4f5beb9cde
 
 The original bytes are retained from the SHA256-pinned official NumPy 2.4.6
 wheel member numpy.libs/msvcp140-a4c2229bdc2a2a630acdc095b4d86008.dll.
-The additional science-v4/MSVCP140.dll file is a byte-identical app-local
+The additional science-v5/MSVCP140.dll file is a byte-identical app-local
 alias for OpenMM's imports. The original NumPy member is also retained.
 
 Microsoft's license terms apply to the Microsoft runtime. It is not

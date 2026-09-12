@@ -1,4 +1,4 @@
-# PhaseForge 0.9.0 on Windows
+# PhaseForge 0.9.1 on Windows
 
 The current scientific package targets **Windows x64**. It bundles the desktop
 interface, Rust backend, and verified scientific Python runtimes. Running the
@@ -9,7 +9,7 @@ installer still needs its own installation checks and marketplace review.
 ## Use the packaged application
 
 The local package command produces
-`desktop/dist/PhaseForge_0.9.0_x64-setup.exe`. Install it, open PhaseForge, and add
+`desktop/dist/PhaseForge_0.9.1_x64-setup.exe`. Install it, open PhaseForge, and add
 your OpenAI or Anthropic API key in **Settings**. Choose the provider, model and
 reasoning effort for the next chat request. API usage is charged by that provider.
 
@@ -138,4 +138,4 @@ the numerical solver failed. Check each job's execution receipt and saved error.
 The [main evidence ledger](README.md#current-evidence) links the completed scoped
 studies and the pending installed mechanics/ML gates. Older
 [0.8.0 validation](docs/RELEASE_VALIDATION.md) remains historical evidence, not
-acceptance of the 0.9.0 installer.
+acceptance of the 0.9.1 installer.

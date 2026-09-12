@@ -34,7 +34,7 @@ export async function stageSeeds({sourceRoot,destination,manifestRoot}){
   const backup=inside(boundary,path.join(boundary,`.runtime-seeds-backup-${crypto.randomUUID()}`));
   const seeds={};
   // Verify all source inputs before creating or replacing any staged runtime.
-  for(const kind of ['science-v4','python-numpy-v3'])seeds[kind]=await verifySeed(path.resolve(sourceRoot,kind),path.join(manifestRoot,`${kind}.manifest.json`));
+  for(const kind of ['science-v5','python-numpy-v4'])seeds[kind]=await verifySeed(path.resolve(sourceRoot,kind),path.join(manifestRoot,`${kind}.manifest.json`));
   fs.mkdirSync(staging);
   try{
     for(const kind of Object.keys(seeds)){

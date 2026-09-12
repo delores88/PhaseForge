@@ -26,6 +26,7 @@ SOURCES = [
     {"name": "openmm-8.5.2-cp313-cp313-win_amd64.whl", "url": "https://files.pythonhosted.org/packages/69/9f/447f86684722ea5a5ec5d2785cd7e1151ccd15a8c6aab7e6b1b39833ff53/openmm-8.5.2-cp313-cp313-win_amd64.whl", "sha256": "289c870e28c946b03992215f1f01f0b7d870f84a6f4c0a57e103bd8d62712b46", "upstream_metadata": "https://pypi.org/pypi/OpenMM/8.5.2/json"},
     {"name": "pillow-12.3.0-cp313-cp313-win_amd64.whl", "url": "https://files.pythonhosted.org/packages/a6/9b/7a58e61d62be561da3a356fe2384d4059a6345fc130e23ef1c36a5b81d24/pillow-12.3.0-cp313-cp313-win_amd64.whl", "sha256": "1cca606cd25738df4ed873d5ad46bbdb3d83b5cbca291f6b4ff13a4df6b0bbe8", "upstream_metadata": "https://pypi.org/pypi/Pillow/12.3.0/json"},
     {"name": "sqlite-dll-win-x64-3530400.zip", "url": "https://www.sqlite.org/2026/sqlite-dll-win-x64-3530400.zip", "sha256": "8b959b7eff4a81f6a62fc3468f9273e5cfe78d4a927e62215aed231b654fb104", "sha3_256": "deddee963c810d1eeac3ce5e15c7c41da21a1c54d7a39cf54fbf577d2f50de3a", "version": "3.53.4", "upstream_metadata": "https://www.sqlite.org/download.html", "license_url": "https://www.sqlite.org/copyright.html"},
+    {"name": "openssl-bin-3.0.22.zip", "url": "https://codeload.github.com/python/cpython-bin-deps/zip/refs/tags/openssl-bin-3.0.22", "sha256": "f41c05d4e91ca5d687dcea3a5cc54b8692c86f5e7e8eb51d7b0bf537c7bcaddb", "bytes": 24671379, "version": "3.0.22", "upstream_commit": "8898e94682675b969ef09c0be4cdf46bf764fa9e", "upstream_metadata": "https://github.com/python/cpython/commit/87c9dfbf06de955e79c606d3163d9a40160d04cf", "license_url": "https://github.com/python/cpython-bin-deps/blob/8898e94682675b969ef09c0be4cdf46bf764fa9e/amd64/LICENSE.txt"},
 ]
 MAX_ARCHIVE = 128 * 1024 * 1024
 MAX_EXPANDED = 1024 * 1024 * 1024
@@ -39,6 +40,7 @@ def digest(data):
 
 def archive_matches(payload, source):
     return (len(payload) <= MAX_ARCHIVE and digest(payload) == source["sha256"]
+            and ("bytes" not in source or len(payload) == source["bytes"])
             and ("sha3_256" not in source or hashlib.sha3_256(payload).hexdigest() == source["sha3_256"]))
 
 
@@ -130,6 +132,13 @@ SQLITE_DLL_SHA256 = "ab57d0437795ecc757cb693f32ea224173fa9856594d95cfa6b5033e645
 SQLITE_DLL_BYTES = 3285504
 SQLITE_DEF_SHA256 = "a93b7867cc1fdb4e1dd0d4eef727cf910fe9f2bb6cd612d933744add1fa7f11b"
 SQLITE_DEF_BYTES = 8722
+OPENSSL_ARCHIVE_PREFIX = "cpython-bin-deps-openssl-bin-3.0.22/amd64/"
+OPENSSL_DLLS = {
+    "libcrypto-3.dll": {"original_sha256": "09499e186cf0e434ffa17ad153aa9a66d6048c54a2c03b823e2a06c49d9affe4", "original_bytes": 5238520, "sha256": "fce8b678990ce3266fd9a86fbda19f232afa7ba76de81d73145dc35cdb19513a", "bytes": 5243128},
+    "libssl-3.dll": {"original_sha256": "28c395290279fa4f4f54a57b85cd66d853895f925fefb8f6fdebc0d8b1cdd07c", "original_bytes": 794872, "sha256": "55913d1e5287ee969c0dab64b101d880a7fd0d95a974c112d925579be097afbd", "bytes": 794872},
+}
+OPENSSL_LICENSE_SHA256 = "ed72ce2b51ee58f117e5a021e2e04af158857f40269fbc03491f0b2a99dbcc96"
+OPENSSL_LICENSE_BYTES = 10352
 
 
 def replace_sqlite(output, replacement):
@@ -155,7 +164,41 @@ def replace_sqlite(output, replacement):
         "upstream_advisory": "https://www.sqlite.org/cves.html"}}
 
 
-def assemble(embedded, source, wheels, add_msvc_alias=False, sqlite_replacement=None):
+def replace_openssl(output, archive):
+    """Replace only the reviewed AMD64 pair, retaining original and new provenance."""
+    prefix = OPENSSL_ARCHIVE_PREFIX
+    native_members = {name for name in archive if name.startswith(prefix) and Path(name).suffix.lower() in NATIVE}
+    if native_members != {prefix + name for name in OPENSSL_DLLS}:
+        raise ValueError("OpenSSL archive requires exactly the reviewed AMD64 DLL pair")
+    for name, pin in OPENSSL_DLLS.items():
+        if ({key for key in output if key.casefold() == name.casefold()} != {name}
+                or digest(output[name]) != pin["original_sha256"] or len(output[name]) != pin["original_bytes"]):
+            raise ValueError("Original embedded OpenSSL DLL differs from pinned identity: " + name)
+        if digest(archive[prefix + name]) != pin["sha256"] or len(archive[prefix + name]) != pin["bytes"]:
+            raise ValueError("Replacement OpenSSL DLL differs from pinned identity: " + name)
+    license_member = prefix + "LICENSE.txt"
+    if (license_member not in archive or digest(archive[license_member]) != OPENSSL_LICENSE_SHA256
+            or len(archive[license_member]) != OPENSSL_LICENSE_BYTES):
+        raise ValueError("OpenSSL license differs from pinned identity")
+    license_path = "licenses/OpenSSL-3.0.22-LICENSE.txt"
+    if license_path.casefold() in {name.casefold() for name in output}:
+        raise ValueError("OpenSSL license destination is occupied")
+    result = {}
+    for name, pin in OPENSSL_DLLS.items():
+        output[name] = archive[prefix + name]
+        result[name] = {
+            "component": "OpenSSL", "version": "3.0.22",
+            "original": {"archive_name": SOURCES[0]["name"], "archive_sha256": SOURCES[0]["sha256"], "archive_member": name, "sha256": pin["original_sha256"], "bytes": pin["original_bytes"], "version": "3.0.21"},
+            "replacement": {"archive_name": SOURCES[6]["name"], "archive_sha256": SOURCES[6]["sha256"], "archive_member": prefix + name, "sha256": pin["sha256"], "bytes": pin["bytes"], "version": "3.0.22"},
+            "auxiliary_members": [{"path": license_path, "archive_member": license_member, "sha256": OPENSSL_LICENSE_SHA256, "bytes": OPENSSL_LICENSE_BYTES}] if name == "libcrypto-3.dll" else [],
+            "reason": "Replace the embedded OpenSSL pair with the exact official CPython 3.13 Windows AMD64 fixed dependency pair; interpreter and extension bytes remain unchanged",
+            "upstream_advisory": "https://openssl-library.org/news/vulnerabilities-3.0/",
+        }
+    output[license_path] = archive[license_member]
+    return result
+
+
+def assemble(embedded, source, wheels, add_msvc_alias=False, sqlite_replacement=None, openssl_replacement=None):
     """Pure archive transformation; every departure is represented in receipts."""
     if "python313.zip" not in embedded or "python313._pth" not in embedded:
         raise ValueError("Official embedded standard library/configuration absent")
@@ -207,6 +250,8 @@ def assemble(embedded, source, wheels, add_msvc_alias=False, sqlite_replacement=
             "reason": "Unmodified app-local alias for OpenMM's plain MSVCP140.dll imports; preserve NumPy's original renamed member for its own imports"}}
     if sqlite_replacement is not None:
         transformations["native_replacements"] = replace_sqlite(output, sqlite_replacement)
+    if openssl_replacement is not None:
+        transformations.setdefault("native_replacements", {}).update(replace_openssl(output, openssl_replacement))
     return output, transformations
 
 
@@ -224,8 +269,8 @@ def build(output, cache, offline=False, source_commit=None, freeze=False, manife
     manifest_root = checked_path(manifest_root or Path(__file__).resolve().parents[2] / "tools/runtime-seeds")
     if freeze:
         manifest_root.mkdir(parents=True, exist_ok=True)
-    for kind, indexes in (("python-numpy-v3", (0, 1, 2, 5)), ("science-v4", (0, 1, 2, 3, 4, 5))):
-        files, transformations = assemble(embedded, source, [zip_files(archives[i]) for i in indexes if i in (2, 3, 4)], add_msvc_alias=kind == "science-v4", sqlite_replacement=zip_files(archives[5]))
+    for kind, indexes in (("python-numpy-v4", (0, 1, 2, 5, 6)), ("science-v5", (0, 1, 2, 3, 4, 5, 6))):
+        files, transformations = assemble(embedded, source, [zip_files(archives[i]) for i in indexes if i in (2, 3, 4)], add_msvc_alias=kind == "science-v5", sqlite_replacement=zip_files(archives[5]), openssl_replacement=zip_files(archives[6]))
         root = output / kind
         root.mkdir()
         for name, value in sorted(files.items()):
@@ -233,14 +278,14 @@ def build(output, cache, offline=False, source_commit=None, freeze=False, manife
             destination.parent.mkdir(parents=True, exist_ok=True)
             destination.write_bytes(value)
         sources = [{**SOURCES[i], "bytes": len(archives[i])} for i in indexes]
-        if kind == "python-numpy-v3":
-            isolation = {"schema_version": 1, "python": "3.13.15", "numpy": "2.4.6", "sqlite": "3.53.4", "sources": sources, "files": {name: digest(value) for name, value in sorted(files.items())}, "stdlib": "Matching pinned source modules replace embedded bytecode", "security": "Pinned dependencies only; generated code requires the separately verified Windows LPAC boundary"}
+        if kind == "python-numpy-v4":
+            isolation = {"schema_version": 1, "python": "3.13.15", "numpy": "2.4.6", "sqlite": "3.53.4", "openssl": "3.0.22", "sources": sources, "files": {name: digest(value) for name, value in sorted(files.items())}, "stdlib": "Matching pinned source modules replace embedded bytecode", "security": "Pinned dependencies only; generated code requires the separately verified Windows LPAC boundary"}
             files["phaseforge-isolation-runtime.json"] = (json.dumps(isolation, indent=2) + "\n").encode()
             (root / "phaseforge-isolation-runtime.json").write_bytes(files["phaseforge-isolation-runtime.json"])
         hashes = {name: digest(value) for name, value in sorted(files.items())}
         sizes = {name: len(value) for name, value in sorted(files.items())}
-        manifest = {"schema_version": 1, "schema": "phaseforge.runtime-seed.v1", "kind": kind, "python": "3.13.15", "numpy": "2.4.6", "sqlite": "3.53.4", "sources": sources, "files": hashes, "file_bytes": sizes, "native_files": {k: v for k, v in hashes.items() if Path(k).suffix.lower() in NATIVE}, "transformations": transformations, "licenses": [k for k in hashes if "license" in k.lower() or "copying" in k.lower()], "delivery": "Bundled inspectable files; copy bytes into a managed runtime after verifying this manifest", "security": "Pinned dependencies only; generated code still requires the separately verified Windows LPAC boundary"}
-        if kind == "science-v4":
+        manifest = {"schema_version": 1, "schema": "phaseforge.runtime-seed.v1", "kind": kind, "python": "3.13.15", "numpy": "2.4.6", "sqlite": "3.53.4", "openssl": "3.0.22", "sources": sources, "files": hashes, "file_bytes": sizes, "native_files": {k: v for k, v in hashes.items() if Path(k).suffix.lower() in NATIVE}, "transformations": transformations, "licenses": [k for k in hashes if "license" in k.lower() or "copying" in k.lower()], "delivery": "Bundled inspectable files; copy bytes into a managed runtime after verifying this manifest", "security": "Pinned dependencies only; generated code still requires the separately verified Windows LPAC boundary"}
+        if kind == "science-v5":
             manifest.update(openmm="8.5.2", pillow="12.3.0")
         name = "phaseforge-runtime-seed.json"
         raw = (json.dumps(manifest, indent=2, ensure_ascii=True) + "\n").encode()

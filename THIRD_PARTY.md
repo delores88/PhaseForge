@@ -41,7 +41,7 @@ datasets and imported assets retain their respective provenance and licenses.
 ## Bundled Windows scientific runtimes
 
 The Windows 0.9 package includes CPython 3.13.15 and NumPy 2.4.6 in
-`resources/runtime/runtime-seeds/science-v4` and `python-numpy-v3`. The science
+`resources/runtime/runtime-seeds/science-v5` and `python-numpy-v4`. The science
 seed also contains OpenMM 8.5.2 and Pillow 12.3.0. These components are copied
 into managed environments without changing their binary or license files.
 The matching CPython source standard library replaces embedded bytecode, as
@@ -54,6 +54,11 @@ archive/member hashes and the replacement's upstream public-domain statement at
 https://www.sqlite.org/copyright.html. The original DLL remains in historical
 seed evidence; it is absent from the current installer.
 
+Both seeds also replace the original OpenSSL 3.0.21 DLL pair with the unmodified
+AMD64 OpenSSL 3.0.22 pair from CPython's official `openssl-bin-3.0.22` archive.
+The original and replacement files, archive hashes and exact license are recorded
+in the new immutable seed manifests. No OpenSSL build or DLL renaming is performed.
+
 | Component | License and included notice location, relative to its seed |
 | --- | --- |
 | CPython 3.13.15 | PSF/Python license and bundled component terms: `LICENSE.txt`; matching source notices: `licenses/CPython-source-LICENSE.txt` |
@@ -61,6 +66,7 @@ seed evidence; it is absent from the current installer.
 | OpenMM 8.5.2 | MIT for core, Reference/CPU and application layers; LGPL-3.0-or-later for bundled OpenCL platforms and XTC/XDR code, with additional component terms. Exact upstream notices accompany the application under `resources/tools/third-party/openmm-8.5.2/`, outside the frozen seed. |
 | Pillow 12.3.0 | MIT-CMU and bundled image/font/codec terms: `pillow-12.3.0.dist-info/licenses/LICENSE` |
 | SQLite 3.53.4 | Public domain; exact official DLL and companion `source-evidence/sqlite-3.53.4/sqlite3.def` are mapped in the runtime manifest |
+| OpenSSL 3.0.22 | Apache-2.0; exact archive notice retained at `licenses/OpenSSL-3.0.22-LICENSE.txt` |
 
 NumPy's aggregate notice includes OpenBLAS, LAPACK, and the GCC runtime's GPLv3
 license with GCC Runtime Library Exception 3.1. CPython's aggregate notices
@@ -94,7 +100,7 @@ dependency's license.
 
 ## Microsoft Visual C++ runtime
 
-The bundled `science-v4` environment retains Microsoft's MSVCP140 runtime
+The bundled `science-v5` environment retains Microsoft's MSVCP140 runtime
 14.40.33810.0, including a byte-identical `MSVCP140.dll` alias for OpenMM.
 Its bytes come from the pinned NumPy wheel; Microsoft's terms apply separately
 from NumPy's BSD license and PhaseForge's MIT license. The existing Visual

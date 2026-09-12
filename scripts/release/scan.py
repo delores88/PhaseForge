@@ -62,11 +62,15 @@ def main():
     if SYSTEM=='windows':
         scan_boms.append(('installer-native',FOLDER/'installer-native.cdx.json'))
         components=json.loads((FOLDER/'runtime-observations.cdx.json').read_text())['components']
-        for kind in ('science-v4','python-numpy-v3'):
+        for kind in ('science-v5','python-numpy-v4'):
             rows=[item for item in components if item.get('name')=='sqlite-'+kind]
             if (len(rows)!=1 or rows[0].get('version')!='3.53.4'
                     or rows[0].get('cpe')!='cpe:2.3:a:sqlite:sqlite:3.53.4:*:*:*:*:*:*:*'):
                 raise RuntimeError('Managed SQLite DLL lacks exact observed-version scanner coverage: '+kind)
+            rows=[item for item in components if item.get('name')=='openssl-'+kind]
+            if (len(rows)!=1 or rows[0].get('version')!='3.0.22'
+                    or rows[0].get('cpe')!='cpe:2.3:a:openssl:openssl:3.0.22:*:*:*:*:*:*:*'):
+                raise RuntimeError('Managed OpenSSL pair lacks exact observed-version scanner coverage: '+kind)
     for scope,bom in scan_boms:
         result=invoke(tool('grype'),[f'sbom:{bom}','-o','json'],'grype-'+scope,env=grype_env)
         data=json.loads(result.stdout);matches=data.get('matches')
