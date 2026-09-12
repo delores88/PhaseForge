@@ -1,6 +1,7 @@
 pub mod telemetry;
 pub mod advisor;
 pub mod recovery;
+pub mod resource_plan;
 mod accelerators;
 mod hardware;
 mod scheduler;

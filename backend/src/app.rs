@@ -61,7 +61,9 @@ impl Application {
 
         let discovery = crate::discovery::DiscoveryService::new(database.clone(), scheduler.clone(), agent.clone())?;
         let assurance = crate::assurance::AssuranceService::new(database.clone())?;
-        let laboratory = crate::laboratory::LaboratoryService::new(database.clone(), config.clone())?;
+        let telemetry=crate::compute::telemetry::Telemetry::start();
+        let laboratory = crate::laboratory::LaboratoryService::new(database.clone(), config.clone())?
+            .with_resource_context(scheduler.hardware().clone(),telemetry.clone());
         let state = Arc::new(AppState {
             config: config.clone(),
             database,
@@ -71,7 +73,7 @@ impl Application {
             assurance,
             laboratory,
             started_at: Instant::now(),
-            telemetry: crate::compute::telemetry::Telemetry::start(),
+            telemetry,
         });
         let router = api::router_with_readiness(Arc::clone(&state), readiness)?;
 

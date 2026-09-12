@@ -16,6 +16,7 @@ use crate::{app::AppState,domain::{ProviderKind,ConversationMessage,Conversation
 #[path="laboratory_monitor.rs"] mod monitor;
 #[path="laboratory_native.rs"] mod native;
 #[path="laboratory_output_recovery.rs"] mod output_recovery;
+#[path="laboratory_progress.rs"] mod progress;
 #[path="laboratory_intent.rs"] mod intent;
 #[path="laboratory_review.rs"] mod review;
 pub use intent::OutputIntent;
@@ -42,6 +43,8 @@ struct Journal {
     #[serde(default)] image_outbox:Vec<native::ImageInput>,
     #[serde(default)] output_recovery:Option<output_recovery::Recovery>,
     #[serde(default)] output_intent:Option<intent::IntentLedger>,
+    #[serde(default)] progress:progress::Progress,
+    #[serde(default)] child_recovery:Vec<Value>,
 }
 /// An outbox bridges the atomic journal replacement and the separate database writes.
 /// Retrying delivery uses the same message identity and does not repeat generation.
@@ -54,7 +57,7 @@ const INSTRUCTIONS:&str=r#"You are PhaseForge's scientific workbench orchestrato
 Resolve the durable output contract once for each new or genuinely revised user request using set_output_intent. When the application state says the contract is already resolved, proceed with execution/inspection or the final explanation; do not resolve it again each round. Use simulation for requested temporal evolution/playback; analysis for requested integrals, optimization, parameter estimates, static numerical experiments or ML studies; explanation for reading/explaining existing evidence without new computation; illustration for requested authored scenes; presentation_edit for requested changes to retained presentation. These are semantic decisions, not choices determined by the selected tab. Never downgrade a requested simulation or its physical capability merely because the requested solver is unavailable. In particular numerical_relativity remains the capability for a finite-speed black-hole collision/merger, not newtonian_nbody or generated_temporal; record the gap and explain it without computing a substitute. A real user progress question during ongoing work preserves the earlier objective; application-state instructions are not such a question. Check the actual deliverable before claiming fulfillment.
 For ordinary questions answer normally; explanation does not authorize another experiment. For a simulation request inspect the executable catalog and choose a defensible supported model. Never silently turn a molecular/biological mechanism into decorative orbits or claim an argon model represents HIV. Explain unsupported mechanisms honestly with a relevant bounded alternative.
 Choose tools from the meaning of the current request and relevant conversation, never from a stale view or mode. Distinguish numerical simulation, scientific 3D illustration, marketing/communications graphic, explanation, and edits to saved results. A request for a static 3D scientific illustration uses Blender without requiring the user to name Blender. Mentioning medical communications, a presentation or an audience does not authorize marketing art or a promotional infographic. Default such a request to the scientific subject itself with useful labels; do not add marketing headlines, banners or step-card layouts unless requested. If the intended deliverable or cellular/molecular/atomic scale is unclear, ask one concise clarifying question before producing the wrong artifact; use earlier answers and do not ask again after clarification. Realistic lighting and texture are not evidence of biological or atomic accuracy. Use retained, verified structures/data when making structure-specific claims, preserve units and scale limitations, and explicitly identify authored conceptual geometry. Labels are allowed in both scientific illustrations and communications graphics.
-Before execution state a concise plan: question, model, measured observable, control and limitations. Tool calls are real and saved. Keep progress readable with concise decision summaries and evidence; do not reveal private chain-of-thought.
+Before execution state a concise plan: question, model, measured observable, control and limitations. Inspect lab_catalog.resource_plan for current CPU, RAM, GPU/VRAM, workspace capacity and the exact inherited timer. Its proposed budgets are not reservations or demonstrated solver accuracy. Only use an execution backend supported by the exact installed adapter; GPU presence or Dx12 availability does not establish numerical-relativity GPU support. Separate physical parameters and convergence requirements from rendering quality. Use retained pilot measurements to assess attainable resolution; never invent throughput, assume lower resolution remains valid, or change requested physics to fit the hardware. Tool calls are real and saved. Keep progress readable with concise decision summaries and evidence; do not reveal private chain-of-thought.
 For structure-based illustrations acquire or select a retained PDB file, then call import_structure with its exact job_id/path/SHA256 and angstrom units. This trusted parser returns a registered structure_id, source pins, author-chain counts and limitations; do not replace available coordinates with a generated parser or guessed geometry. Bind an interacting complex as one structure to one scene node so its chains keep their common frame. Authored cells, missing domains and magnified inset placement remain conceptual; verify experimental origin and resolution against the archive record.
 For a request to build and evaluate a learned surrogate, inspect ml_study_contract. The shipped argon_pressure_surrogate_v1 study executes a complete fixed solver-to-ML protocol with real labels, protected whole-condition splits, frozen model selection, held-out gates and fresh solver fallback. Use launch_ml_study when that bounded scientific endpoint answers the user's request; it uses 99 actual seed runs. Never claim its existence is proof the fitted surrogate is useful. For other ML domains, state the missing domain data and validation rather than reusing unrelated labels.
 After launching a run inspect_result waits for completion. Read measurements, provenance and independent checks, then observe_frame using actual stored PNG images. The image will be attached in a following user input. Only say you observed an image after it was actually supplied. Cross-check image impressions against numerical data. If uncertainty or occlusion matters request another recorded view. Distinguish execution, numerical validity, visual fidelity, and predictive real-world validity. Validating an integrator does not validate an entire biological endpoint.
@@ -97,10 +100,15 @@ impl AgentService {
         self.spawn_lab_session(state,id)?;
         Ok(job)
     }
+    /// Read-only admission: the control API calls this before changing a budget.
+    pub fn validate_lab_resume(&self,state:&AppState,id:Uuid)->anyhow::Result<()> {
+        progress::validate_resume(state,id)
+    }
     pub fn resume_lab_session(&self,state:Arc<AppState>,id:Uuid)->anyhow::Result<()> {
         let job=state.laboratory.get(id)?;
         anyhow::ensure!(matches!(job.kind.as_str(),"session"|"specialist"),"Only agent sessions use this continuation path");
         if job.state=="completed" {return Ok(());}
+        self.validate_lab_resume(&state,id)?;
         anyhow::ensure!(!state.laboratory.executing(id),"The agent is still stopping; retry after its saved receipts are settled");
         let parent=if job.kind=="specialist"{
             let parent=state.laboratory.get(job.parent_id.context("Specialist parent is missing")?)?;
@@ -127,7 +135,7 @@ impl AgentService {
         // The winning execution reservation owns journal mutation. A concurrent
         // Resume must never overwrite a newer paid provider request with a stale
         // copy of the output-cap recovery journal.
-        if explicit_resume{if let Err(error)=output_recovery::authorize_resume(&state,id){state.laboratory.release(id);return Err(error);}}
+        if explicit_resume{if let Err(error)=output_recovery::authorize_resume(&state,id).and_then(|_|progress::authorize_resume(&state,id)){state.laboratory.release(id);return Err(error);}}
         tokio::spawn(async move{
             let job=match state.laboratory.get(id){Ok(j)=>j,Err(_)=>return};
             let deadline_token=token.clone();let deadline=job.deadline_at.map(|at|tokio::spawn(async move{tokio::time::sleep((at-Utc::now()).to_std().unwrap_or_default()).await;deadline_token.cancel();}));
@@ -172,8 +180,9 @@ impl AgentService {
         };
         intent::initialize(&job,&request,&mut journal);
         // Finish an already received answer before checking credentials or issuing requests.
-        if self.deliver_lab_response(&state,id,&journal_path,&mut journal)? {return Ok(());}
+        if self.deliver_lab_response(&state,id,&journal_path,&mut journal).await? {return Ok(());}
         output_recovery::reconcile(&state,id,&journal)?;
+        progress::reconcile(&state,id,&journal)?;
         self.reconcile_lab_compaction(&state,&job,&request,&journal_path,&mut journal,token).await?;
         let attachment_ids=data::references(&request).iter().map(|file|file.job_id).collect::<Vec<_>>();
         if let Some(pending)=journal.pending.as_ref(){
@@ -203,17 +212,16 @@ impl AgentService {
             }else{
                 bail!("A provider request was interrupted before its receipt arrived. The usage reservation remains saved; completion cannot be confirmed and no replacement request was issued.");
             };
-            if self.accept_lab_response(&state,&job,&request,usage_id,&response,&journal_path,&mut journal)? {return Ok(());}
+            if self.accept_lab_response(&state,&job,&request,usage_id,&response,&journal_path,&mut journal).await? {return Ok(());}
         }
         let client=make_client()?;
         state.laboratory.update(id,|j|{j.state="running".into();j.event("orchestrator","The agent is planning and selecting scientific tools.",json!({"provider":provider,"model":model,"reasoning_effort":request.reasoning_effort,"timer_seconds":request.time_limit_seconds}));})?;
-        for child in state.laboratory.list(Some(job.project_id))?.into_iter().filter(|child|child.parent_id==Some(id)&&child.kind=="solver"&&child.state=="paused"){
-            state.laboratory.resume_solver(child.id,state.laboratory.get(id)?.deadline_at)?;
-        }
+        progress::recover_children(&state,&job,&mut journal,&journal_path,token)?;
         loop{
             if token.is_cancelled(){bail!("Session stopped; context and complete tool receipts are saved");}
             review::validate(&state.laboratory,job.project_id,&request)?;
             steering::apply(&state,&job,&journal_path,&mut journal)?;
+            journal.progress.steer(journal.output_intent.as_ref().map(|intent|intent.request_id));
             // Finish any durably received tool call before asking the model for another action.
             let calls:Vec<Value>=journal.items.iter().filter(|item|item["type"]=="function_call" && !journal.tools.get(item["call_id"].as_str().unwrap_or("")).is_some_and(|r|r["state"]=="completed")).cloned().collect();
             for call in calls{
@@ -233,6 +241,7 @@ impl AgentService {
                 let mut output=match output{Ok(value)=>value,Err(error)=>json!({"error":format!("{error:#}"),"executed":false,"action":"Inspect the error and correct the inputs or explain the scope limitation."})};
                 if request.result_review.is_some()&&matches!(name.as_str(),"inspect_result"|"list_artifacts")&&output.is_object(){output["review_evidence"]=review::evidence_context(&request);}
                 journal.tools.insert(call_id.clone(),json!({"state":"completed","name":name,"target_id":target,"arguments":arguments,"output":without_image(&output),"intent_request_id":journal.output_intent.as_ref().map(|intent|intent.request_id)}));
+                if job.kind=="session"{journal.progress.record(journal.round,&call_id,&name,&arguments,&without_image(&output),journal.output_intent.as_ref().map(|intent|intent.request_id));}
                 journal.items.push(json!({"type":"function_call_output","call_id":call_id,"output":serde_json::to_string(&without_image(&output))?}));
                 native::record_image(&mut journal,&call_id,&output);
                 native::retain_order(&mut journal)?;
@@ -241,6 +250,10 @@ impl AgentService {
             }
             if token.is_cancelled(){bail!("Session stopped after preserving tool results");}
             steering::apply(&state,&job,&journal_path,&mut journal)?;
+            journal.progress.steer(journal.output_intent.as_ref().map(|intent|intent.request_id));
+            if job.kind=="session"{journal.progress.finish_round(journal.round);}
+            write_json(&journal_path,&journal)?;
+            progress::reconcile(&state,id,&journal)?;
             // A resumed journal can already contain a provider tool proposal. Deliver its
             // results before adding new user content so native tool-result ordering stays valid.
             if !attachment_ids.is_empty()&&journal.attachment_context!=attachment_ids{
@@ -283,10 +296,10 @@ impl AgentService {
             journal.pending.as_mut().unwrap()["http_status"]=json!(response.status);
             write_json(&journal_path,&journal)?;
             write_json(&state.laboratory.directory(id).join(format!("provider-{:05}.json",journal.round)),&response.body)?;
-            if self.accept_lab_response(&state,&job,&request,row.id,&response,&journal_path,&mut journal)? {return Ok(());}
+            if self.accept_lab_response(&state,&job,&request,row.id,&response,&journal_path,&mut journal).await? {return Ok(());}
         }
     }
-    fn accept_lab_response(&self,state:&AppState,job:&LabJob,request:&SessionRequest,usage_id:Uuid,response:&super::providers::ProviderResponse,journal_path:&std::path::Path,journal:&mut Journal)->anyhow::Result<bool>{
+    async fn accept_lab_response(&self,state:&Arc<AppState>,job:&LabJob,request:&SessionRequest,usage_id:Uuid,response:&super::providers::ProviderResponse,journal_path:&std::path::Path,journal:&mut Journal)->anyhow::Result<bool>{
         self.usage.finish(usage_id,"received",Some(&response.body),None)?;
         if !(200..300).contains(&response.status){self.usage.finish(usage_id,"provider_error",None,Some("Provider rejected tool request"))?;bail!("Provider rejected this selected model/tool request (HTTP {}). See retained provider receipt; no fallback model was used.",response.status);}
         if output_recovery::is_output_limit(request.provider.context("Session provider missing")?,&response.body){
@@ -322,9 +335,9 @@ impl AgentService {
         journal.delivery=Some(ResponseDelivery{usage_id,message,result:if has_tools{None}else{Some(json!({"answer":text,"tool_count":journal.tools.len(),"rounds":journal.round,"compactions":journal.compactions.len()}))},vision});
         // Output, its delivery identity and removal of pending become durable together.
         journal.pending=None;write_json(journal_path,journal)?;
-        self.deliver_lab_response(state,job.id,journal_path,journal)
+        self.deliver_lab_response(state,job.id,journal_path,journal).await
     }
-    fn deliver_lab_response(&self,state:&AppState,id:Uuid,journal_path:&std::path::Path,journal:&mut Journal)->anyhow::Result<bool>{
+    async fn deliver_lab_response(&self,state:&Arc<AppState>,id:Uuid,journal_path:&std::path::Path,journal:&mut Journal)->anyhow::Result<bool>{
         let Some(delivery)=journal.delivery.clone() else{return Ok(false)};
         self.usage.finish(delivery.usage_id,"completed",None,None)?;
         let source_session=state.laboratory.get(id)?;
@@ -332,25 +345,39 @@ impl AgentService {
             let source_request:SessionRequest=serde_json::from_value(source_session.input.clone())?;
             review::validate(&state.laboratory,source_session.project_id,&source_request)?;
         }
-        let mut assessment=if delivery.result.is_some(){intent::assess(state,&source_session,journal)?}else{Value::Null};
+        let mut assessment=if delivery.result.is_some(){
+            let state=state.clone();let source=source_session.clone();
+            let snapshot=Journal{output_intent:journal.output_intent.clone(),tools:journal.tools.clone(),..Default::default()};
+            crate::laboratory::LaboratoryService::retained_nr_io(move||intent::assess(&state,&source,&snapshot)).await?
+        }else{Value::Null};
         if delivery.result.is_some(){review::assess(&source_session,journal,&mut assessment);}
         let mut completed=false;
         state.laboratory.update_with_message(id,|job|{
+            anyhow::ensure!(job.project_id==source_session.project_id&&job.parent_id==source_session.parent_id
+                &&job.input==source_session.input&&job.deadline_at==source_session.deadline_at,
+                "Response source changed while retained evidence was verified; its delivery remains pending");
+            let stopped_during_read=(source_session.active()&&!job.active())
+                ||state.laboratory.execution_token(id).is_some_and(|token|token.is_cancelled())
+                ||(source_session.active()&&job.deadline_at.is_some_and(|at|at<=Utc::now()));
             if let Some(vision)=&delivery.vision{if !job.events.iter().any(|event|event.kind=="vision_input_acknowledged"&&event.data["usage_id"]==json!(delivery.usage_id)){job.event("vision_input_acknowledged","A completed provider response acknowledged the exact retained PNG inputs in its native request. This records input delivery, not scientific validity.",vision.clone());}}
             let pending_update=steering::has_pending(job,journal);
             let mut message=delivery.message.clone();
             if !job.input["result_review"].is_null(){if let Some(message)=&mut message{message.metadata["result_review"]=job.input["result_review"].clone();}}
             if !assessment.is_null(){if let Some(message)=&mut message{message.metadata["deliverable"]=assessment.clone();}}
-            if pending_update{if let Some(message)=&mut message{message.metadata["phase"]=json!("progress");message.metadata["user_update_pending"]=json!(true);}}
+            if pending_update||stopped_during_read{if let Some(message)=&mut message{message.metadata["phase"]=json!("progress");message.metadata["user_update_pending"]=json!(pending_update);message.metadata["stopped_during_evidence_read"]=json!(stopped_during_read);}}
             if let Some(message)=&message{
                 if !job.events.iter().any(|event|event.kind=="agent_summary"&&event.data["message_id"]==json!(message.id)){
                     job.event("agent_summary",message.content.clone(),json!({"message_id":message.id,"usage_id":delivery.usage_id}));
                 }
             }
-            if let Some(result)=delivery.result.as_ref().filter(|_|!pending_update){
+            if let Some(result)=delivery.result.as_ref().filter(|_|!pending_update&&!stopped_during_read){
                 job.result=result.clone();job.error=None;
                 if !job.input["result_review"].is_null(){job.result["result_review"]=job.input["result_review"].clone();}
                 if !assessment.is_null(){job.result["deliverable"]=assessment.clone();}
+                if assessment["status"]=="capability_gap"{
+                    job.result["attention"]=progress::attention("capability_gap",assessment["capability_gap"].as_str().unwrap_or("The requested capability is unavailable. Revise the request or inspect saved evidence before continuing."),true,vec![]);
+                }
+                if !journal.child_recovery.is_empty(){job.result["child_recovery"]=json!(journal.child_recovery);}
                 let fulfilled=assessment.is_null()||assessment["fulfilled"]==true;
                 job.state=if fulfilled{"completed"}else{"paused"}.into();
                 completed=true;
@@ -392,7 +419,15 @@ impl AgentService {
         };
         match name{
             "set_output_intent"=>intent::set(&state,session,journal,args),
-            "check_deliverable"=>intent::check(&state,session,journal,args),
+            "check_deliverable"=>{
+                let state=state.clone();let source=session.clone();let args=args.clone();
+                let mut snapshot=Journal{output_intent:journal.output_intent.clone(),tools:journal.tools.clone(),..Default::default()};
+                let (outcome,ledger)=crate::laboratory::LaboratoryService::retained_nr_io(move||{
+                    let outcome=intent::check(&state,&source,&mut snapshot,&args);
+                    Ok((outcome,snapshot.output_intent))
+                }).await?;
+                journal.output_intent=ledger;outcome
+            },
             "simulation_publication_contract"=>Ok(crate::laboratory::publication::capability()),
             "publish_simulation"=>{
                 let service=state.laboratory.clone();let session=session.clone();let args=args.clone();let token=token.clone();
@@ -435,9 +470,15 @@ impl AgentService {
             "render_illustration"=>{let job=crate::laboratory::illustration::create(&state,session,target,args)?;Ok(json!({"job_id":job.id,"state":job.state,"next":"Wait with inspect_result, then inspect render.png. Scene and editable Blender/GLB assets are retained. No solver is run."}))},
             "delegate_specialist"=>team::delegate(self,state,session,args,target,token),
             "inspect_specialist"=>team::inspect(self,state,session,args,token).await,
-            "lab_catalog"=>Ok(crate::laboratory::catalog::capabilities()),
+            "lab_catalog"=>{
+                let catalog=crate::laboratory::catalog::observed(&state,session.deadline_at)?;
+                state.laboratory.event(session.id,"resource_plan","Inspected current CPU, RAM, GPU and workspace capacity. Proposed budgets are not reserved resources or proof of solver validity.",catalog["resource_plan"].clone())?;
+                Ok(catalog)
+            },
             "launch_experiment"=>{
-                anyhow::ensure!(["openmm_argon","diffusion_2d","newtonian_nbody","heat_conduction_2d","navier_stokes_2d"].contains(&args["engine"].as_str().unwrap_or(""))&&args["parameters"].is_object(),"Choose an executable engine and a parameter object");
+                let engine=args["engine"].as_str().unwrap_or("");
+                anyhow::ensure!((["openmm_argon","diffusion_2d","newtonian_nbody","heat_conduction_2d","navier_stokes_2d"].contains(&engine)||crate::laboratory::nr_engines::supports(engine))&&args["parameters"].is_object(),"Choose an executable engine and a parameter object");
+                if crate::laboratory::nr_engines::supports(engine){crate::laboratory::nr_engines::parameter_text(engine,&args["parameters"])?;}
                 if args["engine"]=="diffusion_2d"{crate::laboratory::field::validate(&args["parameters"])?;}
                 if args["engine"]=="newtonian_nbody"{crate::laboratory::mechanics::validate(&args["parameters"])?;}
                 if args["engine"]=="heat_conduction_2d"{crate::laboratory::thermal::validate(&args["parameters"])?;}
@@ -454,15 +495,15 @@ impl AgentService {
                     loop{tokio::select!{_=token.cancelled()=>bail!("Stopped while waiting for numerical output"),_=tokio::time::sleep(Duration::from_millis(500))=>{}}
                         job=state.laboratory.get(job.id)?;if !job.active()||steering::has_pending(&state.laboratory.get(session.id)?,journal){break;}
                     }
-                    state.laboratory.update(session.id,|s|s.state="running".into())?;
+                    progress::resume_after_wait(&state,session.id,token)?;
                 }
-                if job.kind=="ml_study"&&job.state!="completed"{return Ok(json!({"job_id":job.id,"state":job.state,"progress":job.progress,"error":job.error,"access":"Study labels remain protected until the frozen workflow completes. Resume the study or inspect its progress; held-out evidence is not available for model selection."}));}
+                if job.kind=="ml_study"&&job.state!="completed"{return Ok(json!({"job_id":job.id,"state":job.state,"progress":job.progress,"error":job.error,"execution_identity":progress::execution_identity(&job),"access":"Study labels remain protected until the frozen workflow completes. Resume the study or inspect its progress; held-out evidence is not available for model selection."}));}
                 state.laboratory.ensure_model_study_access(job.id)?;
                 let inventory=state.laboratory.artifact_inventory(job.id)?;
                 let mut result=review::optional_json(&state.laboratory,request,job.id,"result.json")?;
                 if job.kind=="sweep"{if let Some(value)=result.as_mut(){value["cases"]=json!(value["cases"].as_array().into_iter().flatten().map(|case|json!({"case_id":case["case_id"],"attempts":case["attempts"],"completed_job_id":case["completion"]["job_id"],"retained_bytes":case["completion"]["bytes"]})).collect::<Vec<_>>());}}
                 let count=inventory.as_array().map_or(0,Vec::len);
-                Ok(json!({"job":job.summary(),"manifest":review::optional_json(&state.laboratory,request,job.id,"manifest.json")?,"result":result,"artifacts":inventory.as_array().into_iter().flatten().take(100).collect::<Vec<_>>(),"artifact_count":count,"next_artifact_offset":if count>100{Some(100)}else{None},"artifact_retrieval":"Use list_artifacts for later pages. Full numerical files and source hashes remain on disk; omission here does not delete evidence."}))
+                Ok(json!({"job":job.summary(),"execution_identity":progress::execution_identity(&job),"manifest":review::optional_json(&state.laboratory,request,job.id,"manifest.json")?,"result":result,"artifacts":inventory.as_array().into_iter().flatten().take(100).collect::<Vec<_>>(),"artifact_count":count,"next_artifact_offset":if count>100{Some(100)}else{None},"artifact_retrieval":"Use list_artifacts for later pages. Full numerical files and source hashes remain on disk; omission here does not delete evidence."}))
             },
             "list_artifacts"=>{
                 let job=own_job(args)?;let rows=state.laboratory.artifact_inventory(job.id)?;let rows=rows.as_array().context("Artifact inventory invalid")?;
@@ -604,6 +645,7 @@ mod receipt_recovery_tests {
         posts:Arc<Mutex<Vec<Value>>>,gets:Arc<Mutex<usize>>,
         server:tokio::task::JoinHandle<()>,_temp:tempfile::TempDir,
     }
+    impl Fixture {pub(super) fn provider_post_count(&self)->usize{self.posts.lock().len()}}
     impl Drop for Fixture {fn drop(&mut self){self.server.abort();}}
     fn answer(text:&str)->Value{json!({"id":"saved_response","status":"completed","output":[{"type":"message","role":"assistant","content":[{"type":"output_text","text":text}]}],"usage":{"input_tokens":11,"output_tokens":7}})}
     pub(super) async fn fixture()->Fixture {
@@ -843,12 +885,12 @@ mod receipt_recovery_tests {
         let path=f.state.laboratory.directory(f.job.id).join("journal.json");write_json(&path,&pending).unwrap();
         // First interruption: the message write committed, the job write did not.
         f.state.database.put_message(&message).unwrap();
-        f.state.agent.deliver_lab_response(&f.state,f.job.id,&path,&mut pending).unwrap();
+        f.state.agent.deliver_lab_response(&f.state,f.job.id,&path,&mut pending).await.unwrap();
         assert_final_once(&f,"Recovered final answer.");let completed_at=f.state.laboratory.get(f.job.id).unwrap().completed_at;
         // Second interruption: the database committed, the outbox deletion did not.
         pending.delivery=Some(ResponseDelivery{usage_id:usage,message:Some(message),result:Some(json!({"answer":"Recovered final answer.","rounds":1,"tool_count":0,"compactions":0})),vision:None});
         write_json(&path,&pending).unwrap();
-        f.state.agent.deliver_lab_response(&f.state,f.job.id,&path,&mut pending).unwrap();
+        f.state.agent.deliver_lab_response(&f.state,f.job.id,&path,&mut pending).await.unwrap();
         assert_final_once(&f,"Recovered final answer.");assert_eq!(f.state.laboratory.get(f.job.id).unwrap().completed_at,completed_at);
         assert!(f.posts.lock().is_empty());assert_eq!(*f.gets.lock(),0);
     }

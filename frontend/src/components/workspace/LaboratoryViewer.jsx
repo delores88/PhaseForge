@@ -15,6 +15,7 @@ import LaboratoryFieldViewer from './LaboratoryFieldViewer';
 import LaboratoryIllustrationViewer from './LaboratoryIllustrationViewer';
 import LaboratoryPlotViewer from './LaboratoryPlotViewer';
 import LaboratoryArtifactViewer from './LaboratoryArtifactViewer';
+import LaboratoryNRViewer from './LaboratoryNRViewer';
 
 const DEFAULTS={color:'#9f8ded',background:'#080f20',exposure:1.1,contrast:1,opacity:1,selectedIds:[],hiddenIds:[],dimOthers:false,showBox:true,showGrid:true,showLabels:true,interpolate:false,playbackDurationSeconds:30,speed:1,savedViews:[]};
 const number=value=>Number.isFinite(Number(value))?Number(value).toLocaleString(undefined,{maximumSignificantDigits:6}):'—';
@@ -94,6 +95,7 @@ const ParticleLaboratoryViewer=forwardRef(function ParticleLaboratoryViewer({job
   </section>;
 });
 const LaboratoryViewer=forwardRef(function LaboratoryViewer(props,ref){
+  if(['athenak_gauge_wave','athenak_two_punctures_serial','athenak_two_punctures_cuda'].includes(props.job.input?.engine))return <LaboratoryNRViewer job={props.job}/>;
   if(props.job.kind==='generated')return <LaboratoryArtifactViewer job={props.job}/>;
   if(['study_plot','ml_study'].includes(props.job.kind))return <LaboratoryPlotViewer job={props.job}/>;
   if(props.job.kind==='illustration')return <LaboratoryIllustrationViewer {...props}/>;

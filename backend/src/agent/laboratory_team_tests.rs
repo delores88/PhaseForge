@@ -33,7 +33,17 @@ async fn fixture(mode:&'static str)->Fixture{
 fn args(task:&str,evidence:&[Uuid])->Value{json!({"task":task,"evidence_job_ids":evidence})}
 fn evidence(f:&Fixture)->LabJob{f.state.laboratory.create(Uuid::new_v4(),f.parent.project_id,Some(f.parent.id),"solver","Synthetic software-test evidence",json!({}),f.parent.deadline_at).unwrap()}
 async fn stopped(f:&Fixture,id:Uuid)->LabJob{
-    tokio::time::timeout(Duration::from_secs(6),async{loop{let job=f.state.laboratory.get(id).unwrap();if !job.active()&&!f.state.laboratory.executing(id){return job;}tokio::time::sleep(Duration::from_millis(20)).await;}}).await.expect("Specialist did not stop")
+    stopped_within(f,id,Duration::from_secs(6)).await
+}
+async fn stopped_within(f:&Fixture,id:Uuid,wait:Duration)->LabJob{
+    tokio::time::timeout(wait,async{loop{let job=f.state.laboratory.get(id).unwrap();if !job.active()&&!f.state.laboratory.executing(id){return job;}tokio::time::sleep(Duration::from_millis(20)).await;}}).await.unwrap_or_else(|_|{
+        let child=f.state.laboratory.get(id);
+        let retained=match child{
+            Ok(job)=>json!({"state":job.state,"deadline_at":job.deadline_at,"error":job.error,"recent_event_kinds":job.events.iter().rev().take(12).map(|event|event.kind.as_str()).collect::<Vec<_>>()}),
+            Err(error)=>json!({"read_error":error.to_string()}),
+        };
+        panic!("Specialist did not stop within {wait:?}: {}",json!({"child_id":id,"child":retained,"executing":f.state.laboratory.executing(id),"http_call_count":f.calls.lock().len(),"parent_deadline_at":f.parent.deadline_at}));
+    })
 }
 fn child_id(result:&Value)->Uuid{Uuid::parse_str(result["child_job_id"].as_str().unwrap()).unwrap()}
 
@@ -114,7 +124,13 @@ async fn contention_waits_locally_and_off_and_absolute_deadlines_are_preserved()
 }
 #[tokio::test]
 async fn a_specialist_cannot_loop_past_its_model_turn_budget(){
-    let f=fixture("loop").await;let created=delegate(&f.state.agent,f.state.clone(),&f.parent,&args("Bound an unfinished analysis",&[]),Uuid::new_v4(),&f.token).unwrap();let child=stopped(&f,child_id(&created)).await;
+    let f=fixture("loop").await;let created=delegate(&f.state.agent,f.state.clone(),&f.parent,&args("Bound an unfinished analysis",&[]),Uuid::new_v4(),&f.token).unwrap();
+    // Eight localhost HTTP rounds also persist requests, results and journal
+    // replacements. Use this fixture's existing absolute work deadline, rather
+    // than the six-second stop-latency bound retained by cancellation tests.
+    let remaining=(f.parent.deadline_at.expect("Loop fixture needs its existing parent deadline")-Utc::now()).to_std().unwrap_or_default();
+    let child=stopped_within(&f,child_id(&created),remaining).await;
+    assert_eq!(child.deadline_at,f.parent.deadline_at);
     assert_eq!(child.state,"paused");assert!(child.error.unwrap().contains("eight-turn limit"));assert_eq!(f.calls.lock().len(),8);assert!(child.result.is_null());
 }
 

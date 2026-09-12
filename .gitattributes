@@ -5,6 +5,8 @@
 *.cjs text eol=lf
 *.rs text eol=lf
 *.py text eol=lf
+# Unified diff context includes intentionally space-only lines.
+*.patch text eol=lf whitespace=-blank-at-eol
 # Upstream notice hashes must survive Windows Git checkouts unchanged.
 tools/third-party/openmm-8.5.2/*.txt text eol=lf
 tools/third-party/msvc-runtime/*.txt text eol=lf

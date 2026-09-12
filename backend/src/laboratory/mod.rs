@@ -6,6 +6,10 @@ pub mod generated;
 pub mod field;
 pub mod thermal;
 pub mod fluid;
+pub mod numerical_relativity;
+pub mod nr_engines;
+mod nr_live_guard;
+mod nr_retention;
 pub mod catalog;
 pub mod publication;
 pub mod mechanics;
@@ -56,6 +60,31 @@ impl LabJob {
             self.completed_at=self.events.iter().rev().find(|event|event.kind=="completed").map(|event|event.at).or(self.completed_at).or(Some(self.updated_at));
         }
     }
+    /// Add display actions to an older recorded capability gap without changing
+    /// its persisted result, historical explanation, evidence, or timestamps.
+    fn display_attention(&self)->Value {
+        if !self.result["attention"].is_null(){return self.result["attention"].clone();}
+        let deliverable=&self.result["deliverable"];
+        if !matches!(self.kind.as_str(),"session"|"specialist")||self.active()
+            ||deliverable["status"]!="capability_gap"||deliverable["fulfilled"]==true{return Value::Null;}
+        let reason=deliverable["capability_gap"].as_str().filter(|reason|!reason.trim().is_empty())
+            .unwrap_or("This saved request has a recorded capability gap. Revise the request or inspect current capabilities and retained evidence before continuing.");
+        let evidence=deliverable["evidence"].as_array().into_iter().flatten()
+            .filter_map(|row|row["job_id"].as_str().and_then(|id|Uuid::parse_str(id).ok())).take(32).collect::<Vec<_>>();
+        json!({"schema":"phaseforge.agent-attention.v1","status":"needs_direction","kind":"capability_gap",
+            "reason":reason,"requires_user_change":true,"evidence_job_ids":evidence,"tool_call_ids":[],"consecutive_stalled_rounds":0,
+            "actions":[
+                {"id":"revise_request","label":"Revise the request","description":"Clarify the objective or choose supported inputs in chat."},
+                {"id":"inspect_capabilities","label":"Inspect capabilities","description":"Check the installed engine's current scope and resource requirements."},
+                {"id":"inspect_evidence","label":"Inspect saved evidence","description":"Review the original recorded gap, tool outcomes and retained source identities."}
+            ]})
+    }
+    pub(super) fn display_record(&self)->Self {
+        let mut record=self.clone();
+        let attention=self.display_attention();
+        if record.result["attention"].is_null()&&!attention.is_null(){record.result["attention"]=attention;}
+        record
+    }
     /// Polling never carries conversation transcripts, source code or tool outputs.
     /// The full record remains available on the individual job endpoint.
     pub fn summary(&self)->Value {
@@ -64,8 +93,8 @@ impl LabJob {
             if let Some(value)=self.input.get(key){input.insert(key.into(),value.clone());}
         }
         let events=self.events.iter().rev().take(1).map(|event|json!({"sequence":event.sequence,"at":event.at,"kind":event.kind,"message":event.message.chars().take(1200).collect::<String>(),"data":{}})).collect::<Vec<_>>();
-        let result=if matches!(self.kind.as_str(),"session"|"specialist"){json!({"rounds":self.result["rounds"],"tool_count":self.result["tool_count"],"compactions":self.result["compactions"],"deliverable":self.result["deliverable"]})}else if matches!(self.kind.as_str(),"generated"|"data"|"monitor"){json!({"engine":self.result["engine"],"status":self.result["status"],"source_job_id":self.result["source_job_id"],"detected":self.result["detected"]})}else if self.kind=="sweep"{json!({"status":self.result["status"],"case_count":self.result["case_count"],"completed_cases":self.result["completed_cases"],"retained_bytes":self.result["retained_bytes"]})}else{self.result.clone()};
-        json!({"id":self.id,"project_id":self.project_id,"parent_id":self.parent_id,"kind":self.kind,"state":self.state,"title":self.title,"created_at":self.created_at,"updated_at":self.updated_at,"deadline_at":self.deadline_at,"seen_at":self.seen_at,"completed_at":self.completed_at,"input":input,"result":result,"progress":self.progress,"error":self.error,"events":events,"event_count":self.events.len(),"summary_only":true})
+        let result=if matches!(self.kind.as_str(),"session"|"specialist"){json!({"rounds":self.result["rounds"],"tool_count":self.result["tool_count"],"compactions":self.result["compactions"],"deliverable":self.result["deliverable"],"attention":self.display_attention(),"child_recovery":self.result["child_recovery"]})}else if matches!(self.kind.as_str(),"generated"|"data"|"monitor"){json!({"engine":self.result["engine"],"status":self.result["status"],"source_job_id":self.result["source_job_id"],"detected":self.result["detected"]})}else if self.kind=="sweep"{json!({"status":self.result["status"],"case_count":self.result["case_count"],"completed_cases":self.result["completed_cases"],"retained_bytes":self.result["retained_bytes"]})}else{self.result.clone()};
+        json!({"id":self.id,"project_id":self.project_id,"parent_id":self.parent_id,"kind":self.kind,"state":self.state,"title":self.title,"created_at":self.created_at,"updated_at":self.updated_at,"deadline_at":self.deadline_at,"seen_at":self.seen_at,"completed_at":self.completed_at,"input":input,"result":result,"progress":self.progress,"error":self.error,"recovery":nr_retention::recovery_summary(self),"events":events,"event_count":self.events.len(),"summary_only":true})
     }
     pub fn event(&mut self, kind: &str, message: impl Into<String>, data: Value) {
         self.updated_at = Utc::now();
@@ -80,20 +109,59 @@ pub struct LaboratoryService {
     gate: Arc<Mutex<()>>, provision: Arc<tokio::sync::Mutex<()>>,
     solver_slots: Arc<tokio::sync::Semaphore>,
     render_slots: Arc<tokio::sync::Semaphore>,
+    resource_context: Option<(crate::compute::HardwareManager,crate::compute::telemetry::Telemetry)>,
+}
+
+#[cfg(test)]
+mod public_projection_tests {
+    use super::*;
+    fn legacy()->LabJob {
+        let now=Utc::now();
+        LabJob{id:Uuid::new_v4(),project_id:Uuid::new_v4(),parent_id:None,kind:"session".into(),state:"paused".into(),title:"Synthetic legacy gap".into(),
+            created_at:now,updated_at:now,deadline_at:Some(now),seen_at:None,completed_at:None,input:json!({"model":"original-chat-model"}),
+            result:json!({"answer":"Original saved explanation","deliverable":{"status":"capability_gap","fulfilled":false,"capability_gap":"Original unsupported physics","evidence":[]}}),
+            progress:json!({}),error:None,events:vec![]}
+    }
+    #[test]fn legacy_gap_full_and_compact_views_add_same_actions_without_mutating_original(){
+        let job=legacy();let original=serde_json::to_value(&job).unwrap();
+        let full=job.display_record();let compact=job.summary();
+        assert_eq!(full.result["attention"],compact["result"]["attention"]);
+        assert_eq!(full.result["attention"]["requires_user_change"],true);
+        assert_eq!(full.result["attention"]["actions"].as_array().unwrap().iter().map(|action|action["id"].as_str().unwrap()).collect::<Vec<_>>(),vec!["revise_request","inspect_capabilities","inspect_evidence"]);
+        assert_eq!(full.result["deliverable"],job.result["deliverable"]);assert_eq!(full.result["answer"],job.result["answer"]);
+        assert_eq!(full.input,job.input);assert_eq!(full.deadline_at,job.deadline_at);assert_eq!(full.updated_at,job.updated_at);
+        assert_eq!(serde_json::to_value(&job).unwrap(),original);assert!(job.result.get("attention").is_none());
+    }
+    #[test]fn modern_attention_and_child_recovery_are_preserved_in_both_views(){
+        let mut job=legacy();job.result["attention"]=json!({"schema":"phaseforge.agent-attention.v1","status":"needs_direction","kind":"no_progress","actions":[{"id":"resume","label":"Bounded continuation"}]});
+        job.result["child_recovery"]=json!([{"child_id":Uuid::new_v4(),"automatic_relaunch":false,"reason":"Original partial output"}]);
+        assert_eq!(job.display_record().result,job.result);
+        assert_eq!(job.summary()["result"]["attention"],job.result["attention"]);
+        assert_eq!(job.summary()["result"]["child_recovery"],job.result["child_recovery"]);
+    }
+    #[test]fn projection_does_not_invent_gap_actions_for_other_kinds_or_fulfilled_or_active_jobs(){
+        let mut job=legacy();job.kind="solver".into();assert_eq!(job.display_record().result,job.result);
+        job.kind="session".into();job.state="running".into();assert_eq!(job.display_record().result,job.result);
+        job.state="paused".into();job.result["deliverable"]["fulfilled"]=json!(true);assert_eq!(job.display_record().result,job.result);
+    }
 }
 impl LaboratoryService {
     pub fn new(database: Database, config: AppConfig) -> anyhow::Result<Self> {
         std::fs::create_dir_all(config.artifacts_directory().join("laboratory"))?;
         // Never auto-resubmit an uncertain paid request after a process restart.
         for mut job in database.lab_records()? {
+            let recovery_interrupted = nr_retention::interrupt_recovery_after_restart(&mut job);
             if job.active() {
                 job.state = "paused".into();
                 job.event("interrupted", "The runtime restarted. Completed artifacts are retained. Resume reconciles tool receipts before continuing.", json!({"recovery":"explicit_resume"}));
                 database.put_lab_record(&job)?;
+            } else if recovery_interrupted {
+                database.put_lab_record(&job)?;
             }
         }
-        Ok(Self {database,config,active:Default::default(),gate:Default::default(),provision:Default::default(),solver_slots:Arc::new(tokio::sync::Semaphore::new(2)),render_slots:Arc::new(tokio::sync::Semaphore::new(1))})
+        Ok(Self {database,config,active:Default::default(),gate:Default::default(),provision:Default::default(),solver_slots:Arc::new(tokio::sync::Semaphore::new(2)),render_slots:Arc::new(tokio::sync::Semaphore::new(1)),resource_context:None})
     }
+    pub fn with_resource_context(mut self,hardware:crate::compute::HardwareManager,telemetry:crate::compute::telemetry::Telemetry)->Self{self.resource_context=Some((hardware,telemetry));self}
     pub fn directory(&self, id: Uuid) -> PathBuf { self.config.artifacts_directory().join("laboratory").join(id.to_string()) }
     pub fn get(&self,id:Uuid) -> anyhow::Result<LabJob> { let mut job:LabJob=self.database.lab_record(id)?.context("Laboratory job not found")?;job.normalize_completion();Ok(job) }
     pub fn list(&self, project: Option<Uuid>) -> anyhow::Result<Vec<LabJob>> {
@@ -266,6 +334,7 @@ impl LaboratoryService {
     }
     async fn execute_solver(&self,id:Uuid,token:&CancellationToken) -> anyhow::Result<()> {
         self.ensure_science_attempt_identity(id)?;
+        if nr_engines::supports(self.get(id)?.input["engine"].as_str().unwrap_or("")) { return self.execute_numerical_relativity(id,token).await; }
         if matches!(self.get(id)?.input["engine"].as_str(),Some("diffusion_2d"|"heat_conduction_2d"|"navier_stokes_2d")) { return self.execute_field(id,token).await; }
         if self.get(id)?.input["engine"]=="newtonian_nbody" { return self.execute_mechanics(id,token).await; }
         let _slot=tokio::select! { _=token.cancelled()=>bail!("Cancelled in queue"), slot=self.solver_slots.acquire()=>slot? };

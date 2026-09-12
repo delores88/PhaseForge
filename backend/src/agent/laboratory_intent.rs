@@ -1,6 +1,8 @@
 //! Requested outputs survive model summaries; completion is checked against retained artifacts.
 use super::*;
 use sha2::{Digest, Sha256};
+#[path = "laboratory_intent_black_hole.rs"]
+mod black_hole;
 
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
@@ -122,7 +124,7 @@ pub(super) fn set(state: &AppState, job: &LabJob, journal: &mut Journal, args: &
     let mut gap = optional_text(args, "capability_gap", 2000)?;
     if resolved==OutputIntent::Simulation {
         if let Some(required)=capability.as_deref() {
-            let catalog=crate::laboratory::catalog::capabilities();
+            let catalog=crate::laboratory::catalog::observed(state,job.deadline_at)?;
             let supported=required=="generated_temporal"||catalog["engines"].as_array().is_some_and(|engines|engines.iter().any(|engine|engine["id"]==required));
             if !supported&&gap.is_none(){gap=Some(format!("No integrated executable capability named {required} is available. A different approximation, rendered still or generated animation does not fulfill this requested physical model."));}
         }
@@ -250,6 +252,7 @@ fn bytes(state: &AppState, job: Uuid, name: &str, expected: Option<&str>) -> any
     let path = state.laboratory.path(job, name)?;
     anyhow::ensure!(std::fs::metadata(&path)?.len() <= 32 * 1024 * 1024, "Evidence member exceeds the bounded 32 MiB read");
     let bytes = std::fs::read(path)?;
+    anyhow::ensure!(bytes.len() <= 32 * 1024 * 1024, "Evidence member grew beyond the bounded 32 MiB read");
     if let Some(expected) = expected {
         anyhow::ensure!(expected.len() == 64 && expected.bytes().all(|c| c.is_ascii_hexdigit()) && hash(&bytes) == expected,
             "Retained evidence member is missing its hash or changed: {name}");
@@ -266,6 +269,22 @@ fn numeric_array(value: &Value) -> anyhow::Result<usize> {
 fn numerical_evidence(state:&AppState,job:&LabJob)->anyhow::Result<Value>{
     anyhow::ensure!(matches!(job.kind.as_str(),"generated"|"solver"|"ml_study"|"sweep"),"Numerical analysis needs a completed calculation or study, not an illustration or final-answer text");
     anyhow::ensure!(job.input["execution_purpose"]!="presentation","Presentation-only code does not establish a numerical analysis result");
+    if job.kind == "solver" && black_hole::supports(job.input["engine"].as_str().unwrap_or("")) {
+        let mut evidence = black_hole::evidence(state, job)?;
+        evidence["kind"] = json!("retained_numerical_analysis");
+        evidence["path"] = evidence["measurements"]["path"].clone();
+        evidence["sha256"] = evidence["measurements"]["sha256"].clone();
+        evidence["temporal_sampling_required"] = json!(false);
+        return Ok(evidence);
+    }
+    if job.kind == "solver" && job.input["engine"] == "athenak_gauge_wave" {
+        let mut evidence = gauge_evidence(state, job)?;
+        evidence["kind"] = json!("retained_numerical_analysis");
+        evidence["path"] = evidence["measurements"]["path"].clone();
+        evidence["sha256"] = evidence["measurements"]["sha256"].clone();
+        evidence["temporal_sampling_required"] = json!(false);
+        return Ok(evidence);
+    }
     let (path,raw)=if job.kind=="generated"{("work/result.json",state.laboratory.read_generated_artifact(job.id,"work/result.json")?)}else if job.kind=="solver"{("measurements.json",bytes(state,job.id,"measurements.json",None)?)}else{("result.json",bytes(state,job.id,"result.json",None)?)};
     let result:Value=serde_json::from_slice(&raw)?;
     fn count(value:&Value)->usize{match value{
@@ -282,6 +301,11 @@ fn temporal_evidence(state: &AppState, job: &LabJob, intent: &IntentLedger) -> a
     let engine = job.input["engine"].as_str().context("Solver engine identity missing")?;
     anyhow::ensure!(intent.required_capability.as_deref() == Some(engine),
         "Requested capability does not match this solver. A limited approximation cannot silently fulfill unsupported relativity or another physical model");
+    if engine == "athenak_gauge_wave" { return gauge_evidence(state, job); }
+    if black_hole::supports(engine) {
+        black_hole::require_capability(job, intent.required_capability.as_deref())?;
+        return black_hole::evidence(state, job);
+    }
     let manifest = state.laboratory.read_json(job.id, "manifest.json")?;
     anyhow::ensure!(manifest["engine"] == engine, "Manifest and admitted engine differ");
     let is_field = state.laboratory.path(job.id, "fields/index.json").is_ok();
@@ -334,6 +358,170 @@ fn temporal_evidence(state: &AppState, job: &LabJob, intent: &IntentLedger) -> a
         "index_sha256":hash(&raw),"frame_count":count,"time_unit":time_unit,"verified_endpoint_samples":samples,
         "scientific_scope":manifest.get("scientific_scope").or_else(||manifest.get("scope")),
         "verification_scope":"Hash-verified first and last numerical samples and native field arrays; does not revalidate every intermediate state or prove model applicability."}))
+}
+
+// Gauge diagnostics have their own immutable schema; they are not SI scalar-field
+// exports. This is a read-only check, including for a recovered completed attempt.
+fn gauge_evidence(state: &AppState, job: &LabJob) -> anyhow::Result<Value> {
+    const ENGINE: &str = "athenak_gauge_wave";
+    anyhow::ensure!(job.kind == "solver" && job.input["engine"] == ENGINE && job.result["engine"] == ENGINE,
+        "Gauge evidence needs its original solver identity");
+    let saved = &job.result["diagnostics"];
+    anyhow::ensure!(saved["path"] == "diagnostics/result.json", "Gauge completion has no pinned diagnostic result");
+    let digest = saved["sha256"].as_str().context("Gauge diagnostic completion hash is missing")?;
+    let diagnostic: Value = serde_json::from_slice(&bytes(state, job.id, "diagnostics/result.json", Some(digest))?)?;
+    anyhow::ensure!(diagnostic["schema"] == "phaseforge.nr-gauge-result.v1" && diagnostic["engine"] == ENGINE,
+        "Gauge diagnostic schema or engine differs");
+    let summary = json!({"path":"diagnostics/result.json","sha256":digest,
+        "gauge_reference_validated":diagnostic["fulfillment"]["gauge_reference_validated"],
+        "analytic":diagnostic["analytic"],"slice_index":diagnostic["slice_index"],
+        "frame_count":diagnostic["frame_count"],"initial_time":diagnostic["initial_time"],
+        "final_time":diagnostic["final_time"],"scope":diagnostic["scientific_scope"]});
+    anyhow::ensure!(*saved == summary && diagnostic["fulfillment"]["gauge_reference_validated"] == true
+        && diagnostic["fulfillment"]["black_hole_collision_validated"] == false
+        && diagnostic["fulfillment"]["physical_radiation"] == false,
+        "Gauge completion summary or scientific scope is inconsistent");
+    let units = &diagnostic["units"];
+    anyhow::ensure!(units["length"] == "L" && units["time"] == "L/c" && finite(&units["length_scale"])? == 1.0
+        && finite(&units["speed_of_light"])? == 1.0 && units.get("si_mapping") == Some(&Value::Null),
+        "Gauge code coordinates must retain L=1, c=1 without an invented SI mapping");
+    let artifacts = diagnostic["artifacts"].as_array().context("Gauge artifact inventory is missing")?;
+    anyhow::ensure!(artifacts.len() <= 4096, "Gauge artifact inventory is unbounded");
+    let mut paths = std::collections::HashSet::new();
+    for artifact in artifacts {
+        let name = artifact["path"].as_str().context("Gauge artifact path is missing")?;
+        gauge_relative(name)?;
+        anyhow::ensure!(paths.insert(name.to_ascii_lowercase()), "Gauge artifact paths are duplicated");
+    }
+    // Descriptors may omit bytes in a frame, but must match the one full immutable
+    // inventory entry. All data we interpret is read once and checked on those bytes.
+    let read = |descriptor: &Value| -> anyhow::Result<Vec<u8>> {
+        let name = descriptor["path"].as_str().context("Gauge evidence path is missing")?;
+        gauge_relative(name)?;
+        let entry = artifacts.iter().find(|entry| entry["path"] == name).context("Gauge evidence is outside its pinned inventory")?;
+        anyhow::ensure!(descriptor["sha256"] == entry["sha256"] && descriptor.get("bytes").is_none_or(|v| Some(v) == entry.get("bytes")),
+            "Gauge evidence descriptor differs from its inventory");
+        let raw = bytes(state, job.id, &format!("diagnostics/{name}"), Some(entry["sha256"].as_str().context("Gauge evidence hash is missing")?))?;
+        anyhow::ensure!(entry["bytes"].as_u64() == Some(raw.len() as u64), "Gauge evidence length differs");
+        Ok(raw)
+    };
+    let receipt_descriptor = &diagnostic["sources"]["execution_receipt"];
+    anyhow::ensure!(receipt_descriptor["path"] == "sources/execution-receipt.json"
+        && job.result["process_receipt"] == "nr-process-receipt.json"
+        && receipt_descriptor["sha256"] == job.result["process_receipt_sha256"], "Gauge diagnostics refer to another execution receipt");
+    let receipt_raw = read(receipt_descriptor)?;
+    let root_receipt = bytes(state, job.id, "nr-process-receipt.json", Some(receipt_descriptor["sha256"].as_str().context("Gauge process receipt hash is missing")?))?;
+    anyhow::ensure!(root_receipt == receipt_raw, "Gauge execution receipt copies differ");
+    let receipt: Value = serde_json::from_slice(&receipt_raw)?;
+    anyhow::ensure!(receipt["schema"] == "phaseforge.nr-process-receipt.v1" && receipt["job_id"] == json!(job.id)
+        && receipt["engine_id"] == ENGINE && receipt["exit_code"] == 0 && receipt["termination_reason"] == "completed"
+        && receipt["process_group_drained"] == true && job.result["execution_completed"] == true
+        && job.result["exit_code"] == receipt["exit_code"] && job.result["termination_reason"] == receipt["termination_reason"],
+        "Gauge process did not complete this exact attempt");
+    anyhow::ensure!(diagnostic["execution"] == json!({"receipt_type":receipt["schema"],"job_id":job.id,"success":true,
+        "exit_code":0,"termination_reason":"completed","process_group_drained":true}), "Gauge diagnostic execution outcome differs");
+    let manifest: Value = serde_json::from_slice(&bytes(state, job.id, "nr-engine.json", Some(receipt["engine_manifest_sha256"].as_str().context("Gauge engine manifest pin is missing")?))?)?;
+    anyhow::ensure!(manifest["schema"] == "phaseforge.nr-engine.v1" && manifest["engine_id"] == ENGINE
+        && manifest["source"] == receipt["source"] && manifest["build"] == receipt["build"]
+        && manifest["executable"]["path"] == receipt["executable"]["path"] && manifest["executable"]["sha256"] == receipt["executable"]["sha256"],
+        "Gauge source or executable identity differs from its execution receipt");
+    bytes(state, job.id, "input.athinput", Some(receipt["input"]["sha256"].as_str().context("Gauge scientific input pin is missing")?))?;
+    let analytic: Value = serde_json::from_slice(&read(&diagnostic["analytic"]["report"])?)?;
+    anyhow::ensure!(diagnostic["analytic"]["report"]["path"] == "analytic.json" && diagnostic["analytic"]["passed"] == true
+        && diagnostic["analytic"]["status"] == "passed" && analytic["schema"] == "phaseforge.nr-gauge-analytic.v1"
+        && analytic["passed"] == true && analytic["status"] == "passed" && analytic["check"]["passed"] == true,
+        "The retained gauge analytic check did not pass");
+    anyhow::ensure!(diagnostic["slice_index"]["path"] == "slices/index.json" && diagnostic["measurements"]["path"] == "measurements.json",
+        "Gauge index or measurement path differs");
+    let index: Value = serde_json::from_slice(&read(&diagnostic["slice_index"])?)?;
+    let measurements: Value = serde_json::from_slice(&read(&diagnostic["measurements"])?)?;
+    anyhow::ensure!(index["schema"] == "phaseforge.nr-diagnostic-slices.v1" && index["representation"] == "nr_diagnostic_slice"
+        && index["units"] == *units && index["time_unit"] == "L/c" && index["axis_order"] == json!(["y","x"])
+        && index["grid_location"] == "cell_center" && index["interpolation"] == "none" && index["primary_channel"] == "alpha"
+        && index["black_hole_collision"] == false && index["physical_radiation"] == false,
+        "Gauge index changed its diagnostic representation or units");
+    anyhow::ensure!(measurements["schema"] == "phaseforge.nr-gauge-measurements.v1" && measurements["units"] == *units,
+        "Gauge numerical measurement schema or units differ");
+    let frames = index["frames"].as_array().context("Gauge time frames are missing")?;
+    let series = measurements["series"].as_array().context("Gauge numerical series is missing")?;
+    let checks = analytic["check"]["frames"].as_array().context("Gauge per-frame analytic checks are missing")?;
+    anyhow::ensure!((2..=4096).contains(&frames.len()) && index["frame_count"].as_u64() == Some(frames.len() as u64)
+        && diagnostic["frame_count"] == index["frame_count"] && diagnostic["timeframes"] == index["frames"]
+        && series.len() == frames.len() && checks.len() == frames.len(), "Gauge retained time-frame counts differ");
+    let mut previous = None;
+    for (n, ((frame, sample), check)) in frames.iter().zip(series).zip(checks).enumerate() {
+        let time = finite(&frame["time"])?;
+        anyhow::ensure!(previous.is_none_or(|old| time > old) && frame["scientific_time"] == frame["time"]
+            && frame["time_unit"] == "L/c" && frame["index"].as_u64() == Some(n as u64) && frame["cycle"].as_u64().is_some()
+            && frame["analytic_passed"] == true && sample["time"] == frame["time"] && sample["cycle"] == frame["cycle"]
+            && sample["analytic_passed"] == true && check["time"] == frame["time"] && check["cycle"] == frame["cycle"]
+            && check["passed"] == true, "Gauge recorded times or per-frame numerical checks are inconsistent");
+        previous = Some(time);
+        for (channel, unit) in [("alpha","1"),("gxx","1"),("Kxx","1/L"),("hamiltonian","1/L^2")] {
+            let quantities = &sample["channels_3d"][channel];
+            let low = finite(&quantities["min"])?;
+            let high = finite(&quantities["max"])?;
+            let mean = finite(&quantities["mean"])?;
+            anyhow::ensure!(quantities["unit"] == unit && low <= mean && mean <= high,
+                "Gauge retained numerical measurement quantities or units differ");
+        }
+    }
+    anyhow::ensure!(index["initial_time"] == frames[0]["time"] && index["final_time"] == frames[frames.len()-1]["time"]
+        && diagnostic["initial_time"] == index["initial_time"] && diagnostic["final_time"] == index["final_time"], "Gauge time endpoints differ");
+    let mut samples = vec![];
+    for frame in [&frames[0], &frames[frames.len()-1]] {
+        let view: Value = serde_json::from_slice(&read(&frame["data"])?)?;
+        anyhow::ensure!(view["schema"] == "phaseforge.nr-diagnostic-slice-data.v1" && view["axis_order"] == json!(["y","x"])
+            && view["shape"] == frame["shape"] && frame["plane"]["axes"] == json!(["x","y"])
+            && frame["plane"]["normal_axis"] == "z" && frame["plane"]["coordinate_unit"] == "L"
+            && finite(&view["z"])? == finite(&frame["plane"]["coordinate"])? , "Gauge numeric slice geometry differs");
+        let shape = view["shape"].as_array().filter(|v| v.len()==2).context("Gauge slice shape is missing")?;
+        let ny = shape[0].as_u64().filter(|n| *n>0 && *n<=4096).context("Gauge slice height is invalid")? as usize;
+        let nx = shape[1].as_u64().filter(|n| *n>0 && *n<=4096).context("Gauge slice width is invalid")? as usize;
+        for (axis, count) in [("x", nx), ("y", ny)] {
+            let coordinates = view[axis].as_array().filter(|v|v.len()==count).context("Gauge slice coordinates do not match its shape")?;
+            let values: Vec<f64> = coordinates.iter().map(finite).collect::<anyhow::Result<_>>()?;
+            anyhow::ensure!(values.windows(2).all(|v|v[1]>v[0]), "Gauge cell-centre coordinates do not increase");
+        }
+        anyhow::ensure!(view["channels"].as_object().is_some_and(|v| v.len()==4), "Gauge slice needs its four numerical channels");
+        for (channel, unit) in [("alpha","1"),("gxx","1"),("Kxx","1/L"),("hamiltonian","1/L^2")] {
+            anyhow::ensure!(index["channels"][channel]["unit"] == unit, "Gauge numerical channel units differ");
+            let rows = view["channels"][channel].as_array().filter(|v|v.len()==ny).context("Gauge channel height differs")?;
+            for row in rows {
+                anyhow::ensure!(row.as_array().is_some_and(|v|v.len()==nx), "Gauge channel width differs");
+                numeric_array(row)?;
+            }
+        }
+        for descriptor in [&frame["arrays"], &frame["source_block"]["metric"], &frame["source_block"]["constraints"]] { read(descriptor)?; }
+        let native = receipt["files"].as_array().context("Gauge native execution file inventory is missing")?;
+        for descriptor in [&frame["source_frame"], &frame["source_constraint_frame"]] {
+            let name = descriptor["path"].as_str().and_then(|v|v.strip_prefix("native/")).context("Gauge native endpoint path differs")?;
+            let registered = native.iter().find(|row| row["path"] == name && row["sha256"] == descriptor["sha256"])
+                .context("Gauge native endpoint is absent from its execution receipt")?;
+            let raw = read(descriptor)?;
+            anyhow::ensure!(registered["bytes"].as_u64() == Some(raw.len() as u64), "Gauge native endpoint byte count differs");
+            bytes(state, job.id, &format!("native/{name}"), Some(descriptor["sha256"].as_str().context("Gauge native endpoint hash is missing")?))?;
+        }
+        samples.push(json!({"time":frame["time"],"scientific_time":frame["scientific_time"],"cycle":frame["cycle"],
+            "path":format!("diagnostics/{}",frame["data"]["path"].as_str().unwrap()),"sha256":frame["data"]["sha256"],
+            "numeric_values":nx*ny*4,"shape":frame["shape"],"arrays":frame["arrays"],"native_source":frame["source_frame"],
+            "native_constraints":frame["source_constraint_frame"]}));
+    }
+    Ok(json!({"job_id":job.id,"engine":ENGINE,"kind":"retained_temporal_numerical_states",
+        "diagnostic_result":{"path":"diagnostics/result.json","sha256":digest},
+        "process_receipt":{"path":"nr-process-receipt.json","sha256":receipt_descriptor["sha256"]},
+        "index_path":"diagnostics/slices/index.json","index_sha256":diagnostic["slice_index"]["sha256"],
+        "measurements":{"path":"diagnostics/measurements.json","sha256":diagnostic["measurements"]["sha256"]},
+        "frame_count":frames.len(),"time_unit":"L/c","units":units,"verified_endpoint_samples":samples,
+        "gauge_reference_validated":true,"black_hole_collision_validated":false,"physical_radiation":false,
+        "scientific_scope":diagnostic["scientific_scope"],
+        "verification_scope":"Pinned process, analytic report, measurements and all indexed times; finite first/last JSON numerical channels and hashed corresponding NPZ/native arrays. Native arrays are not independently decoded here; the retained gauge analytic checker supplies numerical validation. Flat-spacetime gauge benchmark only."}))
+}
+
+fn gauge_relative(name: &str) -> anyhow::Result<()> {
+    anyhow::ensure!(!name.is_empty() && !name.contains(['\\', ':', '\0'])
+        && name.split('/').all(|part| !part.is_empty() && part != "." && part != ".."), "Unsafe gauge evidence path");
+    Ok(())
 }
 
 fn illustration_evidence(state: &AppState, job: &LabJob) -> anyhow::Result<Value> {

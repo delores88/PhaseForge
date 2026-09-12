@@ -1,7 +1,14 @@
 /** Synthetic independent references only; this never launches the app/worker. */
 import test from 'node:test';
 import assert from 'node:assert/strict';
+import fs from 'node:fs';
+import os from 'node:os';
+import path from 'node:path';
+import crypto from 'node:crypto';
+import {fileURLToPath} from 'node:url';
+import {execFileSync} from 'node:child_process';
 import {HEAT_PARAMETERS,FLOW_PARAMETERS,CONTINUUM_UNITS,validateContinuum} from './native-continuum.mjs';
+import {createLaboratoryAcceptance,acceptanceComplete} from './native-laboratory.mjs';
 
 const H='a'.repeat(64),matrix=fn=>Array.from({length:16},(_,y)=>Array.from({length:16},(_,x)=>fn(x,y))),mean=a=>a.flat().reduce((s,x)=>s+x,0)/256;
 function fixture(engine){
@@ -43,3 +50,60 @@ test('a correct temperature picture cannot conceal corrupted authoritative flux 
 test('flow reference rejects wrong pressure sign, missing velocity, false incompressibility and wrong energy',()=>{for(const mutate of [f=>f.arrays[3].channels.pressure_Pa[0][0]*=-1,f=>delete f.arrays[4].channels.velocity_x_m_s,f=>f.arrays[1].channels.divergence_s_inv[5][3]=.01,f=>f.measurements.series[2].kinetic_energy_per_mass_m2_s2*=2]){const f=fixture('navier_stokes_2d');mutate(f);assert.throws(()=>validateContinuum(f));}});
 test('units, cell orientation, physical time, fixed range and immutable checkpoint remain required',()=>{for(const mutate of [f=>f.index.length_unit='m',f=>f.index.solver_coordinates.x_m[2]*=1e6,f=>f.index.axis_order=['x','y'],f=>f.views[2].time=0,f=>f.index.color_scale.max+=1,f=>f.index.frames[4].state_path=f.index.frames[3].state_path,f=>f.checkpoint={...f.checkpoint,index:{...f.index,end_time:99}},f=>f.manifest.input.parameters.density_kg_m3=3]){const f=fixture('heat_conduction_2d');mutate(f);assert.throws(()=>validateContinuum(f));}});
 test('completion and still-frame substitution cannot satisfy a temporal continuum reference',()=>{for(const mutate of [f=>f.result.status='running',f=>f.index.frame_count=1,f=>f.views[4]=f.views[0],f=>f.observations.images.pop()]){const f=fixture('navier_stokes_2d');mutate(f);assert.throws(()=>validateContinuum(f));}});
+
+const BUILD_ARRAY_FIXTURE=String.raw`
+import io,json,pathlib,struct,sys,zipfile
+request=json.load(sys.stdin)
+root=pathlib.Path(request['root'])
+def npy(rows):
+    assert len(rows)==16 and all(len(row)==16 for row in rows)
+    header=repr({'descr':'<f8','fortran_order':False,'shape':(16,16)}).encode('ascii')
+    header+=b' '*((-(10+len(header)+1))%64)+b'\n'
+    return b'\x93NUMPY\x01\x00'+struct.pack('<H',len(header))+header+struct.pack('<256d',*[v for row in rows for v in row])
+for frame in request['frames']:
+    primary=root/frame['path'];primary.parent.mkdir(parents=True,exist_ok=True)
+    primary.write_bytes(npy(frame['channels'][request['primary']]))
+    with zipfile.ZipFile(root/frame['state_path'],'w') as archive:
+        for name,rows in frame['channels'].items():
+            with archive.open(name+'.npy','w',force_zip64=True) as member:member.write(npy(rows))
+`;
+
+test('actual continuum capture admits an explicit host decoder and keeps the process receipt for both engines',{timeout:30000},async()=>{
+  // This is a retained-data software fixture. Transport and observed solver
+  // identity are mocked; the host Python decoder is a real isolated invocation.
+  // It must not be called installed/native or scientific execution evidence.
+  const python=execFileSync(process.env.PHASEFORGE_ACCEPTANCE_PYTHON||'python',['-I','-B','-c','import sys; print(sys.executable)'],{encoding:'utf8',windowsHide:true,timeout:10000}).trim();
+  assert.ok(path.isAbsolute(python));
+  const previous=process.env.PHASEFORGE_ACCEPTANCE_PYTHON;process.env.PHASEFORGE_ACCEPTANCE_PYTHON=python;
+  const parent=fs.realpathSync.native(os.tmpdir()),temporary=fs.realpathSync.native(fs.mkdtempSync(path.join(parent,'phaseforge-continuum-capture-'))),here=path.dirname(fileURLToPath(import.meta.url));
+  const sha=bytes=>crypto.createHash('sha256').update(bytes).digest('hex');
+  try{
+    for(const engine of ['heat_conduction_2d','navier_stokes_2d']){
+      const f=fixture(engine),directory=path.join(temporary,engine),source=path.join(directory,'source'),output=path.join(directory,'evidence');fs.mkdirSync(source,{recursive:true});
+      execFileSync(python,['-I','-B','-c',BUILD_ARRAY_FIXTURE],{input:JSON.stringify({root:source,primary:f.index.field_name,frames:f.index.frames.map((frame,n)=>({...frame,channels:f.arrays[n].channels}))}),windowsHide:true,timeout:10000});
+      const put=(name,value)=>{const file=path.join(source,name);fs.mkdirSync(path.dirname(file),{recursive:true});const bytes=Buffer.isBuffer(value)?value:Buffer.from(JSON.stringify(value)+'\n');fs.writeFileSync(file,bytes);return sha(bytes);};
+      for(const [file,key]of [['continuum_worker.py','worker_sha256'],['field_worker.py','shared_io_sha256']]){const bytes=fs.readFileSync(path.resolve(here,'../../tools',file));f.manifest[key]=put(file,bytes);f.checkpoint[key]=f.manifest[key];}
+      f.index.frames.forEach((frame,n)=>{
+        frame.sha256=sha(fs.readFileSync(path.join(source,frame.path)));frame.state_sha256=sha(fs.readFileSync(path.join(source,frame.state_path)));frame.view_sha256=put(frame.view_path,f.views[n]);
+        Object.assign(f.measurements.series[n],{field_sha256:frame.sha256,state_sha256:frame.state_sha256});
+        const image=f.observations.images[n];image.path=`observations/fixture-${frame.step}.png`;image.sha256=put(image.path,Buffer.from('iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+/l9sAAAAASUVORK5CYII=','base64'));image.field_source.sha256=frame.sha256;
+      });
+      const projectId=crypto.randomUUID(),id=crypto.randomUUID(),created='2026-09-12T01:00:00Z',observation={pid:4242,created:Date.parse(created)/1000+.1,exe:path.join(directory,'environments/science-v5/python.exe')};
+      const job={id,project_id:projectId,kind:'solver',state:'completed',title:'Synthetic retained capture fixture',created_at:created,input:structuredClone(f.manifest.input),events:[{sequence:1,kind:'solver_started',at:'2026-09-12T01:00:01Z',data:{pid:observation.pid}}]};
+      for(const [name,value]of [['input.json',job.input],['worker-input.json',job.input],['manifest.json',f.manifest],['result.json',f.result],['measurements.json',f.measurements],['checkpoint.json',f.checkpoint],['observations/index.json',f.observations],['fields/index.json',f.index]])put(name,value);
+      const reads=[];const page={evaluate:async(_callback,{route})=>{const prefix=`/api/laboratory/jobs/${id}/artifacts/`;assert.ok(route.startsWith(prefix));const name=route.slice(prefix.length).split('/').map(decodeURIComponent).join('/');assert.ok(!name.split('/').includes('..'));reads.push(name);return {status:200,base64:fs.readFileSync(path.join(source,name)).toString('base64')};}};
+      const acceptance=createLaboratoryAcceptance({page,call(){throw Error('Capture cannot start or control an application job');},remember:()=>[],observedProcesses:()=>[observation],workspace:directory,output,projectId,sourceCommit:'a'.repeat(40),version:'retained-software-fixture',backendSha256:'b'.repeat(64)});
+      const captured=await acceptance.captureRetainedJob(job,'fixture');const key=engine==='heat_conduction_2d'?'heat':'flow';
+      assert.equal(acceptance.evidence.checks[key].passed,true);assert.equal(acceptance.evidence.checks[key].all_channel_cell_comparisons,key==='heat'?3840:6400);assert.equal(acceptanceComplete(acceptance.evidence),false,'Capture fixtures cannot satisfy installed acceptance');
+      assert.deepEqual(acceptance.evidence.processes[id],observation);const receipt=JSON.parse(fs.readFileSync(path.join(output,'laboratory/jobs',id,'fixture/process-observation.json'),'utf8'));assert.deepEqual(receipt,{job_id:id,event:job.events[0],process:observation});
+      assert.equal(reads.filter(name=>name.endsWith('.npz')).length,5);assert.equal(reads.filter(name=>name.endsWith('.npy')).length,5);assert.equal(captured.receipt.artifacts.filter(row=>row.path.endsWith('.npz')).length,5);
+      // The same capture boundary must reject changed retained archive bytes
+      // before invoking a decoder or recording a passing numerical check.
+      const altered=path.join(source,f.index.frames[0].state_path);fs.appendFileSync(altered,'changed');
+      await assert.rejects(()=>acceptance.captureRetainedJob(job,'changed-archive'),/Registered artifact hash/);
+    }
+  }finally{
+    if(previous===undefined)delete process.env.PHASEFORGE_ACCEPTANCE_PYTHON;else process.env.PHASEFORGE_ACCEPTANCE_PYTHON=previous;
+    assert.equal(path.dirname(temporary),parent);assert.match(path.basename(temporary),/^phaseforge-continuum-capture-/);assert.equal(fs.realpathSync.native(temporary),temporary);fs.rmSync(temporary,{recursive:true,force:true});
+  }
+});

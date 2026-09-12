@@ -9,6 +9,7 @@ impl LaboratoryService{
     fn prepare_solver_resume(&self,id:Uuid,deadline:Option<DateTime<Utc>>,independent:bool)->anyhow::Result<CancellationToken>{
         let _guard=self.gate.lock();let mut job=self.get(id)?;
         anyhow::ensure!(job.kind=="solver"&&matches!(job.state.as_str(),"paused"|"failed"|"timed_out"),"Solver is not resumable");
+        anyhow::ensure!(!super::nr_engines::supports(job.input["engine"].as_str().unwrap_or("")),"This NR adapter retains stopped attempts but does not yet support checkpoint continuation. Create a new immutable diagnostic request; the prior attempt will not be overwritten.");
         self.ensure_science_attempt_identity(id)?;
         let original_parent=job.parent_id;let original_deadline=job.deadline_at;
         if let Some(parent_id)=job.parent_id{

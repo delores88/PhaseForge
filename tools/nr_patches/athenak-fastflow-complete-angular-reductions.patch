@@ -1,0 +1,21 @@
+diff --git a/src/z4c/fastflow.cpp b/src/z4c/fastflow.cpp
+--- a/src/z4c/fastflow.cpp
++++ b/src/z4c/fastflow.cpp
+@@ -942,7 +942,7 @@
+   // Step 2: Compute the global minimum.
+   rr_min = std::numeric_limits<Real>::infinity();
+   Kokkos::parallel_reduce("FastFlow_sphradii",
+-  Kokkos::RangePolicy<>(DevExeSpace(), 0, nangles-1),
++  Kokkos::RangePolicy<>(DevExeSpace(), 0, nangles),
+   KOKKOS_LAMBDA(const int &p, Real &lmin) {
+     lmin = Kokkos::min(lmin, rr_(p));
+   }, Kokkos::Min<Real>(rr_min));
+@@ -1041,7 +1041,7 @@
+ 
+   // Loop over surface points
+   Kokkos::parallel_reduce("FastFlow_surfintegrals",
+-  Kokkos::RangePolicy<>(DevExeSpace(), 0, nangles-1),
++  Kokkos::RangePolicy<>(DevExeSpace(), 0, nangles),
+   KOKKOS_LAMBDA(const int &p,
+                 Real& area,
+                 Real& coarea,

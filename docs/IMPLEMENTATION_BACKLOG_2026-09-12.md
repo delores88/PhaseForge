@@ -14,19 +14,21 @@ existing PhaseForge progress-monitor agent, with completed and remaining percent
 | ID | Weight | Task and acceptance | Status |
 | --- | ---: | --- | --- |
 | B1 | 25 | Enforce deliverable intent across chat, steering, tools and completion. Simulation requests must produce retained, playable numerical evolution with an appropriate model, or an explicit capability gap. Stills cannot fulfill simulations. Explicit illustrations and presentation-only edits remain supported. Regression includes the saved black-hole case and switching request types in one conversation. | Complete |
-| B2 | 20 | Retain validated thermal/fluid execution and fulfill the required equal-mass head-on black-hole collision at 0.999c per black hole. Integrate suitable relativistic initial data and Einstein evolution through collision, validate the numerical/reference behavior, and retain measurable playback. An explicit capability gap or incoming-field calculation does not fulfill this criterion. Assess actual hardware and specific missing resources before claiming feasibility. | In progress |
+| B2 | 20 | Provide real bounded thermal/fluid and relativistic engines, hardware-aware admission, retained measurable results and dependable stopped outcomes. Unsupported models, insufficient resources, numerical instability and persistent tool failures must stop expensive work, preserve evidence and offer concrete choices. Do not claim scientific success from an invalid run. Exact 0.999c collision success is not required for release. | Complete |
 | B3 | 15 | Visible, functional pan/zoom/fit controls for stills; pan/orbit/tilt/zoom/reset for interactive 3D and numerical viewers. Playback uses retained data. Test actual control effects and preserved presentation without solver reruns. | Complete |
 | B4 | 10 | Restore horizontal iteration cards below the viewer. Chronological progression goes left to right, newest at the far right and initially visible. Selecting prior iterations works, retains lineage, and is not overridden by background refresh. | Complete |
-| B5 | 8 | Make output views coherent and remove irrelevant/inert tabs. Results and 3D/fabrication must show applicable saved outputs; historical workflows remain reachable where useful. Navigation never starts or cancels work by itself. Lower priority than simulation correctness. | Complete |
+| B5 | 8 | Map visible actions to project/run/result and job ownership. Results, equation experiments and 3D/fabrication must expose applicable saved outputs and actionable unavailable states; historical workflows remain reachable. Show failed/partial result status prominently. Navigation never starts or cancels work by itself. Remove only irrelevant controls. | Reopened |
 | B6 | 5 | Inbox-style unread state: opening completed project/job progress clears its applicable blue dot durably; later completion becomes unread again. Preserve truthful running indicators. | Complete |
 | B7 | 3 | Use the existing PF symbol with genuine transparency for marketplace discovery, without a rectangular thumbnail background. Preserve two actual app screenshots on the detail/download page only. | In progress |
 | B8 | 7 | Integrated regressions and native workflow verification: intent switches, supported simulation versus unsupported merger, playback/camera, lineage, view navigation and read state. Completed legacy equations, solver simulations and numerical analyses must surface their exact results after completion, navigation, reload and history entry. Record failures and exact build identity. No redundant studies or broad scan cycles. | In progress |
 | B9 | 7 | Back up and install the verified Windows update locally, preserve user projects/jobs, then package and pass ordinary Delores marketplace admission with the final artwork. Coordinate exact immutable release evidence with the marketplace owner. | Queued |
 
-**Overall: 63% completed / 37% remaining.**
+**Overall: 83% completed / 17% remaining.** Corrected dependable-engine and actual workflow acceptance passed. Remaining work is the exact packaged Windows verification, local installation and marketplace admission/artwork.
+
+**Current user correction, 2026-09-12 17:24 UTC:** deliver dependable research software, not a validated discovery on one extreme collision. Further collision calibration, parameter and horizon research is deferred. Retain the real engine integration and honest scientific boundaries. Complete actual supported success, stopped failure with concrete options, and navigation/reopen/recovery workflows; then back up/install locally and pass ordinary Windows x64 marketplace admission. No further shipping-scope confirmation is required.
 
 **Delivery status: 0.9.1 remains installed. No packaged 0.10 installation or
-marketplace admission has occurred.** "Complete" in B1/B3/B4/B5/B6 means the
+marketplace admission has occurred.** "Complete" in B1/B3/B4/B6 means the
 component and described workflow passed in source/test environments, not that
 the user has received the update. B8/B9 contain the remaining installed-build
 and delivery checks. At 2026-09-12 13:18 UTC, isolated source UI 7442 used its
@@ -34,14 +36,22 @@ own data profile, the temporary native Electron test host was closed, and UI
 7443 read original records through a proxy that blocks mutations. Exact receipt:
 `.local/validation/workbench-010/current-environments-20260912T131804035Z.json`.
 
-Scope correction: the original request required an actual relativistic collision.
+Historical scope correction (superseded by the current correction above): the original interpretation required an actual relativistic collision.
 The earlier 83% report incorrectly closed B2 after bounded thermal/fluid work and
 honest reporting of the missing relativistic engine. B2 is reopened in full under
 the same all-or-nothing task-weight method; the verified thermal/fluid subwork is
-preserved. Final release completion requires this scientific criterion as well
-as the Results repair, local installation and ordinary marketplace admission.
+preserved. That exact-collision requirement no longer gates release. Results, lifecycle, local installation and ordinary marketplace acceptance still do.
 
 ## Evidence and decisions
+
+- User-workflow acceptance now requires the ordinary chat path to honor the
+  requested output type, execute the appropriate supported calculation, expose
+  its result in an obvious location, provide useful inspection and a grounded
+  explanation with next steps, preserve state through navigation/recovery, and
+  handle a fresh unseen variation within its claimed scope. Component builds,
+  selected examples and test counts alone do not establish product reliability.
+  Apply this to the specific changed workflows, without an open-ended optional
+  testing cycle. Existing completion weights are not reliability percentages.
 
 - Engine-selection constraint: prefer portable scientific engines and data
   contracts across Linux x64/ARM64, Windows x64/ARM64, and macOS Apple Silicon.
@@ -80,17 +90,31 @@ as the Results repair, local installation and ordinary marketplace admission.
   dependency; the development interpreter passed without changing app runtimes.
   New hosted acceptance requires numerical heat/flow arrays, playback and
   restored hashes, but has not yet run on an exact 0.10 installer. Source
-  verification does not close B8/B9 or the required relativistic criterion.
+  verification does not close B8/B9 or the integrated software workflow criteria.
 
-- Release scope question pending: install/submit these verified improvements
-  with the required 0.999c collision still open, or hold the whole release for
-  that collision. Preparing a reviewable Windows candidate does not change
-  the scientific acceptance criterion or treat silence as a decision.
+- Current release decision: complete dependable ordinary-user workflows and
+  their packaged Windows acceptance, then install and publish. A scientific
+  capability gap is acceptable when the app stops cleanly, preserves evidence
+  and offers concrete alternatives without silently substituting the requested
+  physics. Coarser grids never imply validity merely because they fit hardware.
+  The app must discover current CPU, RAM, GPU/VRAM and scratch capacity, propose
+  an explicit experiment budget, enforce it during execution, and use measured
+  pilots to establish attainable resolution. Hardware inventory alone is not
+  a throughput estimate or proof that a numerical method is valid.
 
-- Required-scope correction: actual equal-mass head-on 0.999c collision remains
-  unfulfilled. Read-only hardware/dependency and suitable numerical-relativity
-  solver investigations are active. Neither a precontact analytic approximation
-  nor refusing to substitute a still counts as delivering that collision.
+- Scientific limit retained: an equal-mass head-on 0.999c collision remains
+  unvalidated. Further calibration research is deferred. Neither a precontact
+  approximation nor a still is labeled as a solved collision.
+
+- Current software blockers found by actual workflow and code inspection:
+  recovery kept141 navigation GETs responsive but its POST timed out at30s;
+  a selected failed gauge result lacked a prominent failure warning; ordinary
+  timer-Off sessions lacked a deterministic repeated-tool-failure stop; parent
+  resume blindly attempted unsupported NR checkpoint continuation; unchanged
+  capability gaps exposed a Resume action that could buy another model turn.
+  These are the active fixes. Ordinary saved-result explanation (including
+  compaction) and quantitative Analysis already passed on actual CUDA evidence;
+  see `docs/validation/nr-ui-results-2026-09-12.md`.
 
 - Relativity foundation: pinned AthenaK was built in the existing WSL Ubuntu
   and ran three bounded harmonic gauge-wave benchmarks. The preregistered
@@ -113,3 +137,7 @@ as the Results repair, local installation and ordinary marketplace admission.
 - B1 complete: actual provider requests verify illustration, status steering, numerical analysis, native publication and an explicit unsupported-merger gap. The same UI conversation switched its selected Blender still to a new heat simulation with 21 retained states. Initial application-instruction contract looping was found and repaired; interrupted provider receipts remain preserved without automatic replacement calls. Evidence: docs/validation/workbench-010-results-2026-09-12.md. Full backend library suite:400 passed,0 failed,11 ignored; optional published rendering and continuum readiness were separately run.
 
 - Additional B8 report: completed Results did not consistently appear. Source inspection found legacy equation outputs omitted from default lab/lineage, a chat findings link tied to stale selectedRun, and run deep links that loaded records without opening measurements. A functional exact-run results navigator and routing/selection regressions are required before source freeze. Original retained data stays untouched.
+
+- Final B2 acceptance: the combined backend passed508 tests (12 explicitly ignored). The real saved capability-gap UI offers capabilities, exact evidence and draft-preserving revision with no unchanged Resume. One same-job recovery returned202 in16ms, completed in46.04s, and kept212 concurrentGETs at63ms maximum/47ms p95. Original scientific output and deadline remained unchanged. See `docs/validation/nr-background-recovery-2026-09-12.md`.
+
+- Final B5 acceptance: actual legacyResults opens all3 Blackholeoutputs by exactidentity; historicalHIVreplay keeps its own title; failedpartialoutputs show their status; saved-gap nextactions work. DedicatedResultsreview b434de80 completed without another solver, while navigation remained usable and the completion dot cleared durably on opening its project. The explanation was lengthy; that is recorded as polish rather than another release-blocking scientific study.

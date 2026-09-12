@@ -1,6 +1,23 @@
 //! The agent and user interface share one executable capability catalog.
 use serde_json::{json,Value};
 
+/// Shared live catalog: host measurements are observations, never a promise of
+/// solver compatibility, resource reservation or attainable physical accuracy.
+pub fn observed(state:&crate::app::AppState,deadline:Option<chrono::DateTime<chrono::Utc>>)->anyhow::Result<Value>{
+    let mut catalog=capabilities();
+    catalog["resource_plan"]=crate::compute::resource_plan::plan(state.scheduler.hardware(),&state.telemetry.snapshot(),&state.config.data_directory,deadline,None)?;
+    let optional:Vec<Value>=super::nr_engines::ENGINES.iter().map(|engine|super::numerical_relativity::capability(&state.laboratory,engine)).collect();
+    for engine in &optional {
+        if engine["available"]==true {catalog["engines"].as_array_mut().expect("catalog engines array").push(engine.clone());}
+    }
+    if optional.iter().any(|engine|engine["available"]==true) {
+        catalog["gaps"][0]["status"]=json!("diagnostic_only");
+        catalog["gaps"][0]["reason"]=json!("Optional Einstein-equation diagnostic workers are installed with explicit limited recipes. Their catalog scope is authoritative: gauge waves are flat spacetime; puncture diagnostics do not establish calibrated high boost, common horizons, convergence or a completed physical merger. The requested0.999c collision remains unavailable.");
+    }
+    catalog["optional_engines"]=json!(optional);
+    Ok(catalog)
+}
+
 pub fn capabilities()->Value {
     json!({"engines":[argon_capability(),super::field::capability(),super::mechanics::capability(),super::thermal::capability(),super::fluid::capability()],
         "gaps":[

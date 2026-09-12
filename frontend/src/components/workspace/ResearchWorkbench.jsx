@@ -2,6 +2,8 @@ import dynamic from "next/dynamic";
 import ExperimentWorkspace from "./ExperimentWorkspace";
 import ResearchSessions from './ResearchSessions';
 import LaboratoryActivity from './LaboratoryActivity';
+import LaboratoryEvidenceDetails from './LaboratoryEvidenceDetails';
+import {attentionDestination} from '@/lib/laboratory-attention-navigation.mjs';
 import WorkspaceErrorBoundary from './WorkspaceErrorBoundary';
 const LaboratoryViewer=dynamic(()=>import('./LaboratoryViewer'),{ssr:false});
 import LaboratoryLineage from './LaboratoryLineage';
@@ -102,6 +104,7 @@ export default function ResearchWorkbench({ backend, onHardware, onEventState })
   const [projects, setProjects] = useState([]);
   const [activeProjectId, setActiveProjectId] = useState(null);
   const [selectedLabId,setSelectedLabId]=useState(null);
+  const [attentionEvidence,setAttentionEvidence]=useState(null);
   const [resolvedLabLink,setResolvedLabLink]=useState(null);
   const [admittedReviews,setAdmittedReviews]=useState([]);
   const [reviewDeliveries,setReviewDeliveries]=useState({});
@@ -121,6 +124,9 @@ export default function ResearchWorkbench({ backend, onHardware, onEventState })
   const projectLabJobs=useMemo(()=>availableLaboratoryJobs.filter(j=>j.project_id===activeProjectId),[availableLaboratoryJobs,activeProjectId]);
   const labSolvers=projectLabJobs.filter(laboratoryViewable);
   const selectedLab=labSolvers.find(j=>j.id===selectedLabId)||null;
+  const selectedLabWarning=selectedLab?.result?.diagnostics?.analytic?.passed===false?'Analytic checks failed'
+    :selectedLab?.result?.diagnostics?.execution?.complete===false?'Partial execution'
+    :({failed:'Attempt failed',timed_out:'Time limit reached',cancelled:'Attempt cancelled',paused:'Attempt paused'}[selectedLab?.state]||null);
   const deliverableSession=latestDeliverable(projectLabJobs);
   useEffect(()=>{setSelectedLabId(current=>initialLaboratorySelection(availableLaboratoryJobs,activeProjectId,current));},[availableLaboratoryJobs,activeProjectId]);
   const activeLabSession=projectLabJobs.find(j=>j.kind==='session'&&['queued','running','provisioning','waiting'].includes(j.state));
@@ -631,7 +637,19 @@ export default function ResearchWorkbench({ backend, onHardware, onEventState })
     }catch(value){if(projectRef.current===project)setError(value.message);}
   };
   const controlLabJob=async (job,action,options={})=>{
-    try{return await api.labControl(typeof job==='string'?job:job.id,action,options);}catch(value){setError(value.message);throw value;}
+    const project=typeof job==='string'?projectRef.current:job.project_id;
+    try{return await api.labControl(typeof job==='string'?job:job.id,action,options);}catch(value){if(projectRef.current===project)setError(value.message);throw value;}
+  };
+  const attentionLabJob=async (job,action)=>{
+    const project=projectRef.current,view=viewTracker.current.capture();
+    if(job.project_id!==project)throw Error('Open this attempt in its own project before choosing a next step.');
+    const current=await api.labJob(job.id);
+    if(projectRef.current!==project||!viewTracker.current.isCurrent(view))return;
+    if(current.id!==job.id)throw Error('The requested attempt identity changed while loading its directions.');
+    const destination=attentionDestination(current,action,project);
+    if(destination.type==='chat')window.dispatchEvent(new CustomEvent('phaseforge:focus-chat'));
+    else if(destination.type==='capabilities')setTab('capabilities');
+    else{setAttentionEvidence(destination);setTab('job_evidence');}
   };
   const inspectSessionRun=async id=>{
     const project=projectRef.current,view=viewTracker.current.capture(),generation=loadGeneration.current;
@@ -890,6 +908,12 @@ export default function ResearchWorkbench({ backend, onHardware, onEventState })
               <button type="button" className="button button--secondary" onClick={()=>setTab('capabilities')}>Solver coverage</button>
               {selectedLab&&<button type="button" className="button button--secondary" onClick={()=>setTab('sessions')}>Job history & evidence</button>}
             </div>
+            {selectedLabWarning&&<section className="labNotice labNotice--warning" role="status" aria-label="Selected output status" style={{margin:'0 14px 12px',flexShrink:0}}>
+              <strong>{selectedLabWarning}</strong>
+              <p>Attempt state: {selectedLab.state.replaceAll('_',' ')}.{selectedLab.error?` ${selectedLab.error}`:''}</p>
+              <p>Any visible states are retained data from this attempt. Their presence does not establish completed or numerically validated work.</p>
+              <button type="button" className="button button--secondary" onClick={()=>setTab('sessions')}>Open Agents & evidence</button>
+            </section>}
             {selectedLab?<LaboratoryViewer key={`viewer:${selectedLab.id}`} job={selectedLab} onCapture={['solver','published_simulation'].includes(selectedLab.kind)?observeLabFrame:undefined}/>:completedResults.length?<div className="expNotice"><strong>{completedResults.length} completed result{completedResults.length===1?'':'s'} retained in this project.</strong><p>Open the measured output below or browse Results above. Your equation measurements and newer laboratory artifacts share that results list.</p><button type="button" className="button button--secondary" onClick={()=>openCompletedResult(completedResults.at(-1))}>Open latest completed result</button></div>:<div className="expNotice"><strong>Describe the experiment or illustration you want in chat.</strong><p>Simulations retain computed states for playback. Scientific illustrations retain a rendered still and editable 3D geometry. The requested output determines the tools; this view holds both.</p><button type="button" className="button button--secondary" onClick={()=>setTab('capabilities')}>Explore supported physics and limitations</button></div>}
             {selectedLab&&<LaboratoryResultActions key={`review:${selectedLab.id}`} job={selectedLab} busy={reviewBusy} modelError={targetModelError} pendingReview={reviewDeliveries[activeProjectId]||null} onReview={reviewLabResult}/>}
             <LaboratoryLineage jobs={projectLabJobs} selectedJobId={selectedLab?.id} scopeKey={activeProjectId} onSelect={selectLabJob}/>
@@ -897,7 +921,8 @@ export default function ResearchWorkbench({ backend, onHardware, onEventState })
           </div>}
           {tab==='capabilities'&&<SolverCoverage/>}
           {tab==='studio'&&<StudioWorkbench project={activeProject} manifest={activeManifest} providers={providers} onInspect={value=>setSceneContext(v=>({...v,inspection:value}))} onCameraChange={value=>setSceneContext(v=>({...v,camera:value}))}/>}
-          {tab==='sessions'&&<div style={{overflow:'auto',height:'100%'}}><LaboratoryActivity jobs={projectLabJobs} onSelect={selectLabJob} onControl={controlLabJob}/><ResearchSessions project={activeProject} providers={providers} onRefresh={refreshTaskData} onInspectRun={inspectSessionRun}/></div>}
+          {tab==='sessions'&&<div style={{overflow:'auto',height:'100%'}}><LaboratoryActivity jobs={projectLabJobs} onSelect={selectLabJob} onControl={controlLabJob} onAttentionAction={attentionLabJob}/><ResearchSessions project={activeProject} providers={providers} onRefresh={refreshTaskData} onInspectRun={inspectSessionRun}/></div>}
+          {tab==='job_evidence'&&attentionEvidence?.projectId===activeProjectId&&<LaboratoryEvidenceDetails key={`${activeProjectId}:${attentionEvidence.sourceId}`} request={attentionEvidence} jobs={projectLabJobs} onOpen={job=>selectLabJob(job).catch(value=>setError(value.message))} onBack={()=>setTab('sessions')}/>}
           {tab==="research"&&<ResearchPlan project={activeProject} manifest={activeManifest} refreshKey={messages.length} busy={busy}
             onExperiment={content=>{setTab("world");return buildExperiment(content,DEFAULT_BUILD,false);}}
             onAdvanced={()=>setTab("advanced")}
@@ -937,7 +962,7 @@ export default function ResearchWorkbench({ backend, onHardware, onEventState })
           </WorkspaceErrorBoundary>
         </div>
 
-        {!['studio','laboratory','sessions','capabilities'].includes(tab)&&<RunStrip
+        {!['studio','laboratory','sessions','capabilities','job_evidence'].includes(tab)&&<RunStrip
           runs={runs}
           selectedRunId={selectedRun?.id}
           onSelect={(run) => {

@@ -11,7 +11,7 @@ const frontend=path.resolve(__dirname,'..');
 const work=fs.mkdtempSync(path.join(os.tmpdir(),'phaseforge-viewport-regression-'));
 const webpack=require(path.join(frontend,'node_modules/next/dist/compiled/webpack/webpack')).webpack;
 fs.writeFileSync(path.join(work,'loader.cjs'),`module.exports=function(source){if(this.resourcePath.endsWith('.css'))return 'export default {}';return require(${JSON.stringify(path.join(frontend,'node_modules/next/dist/build/swc'))}).transformSync(source,{filename:this.resourcePath,jsc:{parser:{syntax:'ecmascript',jsx:true},transform:{react:{runtime:'automatic'}}},module:{type:'es6'}}).code;};`);
-fs.writeFileSync(path.join(work,'entry.jsx'),`import React from 'react';import{renderToStaticMarkup}from'react-dom/server';import GenericViewport from ${JSON.stringify(path.join(frontend,'src/components/workspace/GenericViewport.jsx'))};export const render=run=>renderToStaticMarkup(<GenericViewport run={run}/>);`);
+fs.writeFileSync(path.join(work,'entry.jsx'),`import React from 'react';import{renderToStaticMarkup}from'react-dom/server';import GenericViewport from ${JSON.stringify(path.join(frontend,'src/components/workspace/GenericViewport.jsx'))};export const render=(run,manifest)=>renderToStaticMarkup(<GenericViewport run={run} manifest={manifest}/>);`);
 const component=new Promise((resolve,reject)=>webpack({mode:'development',context:frontend,target:'node',entry:path.join(work,'entry.jsx'),output:{path:work,filename:'component.cjs',library:{type:'commonjs2'}},resolve:{extensions:['.js','.jsx','.mjs'],modules:[path.join(frontend,'node_modules')],alias:{'@':path.join(frontend,'src')}},module:{rules:[{test:/\.(jsx|css)$/,use:path.join(work,'loader.cjs')}]},optimization:{minimize:false},devtool:false},(error,stats)=>{if(error||stats.hasErrors())reject(error||Error(stats.toString({all:false,errors:true})));else resolve(require(path.join(work,'component.cjs')));}));
 
 test('GenericViewport renders retained frames and its simulation timeline',async()=>{
@@ -32,4 +32,19 @@ test('GenericViewport without retained frames keeps its empty state',async()=>{
   const html=render({id:'empty-state-regression',status:'completed'});
   assert.match(html,/Build a world around your question/);
   assert.doesNotMatch(html,/aria-label="Simulation time"/);
+});
+
+test('historical replay title belongs to its retained run, not the current setup',async()=>{
+  const {render}=await component;
+  const run={id:'original-run',manifest_id:'original-setup',name:'Original measured experiment',status:'completed',result:{visualization:{frames:[{time:0,entities:[{id:'sample',position:[0,0,0]}]}]}}};
+  const manifest={id:'later-setup',title:'Unrelated current experiment'};
+  const html=render(run,manifest);
+  assert.match(html,/<strong>Original measured experiment<\/strong>/);
+  assert.doesNotMatch(html,/Unrelated current experiment/);
+  assert.match(html,/1 recorded frames/);
+  const unnamed=render({...run,name:undefined},manifest);
+  assert.match(unnamed,/<strong>Measured trajectories<\/strong>/);
+  assert.doesNotMatch(unnamed,/Unrelated current experiment/);
+  const matching=render({...run,name:undefined},{...manifest,id:'original-setup',title:'Bound setup title'});
+  assert.match(matching,/<strong>Bound setup title<\/strong>/);
 });

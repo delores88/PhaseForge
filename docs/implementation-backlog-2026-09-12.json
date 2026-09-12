@@ -2,8 +2,8 @@
   "baselineVersion": "0.9.1",
   "baselineSource": "27f5c91ac6482df16c34012c7f56501a1f494f32",
   "progressMethod": "Sum of verified completed task weights; partial tasks reported separately",
-  "completedPercent": 63,
-  "remainingPercent": 37,
+  "completedPercent": 83,
+  "remainingPercent": 17,
   "monitorThread": "01a0912b-c5a6-79d3-9e35-9fe066ab5fdb",
   "tasks": [
     {
@@ -20,22 +20,24 @@
     {
       "id": "B2",
       "weight": 20,
-      "title": "Scientific solver coverage, including required relativistic collision",
-      "status": "in_progress",
+      "title": "Dependable scientific engines, resource planning and truthful stopped outcomes",
+      "status": "complete",
       "evidence": [
         "docs/validation/continuum-results-2026-09-12.md",
         ".local/validation/workbench-010/continuum-backend.log",
         ".local/validation/workbench-010/actual-fields-status.json",
-        "Actual normal API heat and flow jobs completed with retained fields. Browser loaded21 states, playback advanced0→0.2s; visible pan/tilt/zoom persisted to presentation without rerunning solver.",
+        "Actual normal API heat and flow jobs completed with retained fields. Browser loaded21 states, playback advanced0\u21920.2s; visible pan/tilt/zoom persisted to presentation without rerunning solver.",
         "docs/validation/relativistic-compute-feasibility-2026-09-12.md",
         "docs/validation/relativistic-solver-path-2026-09-12.md",
-        "Pinned AthenaK built and three bounded gauge-wave grids executed with independently checked refinement; does not constitute a black-hole collision."
+        "Pinned AthenaK built and three bounded gauge-wave grids executed with independently checked refinement; does not constitute a black-hole collision.",
+        "Actual CUDA appjob5ebd8820-43ef-4e91-8213-9d158a439809 completed3pairednative states0/.5126953125/1,69steps,469.792s; liveRAM/GPU/scientificguards passed. SharedCPU/CUDAstates passed preregisteredagreement. Noaccuracy/boost/mergerclaim; see docs/validation/nr-runtime-integration-2026-09-12.md.",
+        "docs/validation/nr-background-recovery-2026-09-12.md",
+        ".local/validation/backend-final-20260912/report.json",
+        ".local/validation/backend-final-20260912/runtime-capabilities.json",
+        "Final actual UI: legacy paused gap1495d57a exposes correct capabilities, exact saved evidence and draft-preserving Revise; no Resume on that gap and original saved fields/events unchanged. Existing heat/fluid/CUDA numerical acceptance retained; no extreme collision claim."
       ],
-      "acceptance": "Retain verified bounded thermal/fluid workflows AND execute the requested equal-mass head-on collision at 0.999c per black hole using suitable relativistic initial data and Einstein evolution through collision, with numerical/reference validation and saved measurable playback. A capability gap or analytic precontact field is not fulfillment.",
-      "remaining": [
-        "Integrate suitable relativistic computation and constraint-satisfying high-boost initial data with resource/lifecycle enforcement",
-        "Validate the requested 0.999c collision and saved numerical outputs; do not count the gauge-wave foundation as fulfillment"
-      ]
+      "acceptance": "Provide real bounded thermal/fluid and relativistic computation with retained numerical outputs, hardware-aware admission and lifecycle control. Supported work must expose usable results; unsupported models, insufficient resources, numerical failure and persistent tool errors must stop costly work, preserve valid evidence and offer concrete next options. A validated exact 0.999c collision is not required for release and must not be claimed.",
+      "remaining": []
     },
     {
       "id": "B3",
@@ -66,8 +68,13 @@
       "status": "complete",
       "evidence": [
         ".local/validation/workbench-010/navigation-read-verification.json",
-        ".local/viewer-acceptance/json-analysis-20260912-01/runs/2026-09-12T12-05-33-178Z/interaction-report.json"
-      ]
+        ".local/viewer-acceptance/json-analysis-20260912-01/runs/2026-09-12T12-05-33-178Z/interaction-report.json",
+        "docs/validation/workbench-action-map-2026-09-12.md",
+        "docs/validation/nr-ui-results-2026-09-12.md",
+        ".local/validation/nr-result-review-20260912/final-ui-20260912/attention-report.json",
+        "Actual dedicatedResultsreview b434de80-ade2-4da5-b08b-8e6c7fe2a0c6 completed with exact CUDA source5ebd8820,9rounds20tools2compactions; original scientific fields/events unchanged and solver count1to1. Agents/Notes/anotherproject navigation remained usable; completion read acknowledgement persisted. Explanation verbosity remains a polish limitation."
+      ],
+      "remaining": []
     },
     {
       "id": "B6",
@@ -96,6 +103,11 @@
         "docs/validation/workspace-results-2026-09-12.md",
         ".local/validation/workbench-010/fullpage-results-20260912-01.json",
         ".local/validation/workbench-010/backend-full-with-result-review.log"
+      ],
+      "remaining": [
+        "Promptly acknowledge background recovery and expose progress/cancellation/terminal failure without a long HTTP request",
+        "Prove a small ordinary-user set: supported success, truthful stopped failure with options, and navigation/reopen/recovery",
+        "Validate exact packaged Windows build after source fixes, preserving earlier failed test receipts"
       ]
     },
     {
@@ -146,6 +158,68 @@
       "completedPercent": 63,
       "remainingPercent": 37,
       "reason": "The required actual black-hole collision was incorrectly treated as fulfilled by explicit capability-gap reporting. Thermal/fluid subwork stays verified; B2 is reopened until the relativistic criterion is fulfilled."
+    },
+    {
+      "at": "2026-09-12T17:24:22.622309+00:00",
+      "task": "User scope correction and B5 workflow reopening",
+      "completedPercent": 55,
+      "remainingPercent": 45,
+      "reason": "Extreme collision research removed from release gates; B5 reopened for whole-app action/selection/failure-state validation. Existing verified work is retained; scientific gate removal does not automatically complete B2."
+    },
+    {
+      "at": "2026-09-12T19:02:29.642268+00:00",
+      "task": "B2 dependable-engine acceptance",
+      "completedPercent": 75,
+      "remainingPercent": 25,
+      "reason": "Bounded real engines, current resource/capability outcomes, 22 tested progress/lifecycle fixtures and actual saved-gap actions/background recovery passed. Exact collision research remains deferred."
+    },
+    {
+      "at": "2026-09-12T19:07:05.425467+00:00",
+      "task": "B5 integrated useful workflows",
+      "completedPercent": 83,
+      "remainingPercent": 17
+    }
+  ],
+  "releaseDecision": "User correction: release dependable research software after integrated ordinary-user acceptance, local Windows installation and ordinary marketplace validation. Exact 0.999c collision success is not a release gate. No fake physics, weakened validity checks, silent scope substitutions or endless retries.",
+  "relativityMilestones": [
+    {
+      "id": "NR1",
+      "status": "complete",
+      "evidence": "nr-cuda-api-pilot-01-completion.json",
+      "title": "Pinned app execution with enforced RAM, GPU and deadline limits"
+    },
+    {
+      "id": "NR2",
+      "status": "complete",
+      "evidence": "nr-backend-comparison-20260912/actual-cuda-01/comparison.json",
+      "title": "CPU/CUDA agreement at the exact retained common states"
+    },
+    {
+      "id": "NR3",
+      "status": "deferred_research",
+      "evidence": "nr-horizon-diagnostic-review-2026-09-12.md identifies invalid/stale finder outputs; physical boost remains unknown",
+      "title": "Current independently valid horizon measurements and physical boost calibration",
+      "releaseGate": false
+    },
+    {
+      "id": "NR4",
+      "status": "deferred_research",
+      "evidence": "No validated target-regime execution",
+      "title": "Stable collision at requested0.999c per hole",
+      "releaseGate": false
+    },
+    {
+      "id": "NR5",
+      "status": "deferred_research",
+      "evidence": "No convergence or credible merger validation",
+      "title": "Resolution, domain, horizon and waveform validation",
+      "releaseGate": false
+    },
+    {
+      "id": "NR6",
+      "status": "complete",
+      "evidence": "Actual ordinary explanation/quantitative analysis, dedicated Results review, background recovery, saved-gap actions and navigation/read acknowledgement passed. See nr-ui-results and nr-background-recovery validation notes.",
+      "title": "Ordinary chat, inspection, results and recovery for the integrated engine"
     }
   ]
 }

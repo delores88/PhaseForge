@@ -44,6 +44,7 @@ fn standalone_deadline(request:&StandaloneJobRequest,now:chrono::DateTime<chrono
                 Some("heat_conduction_2d")=>super::thermal::validate(&request.input["parameters"])?,
                 Some("navier_stokes_2d")=>super::fluid::validate(&request.input["parameters"])?,
                 Some("newtonian_nbody")=>super::mechanics::validate(&request.input["parameters"])?,
+                Some(engine) if super::nr_engines::supports(engine)=>{super::nr_engines::parameter_text(engine,&request.input["parameters"])?;},
                 _=>anyhow::bail!("Choose an executable scientific engine"),
             }
         },
@@ -67,8 +68,8 @@ async fn create_standalone_job(State(state):State<Arc<AppState>>,Path(project):P
 async fn list(State(state):State<Arc<AppState>>,Query(query):Query<ProjectQuery>)->Result<Json<Value>,Error>{
     Ok(Json(json!({"jobs":state.laboratory.list(query.project_id)?.iter().map(LabJob::summary).collect::<Vec<_>>()})))
 }
-async fn capabilities()->Json<Value>{Json(super::catalog::capabilities())}
-async fn get_job(State(state):State<Arc<AppState>>,Path(id):Path<Uuid>)->Result<Json<LabJob>,Error>{Ok(Json(state.laboratory.get(id)?))}
+async fn capabilities(State(state):State<Arc<AppState>>)->Result<Json<Value>,Error>{Ok(Json(super::catalog::observed(&state,None)?))}
+async fn get_job(State(state):State<Arc<AppState>>,Path(id):Path<Uuid>)->Result<Json<LabJob>,Error>{Ok(Json(state.laboratory.get(id)?.display_record()))}
 async fn chat(State(state):State<Arc<AppState>>,Path(project):Path<Uuid>,Json(request):Json<crate::agent::laboratory::SessionRequest>)->Result<Json<LabJob>,Error>{
     let job=state.agent.start_lab_session(state.clone(),project,request,None)?;Ok(Json(job))
 }
@@ -80,34 +81,45 @@ fn resumed_deadline(job:&LabJob,options:&serde_json::Map<String,Value>,now:chron
         None=>{anyhow::ensure!(job.deadline_at.is_none_or(|at|at>now),"This job's original deadline expired. Choose an explicit new time limit or Off to resume; the budget is never silently reset.");Ok(job.deadline_at)},
     }
 }
-async fn control(State(state):State<Arc<AppState>>,Path(id):Path<Uuid>,Json(request):Json<Control>)->Result<Json<LabJob>,Error>{
+async fn control(State(state):State<Arc<AppState>>,Path(id):Path<Uuid>,Json(request):Json<Control>)->Result<(StatusCode,Json<LabJob>),Error>{
     let job=state.laboratory.get(id)?;
     match request.action.as_str(){
-        "cancel"=>{state.laboratory.stop(id,"cancelled")?;}
-        "pause"=>{state.laboratory.stop(id,"paused")?;}
+        "cancel"=>{if let Some(job)=state.laboratory.cancel_nr_recovery(id,None)?{return Ok((StatusCode::ACCEPTED,Json(job)));}state.laboratory.stop(id,"cancelled")?;}
+        "pause"=>{if let Some(job)=state.laboratory.cancel_nr_recovery(id,None)?{return Ok((StatusCode::ACCEPTED,Json(job)));}state.laboratory.stop(id,"paused")?;}
+        "cancel_recovery"=>{
+            if request.options.len()!=1{return Err(anyhow::anyhow!("Cancel recovery requires only the exact operation_id").into());}
+            let operation=Uuid::parse_str(request.options["operation_id"].as_str().context("Recovery operation_id is required")?)?;
+            let job=state.laboratory.cancel_nr_recovery(id,Some(operation))?.context("Recovery operation is unavailable")?;
+            return Ok((StatusCode::ACCEPTED,Json(job)));
+        }
+        "reconcile"=>{
+            if !request.options.is_empty(){return Err(anyhow::anyhow!("Recovering retained NR output does not accept a new timer or execution options").into());}
+            return Ok((StatusCode::ACCEPTED,Json(state.laboratory.start_nr_recovery(id)?)));
+        }
         "resume"=>{
             if !matches!(job.state.as_str(),"paused"|"failed"|"timed_out"){return Err(anyhow::anyhow!("Only paused, failed or timed-out jobs can resume").into());}
+            if matches!(job.kind.as_str(),"session"|"specialist"){state.agent.validate_lab_resume(&state,id)?;}
             if job.kind=="published_simulation"{return Err(anyhow::anyhow!("Resume the parent agent to continue this retained-data publication; it is not a solver restart").into());}
             if job.kind=="specialist"{
                 if request.options.contains_key("time_limit_seconds"){return Err(anyhow::anyhow!("Specialists inherit their parent's exact deadline. Extend and resume the parent session instead.").into());}
                 state.agent.resume_lab_session(state.clone(),id)?;
-                return Ok(Json(state.laboratory.get(id)?));
+                return Ok((StatusCode::OK,Json(state.laboratory.get(id)?)));
             }
             // A render retry creates an immutable new attempt. Do not rewrite
             // the original attempt's budget before admission succeeds.
             if matches!(job.kind.as_str(),"illustration"|"observation"){
                 let deadline=render_restart_deadline(&state.laboratory,&job,&request.options,chrono::Utc::now())?;
-                return Ok(Json(if job.kind=="illustration"{state.laboratory.restart_illustration(id,deadline)?}else{state.laboratory.restart_observation(id,deadline)?}));
+                return Ok((StatusCode::OK,Json(if job.kind=="illustration"{state.laboratory.restart_illustration(id,deadline)?}else{state.laboratory.restart_observation(id,deadline)?})));
             }
             if job.kind=="solver"{
                 let (deadline,independent)=solver_resume_request(&state.laboratory,&job,&request.options,chrono::Utc::now())?;
                 state.laboratory.resume_solver_with_mode(id,deadline,independent)?;
-                return Ok(Json(state.laboratory.get(id)?));
+                return Ok((StatusCode::OK,Json(state.laboratory.get(id)?)));
             }
             if matches!(job.kind.as_str(),"sweep"|"ml_study"|"ml_query"){
                 let deadline=render_restart_deadline(&state.laboratory,&job,&request.options,chrono::Utc::now())?;
                 if job.kind=="sweep"{state.laboratory.resume_sweep(id,deadline)?;}else{state.laboratory.resume_ml_study(id,deadline)?;}
-                return Ok(Json(state.laboratory.get(id)?));
+                return Ok((StatusCode::OK,Json(state.laboratory.get(id)?)));
             }
             let deadline=resumed_deadline(&job,&request.options,chrono::Utc::now())?;
             if request.options.contains_key("time_limit_seconds"){
@@ -115,14 +127,14 @@ async fn control(State(state):State<Arc<AppState>>,Path(id):Path<Uuid>,Json(requ
             }
             if job.kind=="session"{state.agent.resume_lab_session(state.clone(),id)?;}
             else if job.kind=="export"{
-                return Ok(Json(state.laboratory.resume_export(id,deadline)?));
+                return Ok((StatusCode::OK,Json(state.laboratory.resume_export(id,deadline)?)));
             }else if job.kind=="generated"{
-                return Ok(Json(state.laboratory.restart_generated(id,deadline)?));
+                return Ok((StatusCode::OK,Json(state.laboratory.restart_generated(id,deadline)?)));
             }else{return Err(anyhow::anyhow!("This job type cannot resume").into());}
         }
         _=>return Err(anyhow::anyhow!("Choose pause, resume or cancel").into()),
     }
-    Ok(Json(state.laboratory.get(id)?))
+    Ok((StatusCode::OK,Json(state.laboratory.get(id)?)))
 }
 #[derive(Default,Deserialize)]
 #[serde(deny_unknown_fields)]
